@@ -4,7 +4,7 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  dickeAn, plattenDaemmdicke, polygonCentroid,
+  dickeAn, kotenMarken, plattenDaemmdicke, polygonCentroid,
   type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfSeite, type Punkt } from "./pdf";
@@ -304,17 +304,13 @@ function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
     }
   }
   // Koten an Ecken, Linienenden, Abläufen (Abläufe sind oben beschriftet)
-  for (const g of e.slope.dachflaechen) {
-    const gesehen: Vec2[] = [];
-    for (const k of g.koten) {
-      if (k.art === "ablauf") continue;
-      if (gesehen.some((q) => Math.hypot(q.x - k.position.x, q.y - k.position.y) < 0.05)) continue;
-      gesehen.push(k.position);
-      const c = a.p(k.position), t = kote(k.kote), w = textBreite(t, 2, false);
-      s.kreis(c, 0.6, { fuell: "#000000", breite: 0 });
-      for (const [dx, dy] of [[1, 1], [-1 - w, 1], [1, -3], [-1 - w, -3]] as const) {
-        if (frei.belege(c.x + dx, c.y + dy, w, 2.6)) { s.text(t, c.x + dx, c.y + dy + 0.4, { groesse: 2 }); break; }
-      }
+  // Gebündelt (kotenMarken): nahezu gleiche Stelle und Höhe → eine Kote, auch über Dachflächengrenzen.
+  for (const k of kotenMarken(e.slope.dachflaechen)) {
+    if (k.art === "ablauf") continue;
+    const c = a.p(k.position), t = kote(k.kote), w = textBreite(t, 2, false);
+    s.kreis(c, 0.6, { fuell: "#000000", breite: 0 });
+    for (const [dx, dy] of [[1, 1], [-1 - w, 1], [1, -3], [-1 - w, -3]] as const) {
+      if (frei.belege(c.x + dx, c.y + dy, w, 2.6)) { s.text(t, c.x + dx, c.y + dy + 0.4, { groesse: 2 }); break; }
     }
   }
 }

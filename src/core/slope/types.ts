@@ -113,7 +113,8 @@ export interface Faltlinie {
   readonly ablaufIds: readonly [Id, Id];
 }
 
-export type KotenArt = "ablauf" | "ecke" | "grat" | "kehle";
+/** teilung: Ende einer Facettengrenze ohne Knick (Teilung zwischen Abläufen) auf der Kontur. */
+export type KotenArt = "ablauf" | "ecke" | "grat" | "kehle" | "teilung";
 
 export interface Kote {
   readonly position: Vec2;

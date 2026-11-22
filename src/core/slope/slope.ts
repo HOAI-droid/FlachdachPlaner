@@ -13,6 +13,7 @@
 import { difference, intersection, union } from "../geometry/clipper";
 import { EPS } from "../geometry/eps";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geometry/polygon";
+import { distPointSegment } from "../geometry/segment";
 import type { Polygon, Ring, Vec2 } from "../geometry/types";
 import { dachPolygon } from "../model/model";
 import type { Dachflaeche, ProjectModel, Zone } from "../model/types";
@@ -68,7 +69,7 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
     : [dach];
   const facettenHaupt = haupt.length > 0 ? berechneFacetten(haupt, box, feld, "") : [];
   const linien = haupt.flatMap((t) => berechneFaltlinien(t, box, feld));
-  const koten = haupt.length > 0 ? berechneKoten(haupt, feld, linien) : [];
+  const koten = haupt.length > 0 ? berechneKoten(haupt, feld, linien, facettenHaupt) : [];
   const hpHaupt = extrem(koten, 1), tpHaupt = extrem(koten, -1);
   const daemmungHaupt = tpHaupt && hpHaupt && facettenHaupt.length > 0
     ? mittlereDaemmung(facettenHaupt, q.les, tpHaupt.kote, hpHaupt.kote, d.daemmdickeTiefpunkt, opt.daemmdickeTiefpunktStandard)
@@ -127,7 +128,7 @@ function zonenGefaelle(zone: Zone, polygone: Polygon[], box: Vec2[], haupt: Hoeh
   if (feld.gefaelle > EPS) {
     facetten = berechneFacetten(polygone, box, feld, `${zone.id}:`).map((f) => ({ ...f, zoneId: zone.id }));
     linien = polygone.flatMap((t) => berechneFaltlinien(t, box, feld));
-    koten = berechneKoten(polygone, feld, linien);
+    koten = berechneKoten(polygone, feld, linien, facetten);
   } else {
     // 0-%-Zone: waagerecht auf der Kote des tiefsten Ablaufs (+ Versatz); dem tiefsten Ablauf zugeordnet.
     const tiefste = feld.quellen.reduce((b, q) => (q.z < b.z ? q : b));
@@ -325,24 +326,42 @@ function imDach(dach: Polygon, p0: Vec2, dir: Vec2): Intervalle {
 
 /** Teilstücke behalten, an denen das Höhenfeld wirklich knickt (sonst steigt die Fläche einfach weiter an). */
 function nurKnicke(f: Hoehenfeld, p0: Vec2, dir: Vec2, iv: Intervalle): Intervalle {
-  const d = 0.02, N = 24;
-  const knick = (t: number) => {
+  // Grob: N Abtastzellen mit Querabstand d; Übergänge Knick ↔ kein Knick per Bisektion mit kleinem
+  // Querabstand (sonst endet eine Linie bis zu einer Zelle zu früh, Review b; Koten-Dubletten an Kehlen-Ecken).
+  const N = 24, d = 0.02, dFein = 1e-5, schritte = 48;
+  const knick = (t: number, q: number) => {
     const p = { x: p0.x + t * dir.x, y: p0.y + t * dir.y };
     const h = (s: number) => hoeheAm(f, { x: p.x - s * dir.y, y: p.y + s * dir.x });
-    return Math.abs(h(d) + h(-d) - 2 * h(0)) > 1e-6;
+    // Schwelle proportional zum Querabstand (Knick ≙ Neigungssprung, 1e-6 bei d = 2 cm wie bisher).
+    return Math.abs(h(q) + h(-q) - 2 * h(0)) > 5e-5 * q;
+  };
+  /** Grenze zwischen tJa (Knick) und tNein (kein Knick). */
+  const grenze = (tJa: number, tNein: number) => {
+    let ja = tJa, nein = tNein;
+    for (let i = 0; i < schritte && Math.abs(nein - ja) > EPS; i++) {
+      const m = (ja + nein) / 2;
+      if (knick(m, dFein)) ja = m; else nein = m;
+    }
+    return ja;
   };
   const out: Intervalle = [];
   for (const [a, b] of iv) {
     let start: number | null = null;
+    const mitte = (i: number) => a + ((b - a) * (i + 0.5)) / N;
     for (let i = 0; i < N; i++) {
-      const t0 = a + ((b - a) * i) / N, t1 = a + ((b - a) * (i + 1)) / N;
-      if (knick((t0 + t1) / 2)) { if (start === null) start = t0; }
-      else if (start !== null) { out.push([start, t0]); start = null; }
+      const k = knick(mitte(i), d);
+      if (k && start === null) start = i === 0 ? a : grenze(mitte(i), mitte(i - 1));
+      else if (!k && start !== null) { out.push([start, grenze(mitte(i - 1), mitte(i))]); start = null; }
     }
     if (start !== null) out.push([start, b]);
   }
-  return out;
+  // Ein Rand des Intervalls liegt meist exakt (Schnitt mit Dach/Ebenen); fast gleiche Enden darauf einrasten.
+  return out.map(([s, e]) => [s - a0(iv, s) <= 1e-6 ? a0(iv, s) : s, b0(iv, e) - e <= 1e-6 ? b0(iv, e) : e] as [number, number]);
 }
+
+/** Anfang/Ende des Ausgangsintervalls, das t enthält. */
+const a0 = (iv: Intervalle, t: number) => iv.find(([a, b]) => t >= a - 1e-6 && t <= b + 1e-6)?.[0] ?? t;
+const b0 = (iv: Intervalle, t: number) => iv.find(([a, b]) => t >= a - 1e-6 && t <= b + 1e-6)?.[1] ?? t;
 
 function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlinie[] {
   const mitte = { x: (box[0]!.x + box[2]!.x) / 2, y: (box[0]!.y + box[2]!.y) / 2 };
@@ -397,13 +416,15 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
 
 // ---------- Koten, HP/TP ----------
 
-const nah = (p: Vec2, q: Vec2) => Math.hypot(p.x - q.x, p.y - q.y) <= EPS;
-const RANG: Record<KotenArt, number> = { ablauf: 0, ecke: 1, grat: 2, kehle: 3 };
+const nah = (p: Vec2, q: Vec2, tol = EPS) => Math.hypot(p.x - q.x, p.y - q.y) <= tol;
+/** Koten näher als 0,1 mm gelten als derselbe Punkt (Faltlinien-Enden aus der Bisektion, Clipper-Raster). */
+const KOTEN_GLEICH = 1e-4;
+const RANG: Record<KotenArt, number> = { ablauf: 0, ecke: 1, grat: 2, kehle: 3, teilung: 4 };
 
-function berechneKoten(teile: readonly Polygon[], f: Hoehenfeld, linien: readonly Faltlinie[]): Kote[] {
+function berechneKoten(teile: readonly Polygon[], f: Hoehenfeld, linien: readonly Faltlinie[], facetten: readonly Facette[] = []): Kote[] {
   const out: Kote[] = [];
   const add = (p: Vec2, art: KotenArt) => {
-    const i = out.findIndex((k) => nah(k.position, p));
+    const i = out.findIndex((k) => nah(k.position, p, KOTEN_GLEICH));
     if (i >= 0) {
       if (RANG[art] < RANG[out[i]!.art]) out[i] = { ...out[i]!, art };
       return;
@@ -414,6 +435,30 @@ function berechneKoten(teile: readonly Polygon[], f: Hoehenfeld, linien: readonl
   for (const q of f.quellen) for (const p of [q.position, q.bis]) if (drin(p)) add(p, "ablauf");
   for (const t of teile) for (const r of [t.outer, ...t.holes]) for (const p of r) add(p, "ecke");
   for (const l of linien) { add(l.von, l.art); add(l.bis, l.art); }
+  for (const p of teilungsEnden(teile, facetten)) add(p, "teilung");
+  return out;
+}
+
+/** Abstand, bis zu dem ein Facettenpunkt als auf der Kontur gilt (Clipper-Raster 0,1 mm). */
+const AUF_KONTUR = 2e-4;
+
+/**
+ * Punkte auf der Kontur (außen/Löcher), an denen Facetten verschiedener Abläufe/Seiten aneinanderstoßen:
+ * Enden von Grat/Kehle oder einer knickfreien Teilung (z. B. Mittelsenkrechte zweier Abläufe) am Rand.
+ */
+function teilungsEnden(teile: readonly Polygon[], facetten: readonly Facette[]): Vec2[] {
+  const ringe = teile.flatMap((t) => [t.outer, ...t.holes]);
+  const aufKontur = (p: Vec2) => ringe.some((r) => r.some((a, i) => distPointSegment(p, a, r[(i + 1) % r.length]!) <= AUF_KONTUR));
+  const kandidaten: { p: Vec2; schluessel: string }[] = [];
+  for (const fa of facetten) {
+    const schluessel = `${fa.ablaufId}/${fa.seite}`;
+    for (const r of [fa.polygon.outer, ...fa.polygon.holes]) for (const p of r) if (aufKontur(p)) kandidaten.push({ p, schluessel });
+  }
+  const out: Vec2[] = [];
+  for (const k of kandidaten) {
+    if (out.some((q) => nah(q, k.p, AUF_KONTUR))) continue;
+    if (kandidaten.some((x) => x.schluessel !== k.schluessel && nah(x.p, k.p, AUF_KONTUR))) out.push(k.p);
+  }
   return out;
 }
 

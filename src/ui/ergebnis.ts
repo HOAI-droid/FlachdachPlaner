@@ -1,8 +1,8 @@
 /** Berechnung und Darstellung der Ergebnisse (PLAN Schritt 19): Einzugsflächen, Koten, Pfeile, Notbereich, Kennwerte. */
 import {
-  computeCatchments, computeSlope, estimateEmergency, pointInPolygon, polygonCentroid, runChecks,
+  attikaStreifen, computeCatchments, computeSlope, estimateEmergency, kotenMarken, pfeilLage, pointInPolygon, polygonCentroid, runChecks,
   type Befund, type CatchmentResult, type Dachflaeche, type EmergencyEstimate, type Einzugsflaeche, type ProjectModel,
-  type Auswahl, type SlopeResult, type Vec2,
+  type Auswahl, type KotenMarke, type SlopeResult, type Vec2,
 } from "../core/index";
 import type { Viewport } from "./canvas/viewport";
 import { kote, millimeter, prozent, quadratmeter, zahl } from "./format";
@@ -78,8 +78,9 @@ export function zeichneEinzugsflaechen(ctx: CanvasRenderingContext2D, vp: Viewpo
     }
     const d = dachVon(m, f.dachflaecheId);
     if (d) for (const a of f.attika) {
-      const n = innenNormale(d, a.von, a.bis);
-      const q = [a.von, a.bis, { x: a.bis.x + n.x * a.breite, y: a.bis.y + n.y * a.breite }, { x: a.von.x + n.x * a.breite, y: a.von.y + n.y * a.breite }];
+      const seg = d.attika.find((x) => x.id === a.attikaId);
+      const q = seg ? attikaStreifen(d, seg, [a.von, a.bis]) : [];
+      if (q.length < 4) continue;
       bahn(ctx, q); ctx.globalAlpha = dk ? 0.16 : 0.18; ctx.fillStyle = fill; ctx.fill(); ctx.globalAlpha = 1;
     }
     if (f.bewertung?.stufe === "fehler") {
@@ -126,24 +127,35 @@ export function zeichneFaltlinien(ctx: CanvasRenderingContext2D, vp: Viewport, e
   ctx.restore();
 }
 
+/** Pfeillänge und Mindestabstand zum Ablaufsymbol in px. */
+const PFEIL_PX = 44, PFEIL_ABLAUF_PX = 14;
+
+/** Ein Gefällepfeil je Facette (mittig, ganz in der Facette, wenn sie groß genug ist), auch in Zonen. */
 export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
   const px = 1 / vp.scale, belegung = new Belegung(vp);
   ctx.save(); ctx.setLineDash([]); ctx.strokeStyle = css("--text-muted", "#555"); ctx.lineWidth = px; ctx.lineCap = "round";
-  for (const d of e.slope.dachflaechen) for (const a of d.pfeile) {
-    if (d.koten.some((k) => k.art === "ablauf" && Math.hypot(k.position.x - a.start.x, k.position.y - a.start.y) * vp.scale < 120)) continue;
-    const len = 44 * px, { x, y } = a.start, rx = a.richtung.x, ry = a.richtung.y;
-    const ex = x + rx * len, ey = y + ry * len, k = 8 * px;
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey);
-    ctx.moveTo(ex - (rx * Math.cos(0.45) - ry * Math.sin(0.45)) * k, ey - (ry * Math.cos(0.45) + rx * Math.sin(0.45)) * k); ctx.lineTo(ex, ey);
-    ctx.lineTo(ex - (rx * Math.cos(-0.45) - ry * Math.sin(-0.45)) * k, ey - (ry * Math.cos(-0.45) + rx * Math.sin(-0.45)) * k);
-    ctx.stroke();
-    const s = prozent(a.gefaelle * 100, 1);
-    const mx = x + rx * len / 2 - ry * 7 * px, my = y + ry * len / 2 + rx * 7 * px;
-    if (belegung.belege({ x: mx, y: my }, -16, -6, 32, 12)) text(ctx, vp, s, mx, my, { px: 11, mono: true, ankerMitte: true, winkel: Math.atan2(-ry, rx) });
+  for (const d of e.slope.dachflaechen) {
+    const abl = d.koten.filter((k) => k.art === "ablauf").map((k) => k.position);
+    for (const a of d.pfeile) {
+      const f = d.facetten.find((x) => x.id === a.facetteId);
+      if (!f) continue;
+      const lage = pfeilLage(a.start, a.richtung, f.polygon, PFEIL_PX * px, abl, PFEIL_ABLAUF_PX * px);
+      if (!lage) continue;
+      const { x, y } = lage.von, rx = a.richtung.x, ry = a.richtung.y, len = Math.hypot(lage.bis.x - x, lage.bis.y - y);
+      const ex = lage.bis.x, ey = lage.bis.y, k = 8 * px;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey);
+      ctx.moveTo(ex - (rx * Math.cos(0.45) - ry * Math.sin(0.45)) * k, ey - (ry * Math.cos(0.45) + rx * Math.sin(0.45)) * k); ctx.lineTo(ex, ey);
+      ctx.lineTo(ex - (rx * Math.cos(-0.45) - ry * Math.sin(-0.45)) * k, ey - (ry * Math.cos(-0.45) + rx * Math.sin(-0.45)) * k);
+      ctx.stroke();
+      const s = prozent(a.gefaelle * 100, 1);
+      const mx = x + rx * len / 2 - ry * 7 * px, my = y + ry * len / 2 + rx * 7 * px;
+      if (belegung.belege({ x: mx, y: my }, -16, -6, 32, 12)) text(ctx, vp, s, mx, my, { px: 11, mono: true, ankerMitte: true, winkel: Math.atan2(-ry, rx) });
+    }
   }
   ctx.restore();
 }
 
+/** Koten aller Dachflächen (inkl. Zonen), gebündelt: nahezu gleiche Stelle und Höhe → eine Marke (kotenMarken). */
 export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
   const px = 1 / vp.scale, belegung = new Belegung(vp), tx = css("--text", "#222");
   ctx.save(); ctx.setLineDash([]);
@@ -157,12 +169,17 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
     if (dy > 6) { ctx.strokeStyle = tx; ctx.lineWidth = px; bahn(ctx, [p, { x: p.x + 8 * px, y: p.y + dy * px }], false); ctx.stroke(); }
     text(ctx, vp, s, p.x + 10 * px, p.y + dy * px, { px: 12, mono: true, farbe: fett ? css("--accent", "#1F4FA3") : tx });
   };
-  for (const d of e.slope.dachflaechen) {
-    const amAblauf = (o: Vec2) => d.koten.some((k) => k.art === "ablauf" && Math.hypot(k.position.x - o.x, k.position.y - o.y) < 0.05);
-    if (d.hochpunkt) for (const o of d.hochpunkt.orte.filter((q) => !amAblauf(q)).slice(0, 2)) marke(o, `HP ${kote(d.hochpunkt.kote)}`, true);
-    if (d.tiefpunkt) for (const o of d.tiefpunkt.orte.filter((q) => !amAblauf(q)).slice(0, 2)) marke(o, `TP ${kote(d.tiefpunkt.kote)}`, true);
-    for (const k of d.koten) if (k.art !== "ablauf") marke(k.position, kote(k.kote), false);
+  const alle = kotenMarken(e.slope.dachflaechen);
+  // HP/TP zuerst (je Art bis zu 2 Orte als „HP …“, weitere als einfache Kote), dann übrige; Abläufe sind eigens beschriftet.
+  const zaehl = { hochpunkt: 0, tiefpunkt: 0 };
+  const hpTp = (k: KotenMarke) => k.art === "hochpunkt" || k.art === "tiefpunkt";
+  const rest: KotenMarke[] = [];
+  for (const k of alle) {
+    if (k.art === "ablauf") continue;
+    if ((k.art === "hochpunkt" || k.art === "tiefpunkt") && zaehl[k.art]++ < 2) marke(k.position, `${k.art === "hochpunkt" ? "HP" : "TP"} ${kote(k.kote)}`, true);
+    else rest.push(k);
   }
+  for (const k of [...rest.filter(hpTp), ...rest.filter((k) => !hpTp(k))]) marke(k.position, kote(k.kote), false);
   ctx.restore();
 }
 

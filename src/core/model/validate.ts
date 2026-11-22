@@ -239,8 +239,9 @@ function pruefeDach(c: Pruefer, p: string, v: unknown): void {
 
   c.arr(sub(p, "attika"), o["attika"])?.forEach((e, i) => {
     const q = sub(sub(p, "attika"), i);
-    const a = c.obj(q, e, ["id", "kante", "breite"], ["oberkante"]);
+    const a = c.obj(q, e, ["id", "kante", "breite"], ["oberkante", "seite"]);
     if (!a) return;
+    if (a["seite"] !== undefined) c.oneOf(sub(q, "seite"), a["seite"], ["innen", "aussen"] as const);
     c.id(sub(q, "id"), a["id"]);
     c.num(sub(q, "breite"), a["breite"], { gt: 0 });
     c.optNum(q, a, "oberkante");

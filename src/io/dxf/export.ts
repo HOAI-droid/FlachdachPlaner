@@ -3,7 +3,7 @@
  * Koordinaten wie im Projektmodell (y nach oben). Reine Funktion; Sonderzeichen in Texten als \U+XXXX.
  */
 import {
-  konturKante, plattenDaemmdicke,
+  attikaStreifen, konturKante, plattenDaemmdicke,
   type Dachflaeche, type InsulationLayout, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 
@@ -62,7 +62,14 @@ function dachObjekte(w: Schreiber, d: Dachflaeche): void {
   ring(w, DXF_LAYER.kontur, d.kontur, true);
   for (const a of d.aufbauten) ring(w, DXF_LAYER.aufbau, a.kontur, true);
   for (const z of d.zonen) ring(w, DXF_LAYER.zone, z.kontur, true);
-  for (const a of d.attika) { const k = konturKante(d.kontur, a.kante); if (k) linie(w, DXF_LAYER.attika, k[0], k[1]); }
+  // Attika: Kante und Streifenkante (innen oder außen, attikaStreifen).
+  for (const a of d.attika) {
+    const k = konturKante(d.kontur, a.kante);
+    if (!k) continue;
+    linie(w, DXF_LAYER.attika, k[0], k[1]);
+    const q = attikaStreifen(d, a);
+    if (q.length === 4) linie(w, DXF_LAYER.attika, q[3]!, q[2]!);
+  }
   for (const t of d.tuerschwellen) {
     const k = konturKante(d.kontur, t.lage.kante);
     if (!k) continue;

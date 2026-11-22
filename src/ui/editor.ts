@@ -1,11 +1,11 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
-  abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaUmlaufend,
+  abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
   aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
-  neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
+  neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setAttikaSeite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
-  type Abweichung, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
+  type Abweichung, type AttikaSeite, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
@@ -66,6 +66,21 @@ function feld(label: string, wert: string, key: string, commit: (v: number) => v
   i.addEventListener("change", () => { const v = num(i.value); if (Number.isFinite(v)) commit(v); });
   i.addEventListener("keydown", (e) => { if (e.key === "Enter") i.blur(); });
   f.append(l, i);
+  return f;
+}
+/** Umschalter „innen | außen“ für den Attikastreifen (ein Klick). */
+function attikaSeiteWahl(aktiv: AttikaSeite, wahl: (s: AttikaSeite) => void): HTMLElement {
+  const f = el("div", "field");
+  f.append(el("span", "feld-label", "Streifen"));
+  const seg = el("div", "segment");
+  seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Lage des Attikastreifens"); seg.dataset.k = "attika-seite";
+  for (const [v, t] of [["innen", "innen"], ["aussen", "außen"]] as const) {
+    const b = el("button", "", t);
+    b.type = "button"; b.dataset.v = v; b.setAttribute("aria-pressed", String(v === aktiv));
+    b.addEventListener("click", () => { if (v !== aktiv) wahl(v); });
+    seg.append(b);
+  }
+  f.append(seg);
   return f;
 }
 function button(text: string, onClick: () => void, cls = "btn"): HTMLButtonElement {
@@ -516,6 +531,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         const x = d.attika.find((q) => q.id === a.id)!;
         p.append(row("Art", "Attika", "art"), row("Länge", meter(attikaLaenge(d, x), 2), "laenge"),
           feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { verlauf = ausfuehren(verlauf, setAttikaBreite(d.id, x.id, v)); refresh(); } }),
+          attikaSeiteWahl(x.seite ?? "innen", (s) => { verlauf = ausfuehren(verlauf, setAttikaSeite(d.id, x.id, s)); refresh(); }),
           row("Fläche", quadratmeter(attikaSegmentFlaeche(d, x), 2), "flaeche"));
         break;
       }
@@ -605,7 +621,6 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
     if (zu) ctx.closePath();
   };
-  const ccw = (k: readonly Vec2[]) => k.reduce((s, p, i) => s + (k[(i + 1) % k.length]!.x - p.x) * (k[(i + 1) % k.length]!.y + p.y), 0) < 0;
 
   function zeichneKontur(ctx: CanvasRenderingContext2D, vp: Viewport) {
     const px = 1 / vp.scale;
@@ -618,17 +633,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         const c = zn.kontur.reduce((s, q) => ({ x: s.x + q.x / zn.kontur.length, y: s.y + q.y / zn.kontur.length }), { x: 0, y: 0 });
         text(ctx, vp, zn.name, c.x, c.y);
       }
-      const n = d.kontur.length;
-      const links = ccw(d.kontur);
       for (const s of d.attika) {
-        const i = d.kontur.findIndex((q) => q.id === s.kante);
-        if (i < 0) continue;
-        const a = d.kontur[i]!, b = d.kontur[(i + 1) % n]!;
-        const l = Math.hypot(b.x - a.x, b.y - a.y);
-        if (l <= 0) continue;
-        const ux = (b.x - a.x) / l, uy = (b.y - a.y) / l;
-        const nx = (links ? -uy : uy) * s.breite, ny = (links ? ux : -ux) * s.breite;
-        const q = [a, b, { x: b.x + nx, y: b.y + ny }, { x: a.x + nx, y: a.y + ny }];
+        // Streifen innen (Standard) oder außen an der Kante (attikaStreifen).
+        const q = attikaStreifen(d, s);
+        if (q.length < 4) continue;
         bahn(ctx, q);
         ctx.globalAlpha = .25; ctx.fillStyle = css("--text", "#222"); ctx.fill();
         ctx.globalAlpha = 1; ctx.strokeStyle = css("--text", "#222"); ctx.lineWidth = px;

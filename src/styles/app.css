@@ -64,6 +64,8 @@ button, input, select { font: inherit; color: inherit; }
 .field { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-4); }
 .field label { color: var(--text-muted); }
+.field > .feld-label { color: var(--text-muted); }
+.field > .segment { justify-self: end; }
 .field input { height: 28px; padding: 0 var(--sp-3); text-align: right; background: var(--surface-2);
   border: 1px solid var(--line); border-radius: var(--r-1); font-family: var(--font-mono); }
 .field input:hover { border-color: var(--line-strong); }
