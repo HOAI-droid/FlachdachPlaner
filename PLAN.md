@@ -1,109 +1,119 @@
 # PLAN.md – Flachdachplaner (Gefälleplanung)
 
-Grundlage: `docs/intent/gefaelleplanung.md`, `DESIGN.md`. Definition of Done je Schritt: Abnahmekriterien erfüllt, `bash scripts/check.sh` grün, bei UI `visual-qa` ABGENOMMEN.
+Grundlage: `docs/intent/gefaelleplanung.md`, `DESIGN.md` (inkl. §11 Gefälledämmplan), Referenzen `docs/referenz/`. Definition of Done je Schritt: Abnahmekriterien erfüllt, `bash scripts/check.sh` grün, bei UI `visual-qa` ABGENOMMEN.
 
 ## 1. Ziel und Umfang
-Lokale Web-App (später Tauri) zur Gefälleplanung von Flachdächern: Unterlage (PDF/DXF) laden und kalibrieren, Dachflächen mit Punktfang zeichnen, Entwässerungspunkte (Gully, Dachreiter, LES) setzen (Modus B), Höhenkoten/Gefälle und farbige Einzugsflächen berechnen, gegen versionierte Rule-Packs prüfen, Notentwässerungsbereich und Anzahl Notabläufe schätzen, 3D ansehen, als PDF/DXF exportieren.
-**V1 = Meilensteine M1–M4 (Modus B).** M5 (Modus C, Vorschlag) folgt direkt danach als V1.1.
-**Bewusst NICHT:** DWG-Import/-Export (später, Konverter), Tauri-Paket (M6), hydraulische Bemessung (nur Schätzung), Materialmengen/Keilplan-Stückliste über Gefällekeil-Zuordnung hinaus, Statik, Mehrbenutzer/Server/Login, Mobil-Layout, Geocoding per Adresse.
+Lokale Web-App (später Tauri) zur Gefälleplanung von Flachdächern: Unterlage (PDF/DXF) laden und kalibrieren, Dachflächen mit Punktfang zeichnen, Entwässerung (Gully, Dachreiter, LES) setzen (Modus B), Höhenkoten/Gefälle und farbige Einzugsflächen berechnen, gegen versionierte Rule-Packs prüfen, Regenspende aus KOSTRA zum Projektstandort ziehen, Notentwässerung schätzen, **Gefälledämmplan (Verlegeplan) mit Plattentypen, Kehlkeilen und Stückliste** erzeugen, 2D/3D ansehen, PDF/DXF exportieren.
+**V1 = M1–M5 (Modus B + Gefälledämmplan).** M6 (Modus C, Vorschlag) folgt direkt als V1.1.
+**Bewusst NICHT:** DWG (später, Konverter), Tauri-Paket (M7), hydraulische Bemessung (nur Schätzung), Preise/Bestellung, Statik, Server/Login, Mobil-Layout, Online-Kartenkacheln, Adress-Geocoding als Pflichtfunktion.
 
 ## 2. Annahmen
-- A1 Einheiten im Kern: Meter, m², l/s; Koordinaten projektlokal, y nach oben. Bildschirm-Transformation nur in der UI.
-- A2 Gefällemodell V1: Höhenfeld `h(x) = min_i (z_i + s · d(x, E_i))` über alle Entwässerungselemente E_i (Punkt, Linie für LES, Randpunkt für Dachreiter). Metrik `d` wählbar: L∞ in Dachachsrichtung (ebene Gefälleflächen mit Graten/Kehlen, Standard) oder euklidisch. Einzugsflächen = Zellen dieses Felds, an Dachkontur und Aufbauten geschnitten. Engineer darf das Verfahren verfeinern, die Abnahmetests unten bleiben gültig.
-- A3 Sprünge/Abstufungen: Zonen mit eigenem Höhenversatz; jede Zone wird getrennt berechnet, Zonengrenze ist Stufenlinie.
-- A4 Rule-Packs sind JSON mit `id`, `version`, `quelle`, `ausgabe`, `gueltigAb`, `geprueft: boolean`. Ungeprüfte Packs (aktuell alle, inkl. Bauder LES) erzeugen in der Prüfliste den Hinweis "Regelwerk ungeprüft".
-- A5 Projekte werden als `*.fdp.json` gespeichert (inkl. Rule-Pack-IDs + Versionen), Autosave in IndexedDB.
-- A6 Regenspende wird für V1 manuell oder aus einem Offline-KOSTRA-Pack gelesen (siehe Risiken R1).
+- A1 Einheiten im Kern: m, m², m³, l/s, l/(s·ha); Koordinaten projektlokal, y nach oben. Zahlenformatierung nur in der UI.
+- A2 Gefällemodell V1: Höhenfeld `h(x) = min_i (z_i + s · d(x, E_i))` über Entwässerungselemente E_i (Punkt, Segment für LES, Randpunkt für Dachreiter). Metrik Standard L∞ in Dachachsrichtung, ergibt ebene Facetten mit 45°-Kehlen/Graten wie im Referenz-Verlegeplan. Einzugsflächen = Zellen dieses Felds, an Kontur/Aufbauten geschnitten.
+- A3 Sprünge/Abstufungen: Zonen mit eigenem Höhenversatz, getrennt berechnet.
+- A4 Rule-Packs: JSON mit `id`, `version`, `quelle`, `ausgabe`, `gueltigAb`, `geprueft`. Ungeprüfte Packs erzeugen den Hinweis "Regelwerk ungeprüft".
+- A5 Plattensystem (Referenz): Typ n = Gefälleplatte der n-ten Dickenstufe (Dicke am Ende Typ n = Anfang Typ n+1); Reihen quer zur Fallrichtung; Kehlkeile Kn L/R an Kehlen; über der höchsten Stufe Zusatzlage ("n+1", gelb) und Neustart der Reihe; "8A" = Ausgleichs-/Sonderplatte laut Katalog (Bedeutung offen, siehe R6). An Graten treffen Platten gespiegelt ohne Keil zusammen.
+- A6 Projekte als `*.fdp.json` (inkl. Pack-Versionen, Standort, Regenspende Pack- und Nutzerwert), Autosave in IndexedDB.
 
 ## 3. Tech-Stack
-- **TypeScript strict + Vite**: schnelle Web-Entwicklung, später direkt in Tauri einbettbar.
-- **Vitest** (+ fast-check für Eigenschaftstests der Geometrie): ein Testrunner für Kern und UI-Logik.
-- **Kern ohne DOM** (`src/core`, eigene `tsconfig` mit `lib: ES2022`, ESLint-Regel verbietet Importe aus `src/ui`/`three`/DOM).
-- **clipper2-js** (Polygon-Boolesche Operationen, robust), **polylabel** (Labelposition), **Ajv** (JSON-Schema-Validierung der Rule-Packs, sprachneutral).
-- **Preact + @preact/signals** für Panels (klein, schnell); Zeichenfläche als eigenes **Canvas 2D**.
-- **pdfjs-dist** (PDF-Unterlage), **dxf-parser** (DXF-Import), eigener DXF-R12/R2000-Writer (wenige Entitäten, keine Abhängigkeit), **pdf-lib** (Vektor-PDF-Export mit eingebetteter Plex-Schrift), **three.js** (3D).
-- Playwright nur für wenige Smoke-/Screenshot-Tests (visual-qa-Grundlage).
+- **TypeScript strict + Vite**: Web zuerst, später in Tauri einbettbar. **Vitest** + **fast-check** (Eigenschaftstests).
+- **Kern ohne DOM** (`src/core`, eigene tsconfig `lib: ES2022`, ESLint verbietet Importe aus `src/ui`, `three`, DOM).
+- **clipper2-js** (Polygon-Boolesche Operationen), **polylabel** (Labels), **Ajv** (JSON-Schema, sprachneutral für Packs).
+- **Preact + @preact/signals** (Panels), eigenes **Canvas 2D** (Zeichenfläche), **three.js** (3D).
+- **pdfjs-dist** (PDF-Unterlage), **dxf-parser** (Import), eigener DXF-Writer, **pdf-lib** (Vektor-PDF, eingebettete Plex-Schrift).
+- **proj4** nur für WGS84 ↔ KOSTRA-Raster-CRS. Playwright für wenige Smoke-/Screenshot-Tests.
 
 ## 4. Struktur
 ```
-src/core/          geometry/ model/ slope/ catchment/ drainage/ rules/ checks/ io/ (JSON, DXF-Geometrie)
-src/core/index.ts  öffentliche API (einziger Import-Punkt für die UI)
-src/ui/            app/ canvas/ tools/ snap/ underlay/ panels/ checklist/ view3d/ export/
-src/styles/        tokens.css (aus DESIGN.md), fonts/ (woff2)
-rulepacks/         schema/*.schema.json, zvdh-2026/, din18531/, bauder-les/, kostra-dwd-2020/, abflussbeiwerte/
-tests/fixtures/    Referenzdächer (*.fdp.json), DXF/PDF-Beispiele
-e2e/               Playwright-Smoke-Tests
+src/core/   geometry/ model/ slope/ catchment/ drainage/ rain/ insulation/ rules/ checks/ io/
+src/core/index.ts   einzige öffentliche API für die UI
+src/ui/     app/ canvas/ tools/ snap/ underlay/ panels/ checklist/ location/ insulation-plan/ view3d/ export/
+src/styles/ tokens.css, fonts/
+rulepacks/  schema/ zvdh-2026/ din18531/ bauder-les/ daemmplatten/ kostra-dwd-2020/ orte-plz/ abflussbeiwerte/
+tools/      kostra-build.ts, plz-build.ts (Pack-Erzeugung, Node)
+tests/fixtures/  Referenzdächer (*.fdp.json, inkl. L-Dach aus Referenzbild 10,60 × 15,30 m), DXF/PDF
 ```
 
-## 5. Kern-Schnittstelle (Vertrag zwischen Kern und UI)
+## 5. Kern-Schnittstelle
 ```ts
-interface ProjectModel { roofs: Roof[]; drains: Drain[]; zones: Zone[]; fixtures: Fixture[]; params: SlopeParams; rulePacks: PackRef[] }
-function computeSlope(m: ProjectModel): SlopeResult        // Höhenfeld, Koten (HP/TP), Gefällepfeile, Grate/Kehlen
-function computeCatchments(m: ProjectModel, s: SlopeResult): Catchment[]  // Polygon, Fläche m², drainId
-function estimateEmergency(m: ProjectModel, c: Catchment[], rain: RainData): EmergencyEstimate[] // Bereich, n_not
-function runChecks(m: ProjectModel, r: Results, packs: RulePack[]): Finding[] // {stufe, meldung, objektId, regelId, quelle}
+computeSlope(m: ProjectModel): SlopeResult              // Höhenfeld, Facetten, Koten HP/TP, Grate/Kehlen, Pfeile
+computeCatchments(m, s: SlopeResult): Catchment[]       // Polygon, m², drainId, Farbindex
+resolveRain(loc: Location, kostra: RulePack): RainData  // r(5,5), r(5,100), Zelle, Quelle; null wenn außerhalb
+estimateEmergency(m, c: Catchment[], rain: RainData): EmergencyEstimate[]
+layoutInsulation(m, s: SlopeResult, cat: PlateCatalog): InsulationLayout // Platten, Keile, Zusatzlagen, N0, Pfeile
+billOfMaterials(l: InsulationLayout, m): BomRow[]       // Typ, Anzahl, Maße, m², m³, LES-Sets/Dachreiter
+runChecks(m, r: Results, packs: RulePack[]): Finding[]  // {stufe, meldung, objektId, regelId, quelle}
 ```
-Alle Funktionen rein, deterministisch, ohne Seiteneffekte; Toleranz `EPS = 1e-9 m` zentral.
+Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 
 ## 6. Schritte
-Kennung: **[E]** = `engineer` (Opus), **[X]** = `executor` (Hauptsession, Sonnet).
+**[E]** = `engineer` (Opus, Kernlogik), **[X]** = `executor` (Hauptsession, Sonnet).
 
 ### M0 Grundgerüst
-1. **[X] Projekt-Setup**: Vite+TS strict, ESLint, Vitest, Skripte `lint typecheck test build`, getrennte tsconfig für `src/core`. *Abnahme:* `check.sh` grün mit 1 Dummy-Test; ESLint schlägt fehl, wenn `src/core` `document` oder `src/ui` importiert (Test-Fixture).
+1. **[X] Setup**: Vite+TS strict, ESLint, Vitest, Skripte `lint typecheck test build`. *Abnahme:* `check.sh` grün; ESLint schlägt fehl, wenn `src/core` DOM oder `src/ui` importiert.
 
 ### M1 Kern-Bibliothek (UI-unabhängig)
-2. **[E] Geometrie-Basis**: Punkt/Segment/Polygon, Fläche, Orientierung, Punkt-in-Polygon, Abstand Punkt–Segment, Schnitt, Clipper-Adapter. *Abnahme:* Rechteck 20×10 = 200 m²; L-Form bekannter Fläche exakt; fast-check: Fläche invariant unter Verschiebung/Drehung; Schnitt zweier Polygone ≤ min(Flächen).
-3. **[E] Datenmodell + Projekt-JSON**: Typen aus §5, Serialisierung, Versionsfeld, Migration v0→v1. *Abnahme:* Round-Trip Fixture → JSON → Modell identisch; ungültiges Projekt liefert strukturierte Fehlerliste.
-4. **[E] Rule-Pack-Schema + Loader**: JSON-Schemas (Regeln, Grenzwerte, Abläufe/Abflusstabellen, LES-Sets, Dachreiter, Abflussbeiwerte, Regenspenden), Ajv-Validierung, Versionsauflösung. *Abnahme:* Beispiel-Packs (ZVDH 2026 Entwurf, Bauder LES ungeprüft) validieren; Pack ohne `quelle` oder mit falschem Typ wird abgelehnt; Grenzwerte 300/350 m² kommen aus dem Pack, nicht aus Code (Test mit 250/280 ändert Ergebnis).
-5. **[E] Höhenfeld/Gefälle (Punktabläufe)**: Modell A2, Koten an Ecken, HP/TP, Grate/Kehlen, Gefällepfeile. *Abnahme:* Rechteck 20×10, Gully Mitte z=0, 2 %, L∞: Ecken +0,200 m; zwei Gullys bei (5|5),(15|5): Grat bei x=10, HP +0,100 m; Gefälle jeder Teilfläche = Vorgabe ± 1e-6.
-6. **[E] Linien- und Randentwässerung**: LES (Segment-Distanz, Länge, Set-Zuordnung aus Pack), Dachreiter an Attika. *Abnahme:* LES 6 m in Rechteck liefert ebene Flächen senkrecht zur LES; Set-Zuordnung LES 1–10 laut Pack-Tabelle; Länge > 10 m erzeugt Hinweis "objektspezifisch".
-7. **[E] Einzugsflächen**: Zellen je Ablauf, Schnitt mit Kontur, Abzug Aufbauten, Flächen in m², Nachbarschaftsgraph + Greedy-Färbung (12 Farben). *Abnahme:* Summe der Einzugsflächen = Dachfläche − Aufbauten (± 0,01 m²); Beispiel 2 Gullys = 2×100 m²; Nachbarn nie gleiche Farbe (Eigenschaftstest).
-8. **[E] Zonen/Stufen + Vorgaben**: Zonen mit Höhenversatz, max. HP-Höhe, min. TP-Höhe, 0 %-Zonen mit Begründungskürzel. *Abnahme:* Terrassenzone −0,10 m wird getrennt berechnet; Überschreitung max. HP erzeugt Befund mit Differenz in m.
-9. **[E] Regelprüfung**: Mindestgefälle, Pfützen (lokale Minima ohne Ablauf, Raster 0,1 m), Einzugsfläche ≥ 300 Hinweis / > 350 Fehler, Anschlusshöhen Attika/Türschwelle, barrierefreie Schwelle (Abstand ≤ 10,0 m, Überflutungskante ≥ 5 cm unter OK Flüssigkunststoff), Pack ungeprüft. *Abnahme:* je Regel ein positiver und ein negativer Fixture-Test; jeder Befund trägt `regelId` + `quelle` aus dem Pack.
-10. **[E] Notentwässerung (Schätzung)**: Q = r·C·A/10000, n_not = ceil(Q·2/Q_Ablauf@35 mm), min. 1; empfohlener Bereich (Randstreifen der Einzugsfläche an Attika, tiefste Randlage). *Abnahme:* Handrechnung 318 m², r=500 l/(s·ha), C=0,5 → Q=7,95 l/s; Q_Ablauf=6 l/s → n=3; fehlende Abflusstabelle → Befund "Herstellerdaten fehlen", keine Zahl.
-11. **[X] KOSTRA-Pack-Werkzeug**: Node-Skript wandelt DWD-KOSTRA-2020-Rasterdaten (D=5 min, T=5/100 a) in kompaktes Pack (Rasterindex → Wert) + Lookup über Koordinate. *Abnahme:* 3 Referenzpunkte stimmen mit KOSTRA-Viewer überein; manuelle Eingabe überschreibt Pack-Wert.
+2. **[E] Geometrie**: Polygon, Fläche, Punkt-in-Polygon, Abstände, Schnitt, Clipper-Adapter. *Abnahme:* 20×10 = 200 m²; Referenz-L-Dach exakt; fast-check: Fläche invariant unter Verschiebung/Drehung.
+3. **[E] Datenmodell + Projekt-JSON** inkl. Versionsfeld/Migration. *Abnahme:* Round-Trip identisch; ungültiges Projekt → strukturierte Fehlerliste.
+4. **[E] Rule-Pack-Schemas + Loader** (Regeln, Grenzwerte, Abläufe, LES-Sets, Dachreiter, Abflussbeiwerte, Regenspenden, Dämmplatten, Orte). *Abnahme:* Beispiel-Packs validieren; Pack ohne `quelle` abgelehnt; Grenzwerte 300/350 m² nur aus Pack (Test mit 250/280 ändert Ergebnis).
+5. **[E] Höhenfeld (Punktabläufe)**: Facetten, Koten, HP/TP, Grate/Kehlen, Pfeile. *Abnahme:* 20×10, Gully Mitte z=0, 2 %: Ecken +0,200 m, 4 Facetten, 4 Kehlen; 2 Gullys (5|5),(15|5): Grat x=10, HP +0,100 m.
+6. **[E] LES und Dachreiter**: Segment-Distanz, Set-Zuordnung aus Pack. *Abnahme:* Facetten senkrecht zur LES; LES 1–10 laut Pack-Tabelle; > 10 m → Hinweis "objektspezifisch".
+7. **[E] Einzugsflächen**: Zellen, Schnitt, Abzug Aufbauten, m², Greedy-Färbung (12 Farben, ohne Schraffur). *Abnahme:* Summe = Dachfläche − Aufbauten ± 0,01 m²; 2 Gullys = 2×100 m²; Nachbarn nie gleiche Farbe (Eigenschaftstest).
+8. **[E] Zonen/Stufen + Vorgaben** (max. HP, min. TP, 0 %-Zonen mit Begründung). *Abnahme:* Terrassenzone −0,10 m getrennt berechnet; Überschreitung max. HP → Befund mit Differenz.
+9. **[E] Regelprüfung**: Mindestgefälle, Pfützen (Raster 0,1 m), 300/350 m², Anschlusshöhen Attika/Türschwelle, barrierefreie Schwelle (≤ 10,0 m, Überflutungskante ≥ 5 cm), Pack ungeprüft, Regenspende manuell überschrieben. *Abnahme:* je Regel ein positiver und ein negativer Test; jeder Befund mit `regelId` + `quelle`.
+10. **[E] Regenspende + Notentwässerung**: `resolveRain` (Koordinate → Rasterzelle), Q = r·C·A/10000, n_not = ceil(Q·2/Q_Ablauf@35 mm), min. 1, empfohlener Bereich. *Abnahme:* 318 m², r=500, C=0,5 → Q=7,95 l/s, Q_Ablauf=6 → n=3; Koordinate außerhalb Deutschland → null + Befund; fehlende Abflusstabelle → Befund, keine Zahl.
+11. **[X] Pack-Werkzeuge**: `tools/kostra-build.ts` (DWD KOSTRA-2020, D=5 min, T=5/100 a → kompaktes Raster-Pack), `tools/plz-build.ts` (PLZ/Ort → Schwerpunkt-Koordinate, offene Lizenz). *Abnahme:* 3 Referenzorte stimmen mit dem KOSTRA-Viewer überein; Pack-Größe < 5 MB; Quelle/Stand im Pack.
 
 ### M2 2D-Editor
-12. **[X] App-Shell + Tokens**: Grid-Layout, Theme hell/dunkel, Fonts lokal. *Abnahme:* Checkliste DESIGN §10 Punkte 1,3,4,12,14.
-13. **[X] Zeichenfläche**: Pan/Zoom, Welt↔Bildschirm, Zeichnungsreihenfolge. *Abnahme:* Transformations-Unit-Tests; 60 fps bei 5 000 Unterlagen-Linien (Performance-Messung im Test).
-14. **[E] Punktfang**: End-, Mittel-, Schnittpunkt, Lot, Orthogonal, Spatial-Index. *Abnahme:* Unit-Tests je Fangart; Fangsuche < 2 ms bei 20 000 Segmenten.
-15. **[X] DXF-Unterlage**: Import LINE/LWPOLYLINE/ARC/CIRCLE/INSERT, Einheiten ($INSUNITS), Layer ein/aus. *Abnahme:* Fixture-DXF, Maße ± 1 mm korrekt; fangbar.
-16. **[X] PDF-Unterlage + Kalibrierung**: Seite rendern, Maßstab 1:n oder Zwei-Punkt-Kalibrierung. *Abnahme:* bekannte Strecke im Fixture-PDF misst nach Kalibrierung ± 0,5 %; Maßstab in Statusleiste.
-17. **[X] Werkzeuge Zeichnen**: Dachkontur (Ortho-Modus), Attika, Aufbauten, Terrassenzone, Türschwelle; Undo/Redo. *Abnahme:* E2E: L-Dach zeichnen, Fläche im Panel korrekt; Undo/Redo-Tests.
-18. **[X] Werkzeuge Entwässerung (Modus B)**: Gully, Notablauf, Dachreiter, LES mit Produkt aus Pack. *Abnahme:* Setzen löst Neuberechnung aus; Symbole laut DESIGN §6.
+12. **[X] App-Shell + Tokens** (Grid, Theme, Fonts lokal). *Abnahme:* DESIGN §10 Punkte 1, 3, 4, 12, 14.
+13. **[X] Zeichenfläche** (Pan/Zoom, Transformation, Reihenfolge). *Abnahme:* Transformationstests; 60 fps bei 5 000 Unterlagen-Linien.
+14. **[E] Punktfang** (End-, Mittel-, Schnittpunkt, Lot, Ortho; Spatial-Index). *Abnahme:* Test je Fangart; Suche < 2 ms bei 20 000 Segmenten.
+15. **[X] DXF-Unterlage** (LINE, LWPOLYLINE, ARC, CIRCLE, INSERT, $INSUNITS, Layer). *Abnahme:* Fixture-Maße ± 1 mm; fangbar.
+16. **[X] PDF-Unterlage + Kalibrierung** (1:n oder Zwei-Punkt). *Abnahme:* bekannte Strecke ± 0,5 %; Maßstab in Statusleiste.
+17. **[X] Zeichenwerkzeuge** (Kontur, Attika, Aufbauten, Terrasse, Türschwelle, Undo/Redo). *Abnahme:* E2E L-Dach, Fläche korrekt; Undo/Redo-Tests.
+18. **[X] Entwässerungswerkzeuge Modus B** (Gully, Notablauf, Dachreiter, LES aus Pack). *Abnahme:* Neuberechnung beim Setzen; Symbole laut DESIGN §6.
 
 ### M3 Auswertung in der UI
-19. **[X] Ergebnisdarstellung**: Einzugsflächen farbig + Labels (Polylabel, Kollision), Koten, Gefällepfeile, Notentwässerungsbereich. *Abnahme:* DESIGN §10 Punkte 2,7,8,9,10,11.
-20. **[X] Eigenschaften-Panel + Prüfliste**: Parameter (Gefälle, HP/TP, Aufbau, Regenspende/KOSTRA), Befunde sortiert, Klick zentriert Objekt. *Abnahme:* Zähler korrekt; Klick markiert Objekt (E2E).
-21. **[X] Projekt speichern/laden + Autosave**. *Abnahme:* Reload stellt Zustand inkl. Rule-Pack-Version wieder her; fremde Pack-Version → Hinweis.
+19. **[X] Ergebnisdarstellung**: Einzugsflächen farbig ohne Schraffur + Labels, Koten, Pfeile, Notentwässerungsbereich. *Abnahme:* DESIGN §10 Punkte 2, 7–11.
+20. **[X] Standort + Regenspende-Panel**: Eingabe per Koordinaten (WGS84/UTM), PLZ/Ort-Suche (offline Pack) oder Klick auf offline Deutschlandkarte mit KOSTRA-Raster; Anzeige Zelle, r(5,5), r(5,100), Quelle/Stand; Feld "manuell" überschreibt, Pack-Wert bleibt sichtbar (Abgleich, Differenz in %). Adress-Geocoding nur optional per Opt-in-Dialog, sendet nur die eingegebene Adresse. *Abnahme:* PLZ-Eingabe füllt Werte ohne Netz (Netz im E2E blockiert); Überschreiben erzeugt Hinweis; Reload behält beide Werte.
+21. **[X] Eigenschaften-Panel + Prüfliste** (Befunde sortiert, Klick zentriert). *Abnahme:* Zähler korrekt; Klick markiert Objekt (E2E).
+22. **[X] Speichern/Laden + Autosave**. *Abnahme:* Reload stellt Zustand inkl. Pack-Versionen her; fremde Version → Hinweis.
 
-### M4 3D und Export (Abschluss V1)
-22. **[X] 3D-Ansicht**: Dachfläche aus Höhenfeld trianguliert, Überhöhung 1/5/10×. *Abnahme:* Mesh-Erzeugung als Unit-Test (Eckhöhen = Koten); DESIGN §7.
-23. **[X] PDF-Export**: Maßstabsgetreu, Schriftfeld, Legende, Nordpfeil, Maßstabsbalken. *Abnahme:* Strecke 10 m bei 1:100 = 100 mm ± 0,2 mm im PDF; DESIGN §10 Punkt 13.
-24. **[X] DXF-Export**: Layer je Objektart, Koten als Text, Einzugsflächen als HATCH/Polylinie. *Abnahme:* Re-Import mit dxf-parser liefert gleiche Geometrie ± 1 mm.
-25. **Review V1** (`reviewer`), Fixes, Feldtest mit 2 Bürodächern.
+### M4 Gefälledämmplan (Kern + 2D)
+23. **[E] Plattenkatalog-Pack**: Hersteller, Produkt, Format (L×B), Gefälle, Dickenstufen je Typ, Sonderplatten (8A), Zusatzlagen, Kehlkeile Kn L/R mit Maßen, LES-Keil-Sets und Dachreiter-Zubehör. *Abnahme:* Beispielpack (fiktiv, `geprueft:false`) validiert; Loader meldet Lücke, wenn Enddicke Typ n ≠ Anfangsdicke Typ n+1.
+24. **[E] Plattenaufteilung `layoutInsulation`**: je Facette Reihen quer zur Fallrichtung ab Tiefpunkt, Typ aus Höhe, Zuschnitt an Facettengrenzen und Kontur, Kehlkeile an Kehlen, Spiegelung an Graten, Zusatzlage + Neustart über höchstem Typ, N0 und Verlegestart. *Abnahme:* 10×5 m mit LES an Längsseite, Plattenbreite 1 m → 5 Reihen Typ 1–5; Gully mittig → Kehlkeile L/R symmetrisch gleich viele; Dämmdicke an jeder Plattenecke = Höhenfeld ± 1 mm; Gefällelänge über Typ 8 → Bezeichnung "1+1"; Referenz-L-Dach ergibt keine Lücken/Überlappungen (Flächensumme = Dachfläche ± 0,01 m²); Kehle ≠ 45° (ungleiche Gefälle) → Befund "Kehlkeil nicht im Katalog".
+25. **[E] Stückliste `billOfMaterials`**: Anzahl je Typ, Keile, Zusatzlagen, Zuschnitte, m², m³, Verschnitt, LES-Sets, Dachreiter. *Abnahme:* Volumen = Integral Höhenfeld ± 2 %; Ergebnis deterministisch (Snapshot); LES 6 m → Sets 1+2+3.
+26. **[X] 2D-Ansicht Dämmplan**: Plattenraster, Typ-Nummern, Kn L/R, Verlegepfeile, Kehl-/Gratlinien, N0/Verlegestart, Bemaßung außen, Stückliste-Tabelle (DESIGN §11). *Abnahme:* Referenz-L-Dach visuell wie `gefaelledaemmplan-2d.jpg` (visual-qa); Labels überlappen nicht.
 
-### M5 Modus C (V1.1), M6 Desktop
-26. **[E] Vorschlag Abläufe**: Gullyanzahl/-position so, dass jede Fläche ≤ Grenzwert, HP ≤ max. Höhe; Varianten bewerten. *Abnahme:* Rechteck 40×20 → ≥ 3 Abläufe, alle Flächen < 300 m²; deterministisch.
-27. **[X] Tauri-Wrapper** (Dateidialoge nativ), danach DWG über Konverter (ODA File Converter, extern).
+### M5 3D und Export (Abschluss V1)
+27. **[X] 3D-Ansicht**: Dachfläche aus Höhenfeld, Überhöhung 1/5/10×; Modus Dämmplan mit Plattenblöcken, Typ-Labels, Zusatzlage gelb. *Abnahme:* Mesh-Unit-Test (Eckhöhen = Koten, Blockhöhen = Plattendicken); DESIGN §7 und §11.
+28. **[X] PDF-Export** (Gefälleplan + Dämmplan mit Stückliste; Schriftfeld, Legende, Nordpfeil, Maßstabsbalken). *Abnahme:* 10 m bei 1:100 = 100 mm ± 0,2 mm; DESIGN §10 Punkt 13.
+29. **[X] DXF-Export + Stückliste CSV** (Layer je Objektart, Plattenraster, Texte). *Abnahme:* Re-Import ± 1 mm; CSV-Summen = Stückliste.
+30. **Review V1** (`reviewer`), Fixes, Feldtest mit 2 Bürodächern (inkl. Abgleich mit einem Hersteller-Verlegeplan).
+
+### M6 Modus C (V1.1), M7 Desktop
+31. **[E] Vorschlag Abläufe**: Anzahl/Position so, dass alle Flächen ≤ Grenzwert und HP ≤ max. *Abnahme:* 40×20 → ≥ 3 Abläufe, alle < 300 m²; deterministisch.
+32. **[X] Tauri-Wrapper**, danach DWG über externen Konverter.
 
 ## 7. Teststrategie
-- Kern: Vitest-Unit-Tests + fast-check-Eigenschaften (Flächensumme, Invarianz, Färbung) + Golden-Fixtures (`tests/fixtures/*.fdp.json` mit erwarteten Koten/Flächen). Ziel ≥ 90 % Zeilenabdeckung in `src/core`.
-- Rule-Packs: jedes Pack wird in CI gegen Schema validiert; Snapshot der Befunde je Fixture.
-- UI: Unit-Tests für Transformation, Fang, Werkzeug-Zustandsmaschinen; Playwright-Smoke (Laden, Zeichnen, Export) + Screenshots für `visual-qa`.
-- Export: PDF/DXF maßlich geprüft (Re-Import bzw. Koordinaten aus PDF-Operatoren).
+- Kern: Vitest-Unit-Tests, fast-check-Eigenschaften (Flächensumme, Invarianz, Färbung, Lückenfreiheit der Platten), Golden-Fixtures mit erwarteten Koten, Flächen, Plattenlisten. Ziel ≥ 90 % Zeilenabdeckung in `src/core`.
+- Rule-Packs: Schema-Validierung aller Packs in `npm test`; Snapshot der Befunde und Stücklisten je Fixture.
+- UI: Tests für Transformation, Fang, Werkzeug-Zustände; Playwright-Smoke (Laden, Zeichnen, Standort offline, Export) + Screenshots für `visual-qa`.
+- Export: PDF/DXF maßlich geprüft (Re-Import bzw. PDF-Koordinaten).
 
 ## 8. Risiken und offene Fragen
-- **R1 KOSTRA-Anbindung.** DWD stellt KOSTRA-DWD-2020 als Open Data (Raster ca. 5×5 km, Shape/CSV) bereit; Nutzungsbedingungen (Quellenangabe "Deutscher Wetterdienst") vor Einsatz prüfen. Eine offizielle Punktabfrage-API mit CORS ist nicht gesichert, Online-Abruf widerspricht zudem "lokal ohne Server". **Empfehlung:** Offline-Pack (Schritt 11) mit Quelle/Stand, Lookup über Koordinate (WGS84 → Raster-CRS), Pflichtfeld Quellenangabe im Export; Fallback manuelle Eingabe; Online-Aktualisierung nur als optionaler Pack-Download.
-- R2 Regelwerkswerte (ZVDH 01/2026, DIN 18531, DIN 1986-100-Bezug für r(5,5)/r(5,100)) sind ungeprüft übernommen; vor Freigabe gegen Originale prüfen. Bis dahin `geprueft:false`.
-- R3 Bauder-LES-Daten widersprüchlich (0,25 m/m vs. mm-Höhenbereiche); Loro-Abflusstabelle fehlt. Ohne Daten keine Notablauf-Zahl.
-- R4 Gefällemodell A2 bei L-/U-Formen: gerade Distanz kann die Kontur verlassen. Engineer prüft geodätische Distanz bzw. Zerlegung; Befund, falls Pfad außerhalb liegt.
-- R5 PDF-Unterlagen ohne Vektordaten: Fang nur auf eigene Geometrie; Hinweis anzeigen.
-- Offen: konkrete Anschlusshöhen/Notabdichtungsmaße; Abflussbeiwert Gründach (Pack-Parameter); Erfolgskriterium V1 (Vorschlag: Bürodach in < 30 min statt Stunden, Ergebnisse von Planer bestätigt).
+- **R1 KOSTRA.** DWD stellt KOSTRA-DWD-2020 als Open Data bereit (Raster ca. 5×5 km); Nutzungsbedingungen und Pflicht zur Quellenangabe vor Einsatz prüfen. Eine Punktabfrage-API mit CORS ist nicht gesichert, Online-Abruf widerspricht "lokal". **Empfehlung:** Offline-Pack (Schritt 11), Standort offline per Koordinate/PLZ/Kartenklick, Wert sichtbar und überschreibbar, Quellenangabe im Export; Online nur als optionaler Pack-Update-Download.
+- **R2 Geocoding/Datenschutz:** Adressen sind Projektdaten. Online-Geocoding nur nach Opt-in, Anbieter offen (z. B. BKG oder Nominatim, Nutzungsbedingungen prüfen); Standard bleibt offline.
+- R3 Regelwerkswerte (ZVDH 01/2026, DIN 18531, DIN 1986-100 für r(5,5)/r(5,100)) ungeprüft; bis zur Prüfung `geprueft:false`.
+- R4 Bauder-LES-Daten widersprüchlich; Loro-Abflusstabelle fehlt.
+- R5 Modell A2 bei L/U-Formen: Distanz kann die Kontur verlassen; der Engineer prüft eine geodätische Variante.
+- **R6 Plattenkatalog fehlt:** Hersteller, Formate, Dickenstufen, Bedeutung "8A", Keilmaße und Zusatzlagen-Regel vom Nutzer nötig; bis dahin fiktives Pack. Ohne echten Katalog keine verbindliche Stückliste.
+- R7 Kehlen ≠ 45° und schräge Konturen: Keilsortiment evtl. nicht passend; V1 meldet Befund statt Sonderzuschnitt.
+- Offen: Anschlusshöhen/Notabdichtung; Abflussbeiwert Gründach; Erfolgskriterium V1 (Vorschlag: Bürodach inkl. Dämmplan in < 30 min, Ergebnis vom Planer bestätigt).
 
 ## Übergabe
-- Nächster Schritt: **1 Projekt-Setup** (executor).
-- Stand: DESIGN.md und Intent vorhanden, noch kein Code.
-- Entscheidungen: Kern rein in `src/core` ohne DOM; Regeln/Herstellerdaten nur in `rulepacks/`; V1 = M1–M4 Modus B.
-- Offene Punkte: R1–R3 mit Nutzer klären (Lizenz KOSTRA, Original-Regelwerk, Herstellerdaten).
-- Stolperfallen: keine Grenzwerte im Code; Koten immer 3 Nachkommastellen, deutsches Zahlenformat nur in der UI, nie im Kern.
+- Nächster Schritt: **1 Setup** (executor).
+- Stand: DESIGN.md (inkl. §11 Dämmplan, Einzugsflächen ohne Schraffur), Intent, Referenzbilder vorhanden; noch kein Code.
+- Entscheidungen: Kern rein in `src/core`; Regeln, Herstellerdaten, KOSTRA, PLZ nur in `rulepacks/`; V1 = M1–M5 inkl. Gefälledämmplan; Standort offline, Geocoding optional per Opt-in.
+- Vom Nutzer anfordern: Plattenkatalog (R6), Loro-Tabelle, LES-Klärung, KOSTRA-Lizenzprüfung, Original-Regelwerk.
+- Stolperfallen: keine Grenzwerte im Code; Regenspende immer Pack-Wert und Nutzerwert speichern; Einzugsflächen nie schraffieren; Koten 3 Nachkommastellen nur in der UI formatieren.
