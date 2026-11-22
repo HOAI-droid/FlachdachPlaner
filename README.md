@@ -25,7 +25,9 @@ Architekten und Zeichner im Büro, die Flachdächer (meist Warmdach mit Gründac
 - **Modus C (V1.1):** Die Software schlägt Anzahl und Position der Abläufe sowie die Gefälleaufteilung vor.
 
 ### Berechnung
-- **Höhenfeld** aus Entwässerungselementen und Gefälle (Standard 2 %): ebene Facetten, Hochpunkte (HP), Tiefpunkte (TP), Grate und Kehlen, Höhenkoten und Gefällepfeile.
+- **Ablauftiefe:** Für jeden Ablauf (Tiefpunkt) lässt sich angeben, wie tief er sitzt (Kote `z`). Daraus ergibt sich maßgeblich die Gefällesituation: Unterschiedlich tiefe Abläufe verschieben Grate und Kehlen sowie die Koten.
+- **Mittlere Gefälledämmung:** Je Dachfläche wird die mittlere Dämmdicke in mm ausgegeben (zusätzlich Minimum und Maximum), flächengewichtet und ohne Aufbauten. Das ist bauphysikalisch ein maßgeblicher Wert; ein U-Wert-Nachweis ist in V1 nicht enthalten.
+- **Höhenfeld** aus Entwässerungselementen, deren Tiefenlage und Gefälle (Standard 2 %): ebene Facetten, Hochpunkte (HP), Tiefpunkte (TP), Grate und Kehlen, Höhenkoten und Gefällepfeile.
 - **Einzugsflächen** je Ablauf, **farbig und ohne Schraffur**, mit Flächengröße in m². Aufbauten werden abgezogen. Die **Attikafläche** (Horizontalprojektion) wird dem angrenzenden Ablauf zugeschlagen. Je Ablauf werden Dachfläche, Attikafläche und Gesamtfläche getrennt ausgewiesen, z. B. `E3 · Dach 296 m² + Attika 24 m² = 320 m²`.
 - **Zonen und Stufen:** Dachterrassen mit reduziertem Aufbau (z. B. −0,10 m für Barrierefreiheit), 0-%-Zonen mit Begründung, Vorgaben für maximale Höhe des Hochpunkts und Mindesthöhe des Tiefpunkts.
 - **Regenspende** aus KOSTRA zum Projektstandort (offline, Datenquelle OpenKOSTRA): Standort per Koordinate (WGS84/UTM), PLZ/Ort oder Klick auf eine Deutschlandkarte. Der Pack-Wert bleibt sichtbar, ein manuell überschriebener Wert wird mit Differenz ausgewiesen.
@@ -49,9 +51,9 @@ Die Prüfliste ist nach Schwere sortiert; ein Klick springt zum betroffenen Obje
 - **Keine Stückliste** in V1.
 
 ### Ansichten und Export
-- **2D** mit Koten, Pfeilen, Einzugsflächen und Dämmplan inkl. Maßketten.
+- **2D** mit Koten, Pfeilen, Einzugsflächen, Ablauf-Koten, Ø Gefälledämmung je Dachfläche und Dämmplan inkl. Maßketten.
 - **3D** aus dem Höhenfeld mit wählbarer Überhöhung (1/5/10×) und Dämmplan als Plattenblöcke.
-- **PDF-Export** (maßstäblich, Vektor) mit Schriftfeld, Legende, Nordpfeil und Maßstabsbalken.
+- **PDF-Export** (maßstäblich, Vektor) mit Schriftfeld, Legende, Nordpfeil und Maßstabsbalken sowie Tabelle der Ablauf-Koten und der mittleren Gefälledämmung.
 - **DXF-Export** mit Layern je Objektart.
 
 ## Regelwerk als Datenpakete (Rule-Packs)

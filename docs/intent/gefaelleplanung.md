@@ -19,6 +19,10 @@ Zeichen- und Planungswerkzeug für ein Architekturbüro: Gefälleplanung von Fla
 8. **3D-Ansicht** zum Verständnis.
 9. **Export**: PDF und DXF (DWG später).
 
+## Ergänzungen (Nutzer, nach Planstart)
+- **Ablauftiefe:** Zu jedem Ablauf (Tiefpunkt) ist anzugeben, wie tief er sitzt (Kote `z`). Daraus ergibt sich maßgeblich die Gefällesituation (unterschiedlich tiefe Abläufe verschieben Grate/Kehlen und Koten).
+- **Gefälle im Mittel:** Je Dachfläche wird die **mittlere Gefälledämmung** (mittlere Dämmdicke in mm) ausgegeben; bauphysikalisch immer entscheidend. Ausgabe in der Auswertung, im Dämmplan und im Export.
+
 ## Ergänzungen (Interview 6)
 - **Maßstab beim Import** der Unterlage angeben (z. B. 1:100) bzw. per Zwei-Punkt-Kalibrierung (bekannte Strecke). Maßstab/Größe ist wesentlich.
 - **Entwässerungssysteme**: Gully/Ablauf, **Dachreiter** und **Linienentwässerung (LES)** herstellerabhängig (Beispiel Bauder PIR T LES: Keil-Sets, Systeme bis 10 m Länge, größere Längen objektspezifisch). Herstellerdaten als Datenbibliothek, nicht im Code.
