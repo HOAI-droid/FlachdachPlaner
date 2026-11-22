@@ -103,7 +103,7 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 - Export: PDF/DXF maßlich geprüft (Re-Import bzw. PDF-Koordinaten).
 
 ## 8. Risiken und offene Fragen
-- **R1 KOSTRA.** Nutzerentscheid: OpenKOSTRA verwenden, OpenKOSTRA (Lizenz im Pack vermerken) entfällt (Lizenz von OpenKOSTRA beim Bau des Packs im Pack vermerken). Ursprünglich: DWD stellt KOSTRA-DWD-2020 als Open Data bereit (Raster ca. 5×5 km); Nutzungsbedingungen und Pflicht zur Quellenangabe vor Einsatz prüfen. Eine Punktabfrage-API mit CORS ist nicht gesichert, Online-Abruf widerspricht "lokal". **Empfehlung:** Offline-Pack (Schritt 11), Standort offline per Koordinate/PLZ/Kartenklick, Wert sichtbar und überschreibbar, Quellenangabe im Export; Online nur als optionaler Pack-Update-Download.
+- **R1 KOSTRA.** Nutzerentscheid: OpenKOSTRA verwenden, DWD-Lizenzprüfung entfällt (Lizenz von OpenKOSTRA beim Bau des Packs im Pack vermerken). Ursprünglich: DWD stellt KOSTRA-DWD-2020 als Open Data bereit (Raster ca. 5×5 km); Nutzungsbedingungen und Pflicht zur Quellenangabe vor Einsatz prüfen. Eine Punktabfrage-API mit CORS ist nicht gesichert, Online-Abruf widerspricht "lokal". **Empfehlung:** Offline-Pack (Schritt 11), Standort offline per Koordinate/PLZ/Kartenklick, Wert sichtbar und überschreibbar, Quellenangabe im Export; Online nur als optionaler Pack-Update-Download.
 - **R2 Geocoding/Datenschutz:** Adressen sind Projektdaten. Online-Geocoding nur nach Opt-in, Anbieter offen (z. B. BKG oder Nominatim, Nutzungsbedingungen prüfen); Standard bleibt offline.
 - R3 Regelwerkswerte (ZVDH 01/2026, DIN 18531, DIN 1986-100 für r(5,5)/r(5,100)) ungeprüft; bis zur Prüfung `geprueft:false`.
 - R4 Bauder-LES-Daten widersprüchlich; Loro-Abflusstabelle fehlt.
