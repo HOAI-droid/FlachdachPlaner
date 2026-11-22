@@ -237,7 +237,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (!tausch) return;
     const t = tausch;
     const box = el("div", "pad abweichungen");
-    box.append(el("div", "panel-sub", "Unterlage ausgetauscht: Abweichungen"));
+    box.append(el("div", "note", "Unterlage ausgetauscht: Abweichungen (Koordinaten in m)"));
     const al = el("details", "ausrichtung"); al.append(el("summary", "", "Ausrichtung (zwei Passpunkte)"));
     const namen = ["Neu 1 x", "Neu 1 y", "Alt 1 x", "Alt 1 y", "Neu 2 x", "Neu 2 y", "Alt 2 x", "Alt 2 y"];
     namen.forEach((n, i) => al.append(feld(n, zahl(t.pass[i]!, 3), `pass${i}`, (v) => { t.pass[i] = v; }, "m")));
@@ -247,9 +247,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     else {
       const ul = el("ul", "befunde");
       for (const a of abweichungen) {
-        const li = el("li", "befund warnung"); li.dataset.abw = a.id;
+        const li = el("li", "befund abw-zeile"); li.dataset.abw = a.id;
         const txt = a.vorschlag ? `${zahl(a.alt.x, 3)} | ${zahl(a.alt.y, 3)} → ${zahl(a.vorschlag.x, 3)} | ${zahl(a.vorschlag.y, 3)} (${zahl((a.abstand ?? 0) * 100, 1)} cm)` : `${zahl(a.alt.x, 3)} | ${zahl(a.alt.y, 3)} → kein neuer Fangpunkt`;
-        li.append(el("span", "stufe", "Abweichung"), el("span", "", txt));
+        li.append(el("div", "stufe", "Abweichung"), el("div", "num", txt));
         const z = el("div", "btn-row");
         if (a.vorschlag) z.append(button("Übernehmen", () => ausfuehreBefehl(uebernehmeVorschlaege([a]))));
         const pos = { x: (a.vorschlag ?? a.alt).x, y: (a.vorschlag ?? a.alt).y };

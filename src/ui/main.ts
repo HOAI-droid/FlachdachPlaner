@@ -33,7 +33,7 @@ if (root) {
     const gespeichert = await autosaveLesen(); // vor mountEditor lesen, sonst überschreibt der erste Autosave den Stand
     await ladeInstallierte();
     const editor = mountEditor(shell, stage);
-    mountUpdate(shell.panels.projekt, editor);
+    mountUpdate(shell.panels.update, editor);
     if (gespeichert) { const r = leseProjekt(gespeichert); if (r.ok) editor.lade(r.projekt); }
     (window as unknown as { __editor: typeof editor }).__editor = editor;
   })();

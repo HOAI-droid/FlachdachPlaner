@@ -124,3 +124,19 @@ button, input, select { font: inherit; color: inherit; }
 .btn-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .num-klein { width: 72px; font-family: var(--font-mono); }
 .abweichungen details { margin-bottom: var(--sp-3); }
+
+/* Update-/Abweichungs-Panel (flache Zeilen, keine Karten) */
+.update .field input[type="text"] { text-align: left; }
+.update .btn-row, .abweichungen .btn-row { margin: var(--sp-2) 0; align-items: center; }
+.update .check-row { padding: var(--sp-2) 0; }
+.update select { height: 28px; padding: 0 var(--sp-3); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-1); min-width: 0; }
+.update details, .abweichungen details { margin-top: var(--sp-2); }
+.update summary, .abweichungen summary { cursor: pointer; color: var(--text-muted); padding: var(--sp-2) 0; }
+.update .befunde, .abweichungen .befunde { padding: var(--sp-2) 0; gap: 0; }
+.update-zeile, .abw-zeile { background: transparent; border-radius: 0; border-bottom: 1px solid var(--line); padding: var(--sp-2) 0; list-style: none; }
+.update-zeile { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.abw-zeile .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.abw-zeile .stufe::before { content: none; }
+.abweichungen .field input, .num-klein { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-1); height: 28px; padding: 0 var(--sp-2); }
+.pruef-zaehler { padding-top: var(--sp-2); }
+.befund.klick[aria-pressed="true"], .befund.aktiv { background: var(--accent-soft); }

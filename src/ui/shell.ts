@@ -84,7 +84,7 @@ export interface Shell {
   /** Markiert das aktive Werkzeug (z. B. nach Esc oder Tastenkürzel). */
   setTool(id: string): void;
   /** Panel-Abschnitte (Inhalt wird von der UI-Steuerung befüllt). */
-  panels: { unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement; standort: HTMLElement; ergebnis: HTMLElement; projekt: HTMLElement };
+  panels: { unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement; standort: HTMLElement; ergebnis: HTMLElement; projekt: HTMLElement; update: HTMLElement };
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
 }
@@ -159,10 +159,10 @@ export function mountShell(root: HTMLElement): Shell {
   inp.id = "f-gefaelle"; lbl.htmlFor = inp.id; inp.value = "2,0 %"; inp.inputMode = "decimal";
   f.append(lbl, inp);
   proj.append(f);
-  const unterlage = el("div"), werkzeug = el("div"), auswahl = el("div"), standort = el("div"), ergebnis = el("div");
+  const update = el("div"), unterlage = el("div"), werkzeug = el("div"), auswahl = el("div"), standort = el("div"), ergebnis = el("div");
   unterlage.append(el("div", "empty", "Keine Unterlage geladen."));
   auswahl.append(el("div", "empty", "Nichts ausgewählt."));
-  props.append(section("Unterlage", unterlage), section("Werkzeug", werkzeug), section("Auswahl", auswahl), section("Standort & Regenspende", standort), section("Ergebnis", ergebnis), section("Projekt", proj));
+  props.append(section("Unterlage", unterlage), section("Werkzeug", werkzeug), section("Auswahl", auswahl), section("Standort & Regenspende", standort), section("Ergebnis", ergebnis), section("Projekt", proj), section("Updates", update));
 
   const status = el("footer", "status");
   const cursor = el("span", "num", "x –  y –");
@@ -177,6 +177,6 @@ export function mountShell(root: HTMLElement): Shell {
 
   return {
     stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; },
-    setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, projekt: proj }, undo, redo,
+    setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, projekt: proj, update }, undo, redo,
   };
 }

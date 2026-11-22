@@ -34,8 +34,7 @@ function ordnerQuelle(dateien: FileList): Quelle {
 }
 
 export function mountUpdate(host: HTMLElement, editor: Editor): void {
-  const box = el("section", "update"); box.dataset.k = "update";
-  box.append(el("h3", "", "Updates"));
+  const box = el("div", "pad update"); box.dataset.k = "update";
   let s = lies();
   let ordner: Quelle | null = null;
   let angebote: PackUpdate[] = [];
@@ -82,11 +81,11 @@ export function mountUpdate(host: HTMLElement, editor: Editor): void {
   }
 
   function draw(): void {
-    box.replaceChildren(el("h3", "", "Updates"));
-    const ver = el("p", "hilfe", `Programm: Version ${__APP_VERSION__} · Build ${__APP_BUILD__}`); ver.dataset.k = "programm-version";
+    box.replaceChildren();
+    const ver = el("div", "note", `Programm: Version ${__APP_VERSION__} · Build ${__APP_BUILD__}`); ver.dataset.k = "programm-version";
     box.append(ver);
-    const f = el("div", "feld"), l = el("label", "", "Update-Quelle (URL oder Ordner)"); l.htmlFor = "f-update-quelle";
-    const i = el("input"); i.id = "f-update-quelle"; i.type = "text"; i.placeholder = "leer = aus"; i.value = s.quelle; i.dataset.k = "update-quelle";
+    const f = el("div", "field"), l = el("label", "", "Quelle"); l.htmlFor = "f-update-quelle";
+    const i = el("input"); i.id = "f-update-quelle"; i.type = "text"; i.placeholder = "URL oder Ordner, leer = aus"; i.title = "Update-Quelle: URL oder lokaler Ordner (leer = aus)"; i.value = s.quelle; i.dataset.k = "update-quelle";
     i.addEventListener("change", () => { s = { ...s, quelle: i.value }; ordner = null; merke(s); status = s.quelle ? "" : "Update-Quelle nicht eingestellt (Standard: aus)."; draw(); });
     f.append(l, i); box.append(f);
     const ord = el("input"); ord.type = "file"; ord.hidden = true; ord.setAttribute("webkitdirectory", ""); ord.dataset.k = "update-ordner";
@@ -95,15 +94,15 @@ export function mountUpdate(host: HTMLElement, editor: Editor): void {
     const b1 = el("button", "btn", "Ordner wählen …"); b1.type = "button"; b1.addEventListener("click", () => ord.click());
     const b2 = el("button", "btn", "Nach Updates suchen"); b2.type = "button"; b2.dataset.k = "update-suchen"; b2.addEventListener("click", () => void pruefe());
     zeile.append(b1, b2, ord); box.append(zeile);
-    const cb = el("label", "check"), c = el("input"); c.type = "checkbox"; c.checked = s.beiStart; c.dataset.k = "update-start";
+    const cb = el("label", "check-row"), c = el("input"); c.type = "checkbox"; c.checked = s.beiStart; c.dataset.k = "update-start";
     c.addEventListener("change", () => { s = { ...s, beiStart: c.checked }; merke(s); });
-    cb.append(c, document.createTextNode(" Beim Start prüfen")); box.append(cb);
-    if (status) { const p = el("p", "hilfe", status); p.dataset.k = "update-status"; p.setAttribute("role", "status"); box.append(p); }
-    if (programmHinweis) { const p = el("p", "hilfe", programmHinweis); p.dataset.k = "programm-hinweis"; box.append(p); }
+    cb.append(c, el("span", "", "Beim Start prüfen")); box.append(cb);
+    if (status) { const p = el("div", "note", status); p.dataset.k = "update-status"; p.setAttribute("role", "status"); box.append(p); }
+    if (programmHinweis) { const p = el("div", "note warn", programmHinweis); p.dataset.k = "programm-hinweis"; box.append(p); }
     if (angebote.length) {
-      const ul = el("ul", "update-liste"); ul.dataset.k = "update-angebote";
+      const ul = el("ul", "befunde"); ul.dataset.k = "update-angebote";
       for (const a of angebote) {
-        const li = el("li"); li.dataset.pack = a.eintrag.id;
+        const li = el("li", "befund update-zeile"); li.dataset.pack = a.eintrag.id;
         li.append(el("span", "", `${a.eintrag.id}: ${a.alt ?? "neu"} → ${a.neu}${a.eintrag.gueltigAb ? ` (gültig ab ${a.eintrag.gueltigAb})` : ""}${a.eintrag.notiz ? " – " + a.eintrag.notiz : ""}`));
         const b = el("button", "btn", "Laden"); b.type = "button"; b.addEventListener("click", () => void lade(a)); li.append(b);
         ul.append(li);
@@ -115,7 +114,7 @@ export function mountUpdate(host: HTMLElement, editor: Editor): void {
     if (mehr.length) {
       const d = el("details"); d.append(el("summary", "", "Pack-Versionen (Rollback)"));
       for (const p of mehr) {
-        const fz = el("div", "feld"), lb = el("label", "", p.id); lb.htmlFor = `f-pv-${p.id}`;
+        const fz = el("div", "field"), lb = el("label", "", p.id); lb.htmlFor = `f-pv-${p.id}`;
         const sel = el("select"); sel.id = lb.htmlFor; sel.dataset.k = `pv-${p.id}`;
         for (const v of versionenVon(p.id)) { const o = el("option", "", v); o.value = v; o.selected = v === p.version; sel.append(o); }
         sel.addEventListener("change", () => { setzeAktivePackVersion(p.id, sel.value); status = `„${p.id}“ auf ${sel.value} gesetzt.`; editor.ausfuehre({ label: "Pack-Version gewählt", anwenden: (m) => m }); draw(); });
@@ -126,11 +125,11 @@ export function mountUpdate(host: HTMLElement, editor: Editor): void {
     // Hinweis „Neu berechnen?“
     const neuer = neuerePackVersionen(editor.modell.packVersionen);
     if (neuer.length && hinweisNeu) {
-      const h = el("div", "hinweis"); h.dataset.k = "neu-berechnen";
-      h.append(el("p", "", `Neuere Rule-Packs verfügbar: ${neuer.map((n) => `${n.id} ${n.alt} → ${n.neu}`).join(", ")}. Neu berechnen?`));
+      const h = el("div", "note warn"); h.dataset.k = "neu-berechnen";
+      h.append(el("div", "", `Neuere Rule-Packs verfügbar: ${neuer.map((n) => `${n.id} ${n.alt} → ${n.neu}`).join(", ")}. Neu berechnen?`));
       const ja = el("button", "btn", "Neu berechnen"); ja.type = "button"; ja.addEventListener("click", () => { editor.ausfuehre(neuBerechnen()); });
       const nein = el("button", "btn", "Später"); nein.type = "button"; nein.addEventListener("click", () => { hinweisNeu = false; draw(); });
-      h.append(ja, nein); box.append(h);
+      const bz = el("div", "btn-row"); bz.append(ja, nein); h.append(bz); box.append(h);
     }
   }
 
