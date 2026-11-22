@@ -259,4 +259,11 @@ describe("Schritt 26: Ø Gefälledämmung aus dem Plattenlayout", () => {
     expect(k).not.toBeNull();
     expect(Math.abs(k.mittel - s.dachflaechen[0]!.daemmung!.mittel)).toBeLessThanOrEqual(2);
   });
+
+  it("Referenz-L-Dach: keine Kehlkeile K7/K8 dort, wo die Fläche einfach weiter ansteigt", () => {
+    const { l } = plan(L_DACH);
+    const namen = new Set(l.dachflaechen[0]!.platten.map((p) => p.bezeichnung));
+    expect(namen.has("K6 L") || namen.has("K6 R")).toBe(true);
+    for (const n of ["K8 L", "K8 R"]) expect(namen.has(n)).toBe(false);
+  });
 });

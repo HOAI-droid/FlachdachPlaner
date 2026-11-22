@@ -314,6 +314,27 @@ function imDach(dach: Polygon, p0: Vec2, dir: Vec2): Intervalle {
   return iv;
 }
 
+/** Teilstücke behalten, an denen das Höhenfeld wirklich knickt (sonst steigt die Fläche einfach weiter an). */
+function nurKnicke(f: Hoehenfeld, p0: Vec2, dir: Vec2, iv: Intervalle): Intervalle {
+  const d = 0.02, N = 24;
+  const knick = (t: number) => {
+    const p = { x: p0.x + t * dir.x, y: p0.y + t * dir.y };
+    const h = (s: number) => hoeheAm(f, { x: p.x - s * dir.y, y: p.y + s * dir.x });
+    return Math.abs(h(d) + h(-d) - 2 * h(0)) > 1e-6;
+  };
+  const out: Intervalle = [];
+  for (const [a, b] of iv) {
+    let start: number | null = null;
+    for (let i = 0; i < N; i++) {
+      const t0 = a + ((b - a) * i) / N, t1 = a + ((b - a) * (i + 1)) / N;
+      if (knick((t0 + t1) / 2)) { if (start === null) start = t0; }
+      else if (start !== null) { out.push([start, t0]); start = null; }
+    }
+    if (start !== null) out.push([start, b]);
+  }
+  return out;
+}
+
 function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlinie[] {
   const mitte = { x: (box[0]!.x + box[2]!.x) / 2, y: (box[0]!.y + box[2]!.y) / 2 };
   const ebenen = f.quellen.flatMap((_, i) => SEITEN.map((k) => ({ i, k, L: ebeneVon(f, i, k) })));
@@ -351,6 +372,7 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
         if (j === A.i || j === B.i || iv.length === 0) return;
         iv = ohneWoAllePositiv(iv, SEITEN.map((k2) => entlang(differenz(A.L, ebeneVon(f, j, k2)))));
       });
+      iv = nurKnicke(f, p0, dir, iv);
       for (const [a, b] of iv) {
         if (b - a <= EPS) continue;
         const von = { x: p0.x + a * dir.x, y: p0.y + a * dir.y }, bis = { x: p0.x + b * dir.x, y: p0.y + b * dir.y };
