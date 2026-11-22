@@ -139,7 +139,7 @@ function dachPlan(d: Dachflaeche, g: DachGefaelle, kat: Kat, cat: PlateCatalog, 
   }
   if (gefaelleAbweichend) {
     befunde.push(befund("warnung", "gefaelle-abweichend",
-      `${d.name || d.id}: Dachgefälle weicht vom Plattengefälle (${kat.gefaelle * 100} %) ab; Plattendicken folgen dem Plattengefälle, nicht dem Höhenfeld.`, d.id, d.id));
+      `${d.name || d.id}: Dachgefälle weicht vom Plattengefälle (${(kat.gefaelle * 100).toFixed(1).replace(".", ",")} %) ab; Plattendicken folgen dem Plattengefälle, nicht dem Höhenfeld.`, d.id, d.id));
   }
   const tp = g.tiefpunkt;
   return {

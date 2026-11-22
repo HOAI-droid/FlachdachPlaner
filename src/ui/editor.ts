@@ -13,6 +13,7 @@ import type { Viewport } from "./canvas/viewport";
 import { Ansicht3D } from "./ansicht3d";
 import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
 import { baueProjektPdf } from "../io/pdf/plan";
+import { dateiname } from "../io/dateiname";
 import { baueProjektDxf } from "../io/dxf/export";
 import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
 import { meter, quadratmeter, zahl } from "./format";
@@ -299,7 +300,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     return m;
   }
   async function speichereProjekt() {
-    const ok = await speichereDatei(serializeProject(modellFuerDatei()), modell().meta.name || "Projekt");
+    const ok = await speichereDatei(serializeProject(modellFuerDatei()), dateiname(modell().meta.name));
     projektMeldung = ok ? "Projekt gespeichert." : null;
     refresh();
   }
@@ -336,7 +337,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         regelwerk: regeln ? `${regeln.titel ?? regeln.id} · ${regeln.version}` : "–",
       });
       const url = URL.createObjectURL(new Blob([r.bytes as BlobPart], { type: "application/pdf" }));
-      const a = document.createElement("a"); a.href = url; a.download = `${modell().meta.name || "Projekt"}-Plan.pdf`; document.body.append(a); a.click(); a.remove();
+      const a = document.createElement("a"); a.href = url; a.download = `${dateiname(modell().meta.name)}-Plan.pdf`; document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       projektMeldung = `PDF erstellt (A3, Maßstab 1 : ${r.massstab}).`;
     } catch (e) { projektMeldung = `PDF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; }
@@ -350,7 +351,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       try { p = berechnePlan(modell(), ergebnis.slope); } catch { /* ohne Dämmplan */ }
       const text = baueProjektDxf({ modell: modell(), slope: ergebnis.slope, plan: p });
       const url = URL.createObjectURL(new Blob([text], { type: "application/dxf" }));
-      const a = document.createElement("a"); a.href = url; a.download = `${modell().meta.name || "Projekt"}-Plan.dxf`; document.body.append(a); a.click(); a.remove();
+      const a = document.createElement("a"); a.href = url; a.download = `${dateiname(modell().meta.name)}-Plan.dxf`; document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       projektMeldung = "DXF erstellt (Meter, Layer FDP_*).";
     } catch (e) { projektMeldung = `DXF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; }

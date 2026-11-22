@@ -152,7 +152,7 @@ export class PdfDokument {
     obj(2, `<< /Type /Pages /Kids [${kinder}] /Count ${this.seiten.length} >>`);
     obj(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
     obj(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
-    obj(5, `<< /Title (${this.titel.replace(/[()\\]/g, "").replace(/[^\x20-\x7e]/g, "")}) /Producer (FlachdachPlaner) >>`);
+    obj(5, `<< /Title <${titelHex(this.titel)}> /Producer (FlachdachPlaner) >>`);
     this.seiten.forEach((s, i) => {
       const nr = 6 + i * 2, inhalt = s.inhalt();
       obj(nr, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(s.breite * PT)} ${f(s.hoehe * PT)}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${nr + 1} 0 R >>`);
@@ -169,4 +169,11 @@ export class PdfDokument {
     for (const t of teile) for (let i = 0; i < t.length; i++) out[p++] = t.charCodeAt(i) & 0xff;
     return out;
   }
+}
+
+/** PDF-Textstring als UTF-16BE mit BOM (Hex), damit Umlaute im Titel erhalten bleiben. */
+function titelHex(t: string): string {
+  let h = "FEFF";
+  for (let i = 0; i < t.length; i++) h += t.charCodeAt(i).toString(16).toUpperCase().padStart(4, "0");
+  return h;
 }

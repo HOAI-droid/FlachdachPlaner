@@ -47,3 +47,15 @@ describe("Schritt 29: DXF-Export", () => {
     for (const s of k.segmente) expect(eck.has(`${Math.round(s.a.x * 1000)},${Math.round(s.a.y * 1000)}`)).toBe(true);
   });
 });
+
+describe("Review V1: Türschwelle im DXF", () => {
+  it("abstand ist der Start der Schwelle", () => {
+    const m0 = modell();
+    const d = { ...m0.dachflaechen[0]!, tuerschwellen: [{ id: "t", name: "T", lage: { kante: "a", abstand: 2 }, breite: 1, barrierefrei: false }] };
+    const t = baueProjektDxf({ modell: { ...m0, dachflaechen: [d] }, slope: computeSlope({ ...m0, dachflaechen: [d] }, {}), plan: null });
+    const k = flatten(parseDxf(t), { layerSichtbar: new Set([DXF_LAYER.tuer]) }).segmente;
+    expect(k).toHaveLength(1);
+    expect(k[0]!.a.x).toBeCloseTo(2, 3);
+    expect(k[0]!.b.x).toBeCloseTo(3, 3);
+  });
+});

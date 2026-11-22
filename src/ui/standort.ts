@@ -181,9 +181,10 @@ export function mountStandort(panel: HTMLElement, api: StandortApi): StandortPan
       if (!q) { status.textContent = "Bitte Adresse eingeben."; return; }
       status.textContent = "Suche …";
       try {
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de&q=${encodeURIComponent(q)}`);
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de&q=${encodeURIComponent(q)}`, { referrerPolicy: "no-referrer", credentials: "omit" });
+        if (!r.ok) { status.textContent = `Online-Suche fehlgeschlagen (HTTP ${r.status}).`; return; }
         const j = (await r.json()) as { lat: string; lon: string; display_name: string }[];
-        if (!j[0]) { status.textContent = "Nichts gefunden."; return; }
+        if (!j[0] || !Number.isFinite(Number(j[0].lat)) || !Number.isFinite(Number(j[0].lon))) { status.textContent = "Nichts gefunden."; return; }
         dlg.close(); dlg.remove();
         void setzeKoordinate({ lat: Number(j[0].lat), lon: Number(j[0].lon) }, j[0].display_name.split(",").slice(0, 2).join(","));
       } catch { status.textContent = "Online-Suche nicht möglich (kein Netz)."; }

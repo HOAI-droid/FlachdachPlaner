@@ -26,7 +26,7 @@ export interface DxfExportEingabe {
 
 const n = (v: number): string => (Math.round(v * 10000) / 10000).toString();
 /** Text für DXF: Nicht-ASCII als \U+XXXX, Zeilenumbrüche entfernt. */
-const txt = (s: string): string => Array.from(s.replace(/[\r\n]+/g, " ")).map((c) => (c.charCodeAt(0) > 126 ? `\\U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}` : c)).join("");
+const txt = (s: string): string => Array.from(s.replace(/[\r\n]+/g, " ").slice(0, 250)).map((c) => { const cp = c.codePointAt(0) ?? 63; return cp > 0xffff ? "?" : cp > 126 ? `\\U+${cp.toString(16).toUpperCase().padStart(4, "0")}` : c; }).join("");
 
 class Schreiber {
   private readonly z: string[] = [];
@@ -68,8 +68,8 @@ function dachObjekte(w: Schreiber, d: Dachflaeche): void {
     if (!k) continue;
     const len = Math.hypot(k[1].x - k[0].x, k[1].y - k[0].y);
     if (len < 1e-9) continue;
-    const ux = (k[1].x - k[0].x) / len, uy = (k[1].y - k[0].y) / len, m = t.lage.abstand, h = t.breite / 2;
-    linie(w, DXF_LAYER.tuer, { x: k[0].x + ux * (m - h), y: k[0].y + uy * (m - h) }, { x: k[0].x + ux * (m + h), y: k[0].y + uy * (m + h) });
+    const ux = (k[1].x - k[0].x) / len, uy = (k[1].y - k[0].y) / len, a0 = t.lage.abstand, a1 = a0 + t.breite;
+    linie(w, DXF_LAYER.tuer, { x: k[0].x + ux * a0, y: k[0].y + uy * a0 }, { x: k[0].x + ux * a1, y: k[0].y + uy * a1 });
   }
 }
 

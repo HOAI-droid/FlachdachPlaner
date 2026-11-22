@@ -21,6 +21,8 @@ const hashBytes = (b: Uint8Array) => sha256(b.buffer.slice(b.byteOffset, b.byteO
 type Quelle = { holeText(pfad: string): Promise<string> };
 function urlQuelle(basis: string): Quelle {
   const b = new URL(basis.endsWith("/") ? basis : basis + "/", location.href);
+  const lokal = b.hostname === "localhost" || b.hostname === "127.0.0.1" || b.hostname === "[::1]";
+  if (b.protocol !== "https:" && !(lokal && b.protocol === "http:")) throw new Error("Update-Quelle nur über https:// (http nur für localhost).");
   return { async holeText(pfad) {
     const r = await fetch(new URL(pfad, b), { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);

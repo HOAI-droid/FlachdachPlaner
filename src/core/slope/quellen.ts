@@ -101,6 +101,10 @@ function lesQuelle(
   }
   ungeprueft(t.pack, e.id, hinweis);
   const { gefaelle: g, keil: k } = t.eintrag;
+  if (!(g.quer > 0) || !(g.laengs > 0)) {
+    hinweis({ code: "les-gefaelle-ungueltig", objektId: e.id, meldung: `${t.eintrag.produkt}: Längs-/Quergefälle im Pack muss > 0 sein; Linienentwässerung wird nicht gerechnet.` });
+    return;
+  }
   // Pack in sich stimmig? Breite = Länge · längs/quer, Dickenzuwachs = längs · Länge.
   if (Math.abs(k.breiteJeSeite - (k.laenge * g.laengs) / g.quer) > EPS || Math.abs(k.dickeMax - k.dickeMin - g.laengs * k.laenge) > EPS) {
     hinweis({ code: "les-pack-inkonsistent", objektId: e.id, meldung: `${t.eintrag.produkt}: Keilmaße passen nicht zu Längs-/Quergefälle; gerechnet wird mit den Gefällen.` });

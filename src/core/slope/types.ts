@@ -194,7 +194,7 @@ export interface DachGefaelle {
 
 export type SlopeHinweisCode =
   | "keine-ablaeufe" | "ablauf-ausserhalb" | "gefaelle-null" | "pack-ungeprueft"
-  | "les-typ-fehlt" | "les-laenge-null" | "les-laenge-abweichend" | "les-zu-lang" | "les-pack-inkonsistent"
+  | "les-typ-fehlt" | "les-laenge-null" | "les-laenge-abweichend" | "les-zu-lang" | "les-pack-inkonsistent" | "les-gefaelle-ungueltig"
   | "dachreiter-masse-fehlen" | "dachreiter-lage-ungueltig" | "zone-ausserhalb" | "zonen-ueberlappen";
 
 export interface SlopeHinweis {
