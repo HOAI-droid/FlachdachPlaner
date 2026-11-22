@@ -64,4 +64,10 @@ Richtlinien, Grenzwerte, Sicherheitsbeiwerte, Mindestmaße, Herstellerdaten (Abl
 
 ## LES-Maße (Nutzer: "nimm die LES-Maße von Bauder") – Quelle docs/referenz/bauder-les-sets.jpg
 Keilplatten BauderPIR T LES, je Set: Breite 2000 mm, Länge (Keilrichtung) 2500 mm laut Grafik; Dicke dünn -> dick: Set 1 10→30, Set 2 30→50, Set 3 50→70, Set 4 70→90, Set 5 90→110 mm. Nutzer will KEINE Set-Logik/Stückliste, nur diese korrekten Maße als LES-Plattenmaße im Pack (`geprueft:false` bis gegen Datenblatt bestätigt).
-OFFEN: 20 mm Höhenzunahme auf 2500 mm = 0,8 % Gefälle; widerspricht dem Auszug "1/3,5/4 %" aus dem PDF. Vor Umsetzung klären, ob 2500 mm die Keil-Länge ist.
+(Widerspruch 0,8 % vs. 1/3,5/4 % ist durch die Gefälle-Grafik unten aufgelöst; Set-Plattenmaße bleiben nur Maßvorgabe.)
+
+## LES-Gefälle (Nutzer: "mit denen ist zu planen") – Quelle docs/referenz/bauder-les-gefaelle.jpg
+- **Längs der LES (zum Ablauf): 1 %**, **quer zur LES: 4 %**, **diagonal (Kehle/Winkelrichtung): 3,5 %**.
+- Beispiel LES 6 m: Keil je Seite 1,50 m breit (quer), 6,00 m lang; Dicke 10 mm an der dünnen Kante bis 70 mm am Ende (60 mm/6,00 m = 1 %; 60 mm/1,50 m = 4 %). Plattenstücke L1…L6 mit Stufen 10/20/30/…/70 mm.
+- Wichtig: **LES wird AUF der vorhandenen Gefälledämmung angeordnet** (additiv zum Höhenfeld, nicht statt).
+- Prüfen: 3,5 % diagonal passt nicht aus 1 %/4 % ableitbar (√(1²+4²)=4,1 %); vorerst die drei Werte als gegebene Parameter des Packs führen, nicht herleiten.
