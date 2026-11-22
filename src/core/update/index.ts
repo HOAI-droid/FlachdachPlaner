@@ -2,6 +2,9 @@
 import { loadRulePack } from "../rules/loader";
 import type { RulePack } from "../rules/types";
 
+/** Globale Laufzeit-Klasse (Browser und Node); core bindet bewusst keine DOM-Typen ein. */
+declare const TextEncoder: new () => { encode(s: string): Uint8Array };
+
 export interface ManifestPack {
   readonly id: string;
   readonly version: string;
