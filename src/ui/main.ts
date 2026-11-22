@@ -10,7 +10,8 @@ import { mountStage } from "./canvas/stage";
 import { scaleDenominator } from "./canvas/viewport";
 import { demoUnderlay } from "./demo";
 import { zahl } from "./format";
-import { mountEditor } from "./editor";
+import { mountEditor, SPEICHER_KEY } from "./editor";
+import { parseProject } from "../core/index";
 
 const root = document.getElementById("app");
 if (root) {
@@ -26,7 +27,12 @@ if (root) {
     stage.setLayer("unterlage", d.draw);
     stage.fit(...d.bounds);
   }
+  let gespeichert: string | null = null;
+  try { gespeichert = localStorage.getItem(SPEICHER_KEY); } catch { /* ohne Speicher weiter */ }
   const editor = mountEditor(shell, stage);
+  try {
+    if (gespeichert) { const r = parseProject(gespeichert); if (r.ok) editor.lade(r.projekt); }
+  } catch { /* ohne Speicher weiter */ }
   (window as unknown as { __stage: typeof stage; __editor: typeof editor }).__stage = stage;
   (window as unknown as { __editor: typeof editor }).__editor = editor;
 }

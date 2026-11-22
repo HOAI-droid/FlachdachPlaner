@@ -4,18 +4,24 @@ import {
   aufbauFlaeche, ausfuehren, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
-  setzeAttikaBreite, setzeSchwellenBreite, snap, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten,
-  type Auswahl, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
+  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, serializeProject, snap, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
+  type Auswahl, type Befehl, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
 import type { Viewport } from "./canvas/viewport";
-import { meter, quadratmeter, zahl } from "./format";
+import { berechne, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
+import { kote, meter, quadratmeter, zahl } from "./format";
+import { standardTyp, typOptionen } from "./packs";
+import { mountStandort } from "./standort";
+
+import { kantenLage, zeichneEntwaesserung } from "./symbole";
+import { Belegung } from "./zeichnen";
 import type { Shell } from "./shell";
 import { dxfModell, ladeDxf, ladePdf, pdfModell, type UnterlageUI } from "./underlay";
 
 const FANG_PX = 10;
-const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", g: "gully", m: "measure" };
+const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", g: "gully", n: "notablauf", r: "dachreiter", l: "les", m: "measure" };
 const FANG_NAME: Record<SnapArt, string> = { endpunkt: "Endpunkt", schnittpunkt: "Schnittpunkt", mittelpunkt: "Mittelpunkt", lot: "Lot", ortho: "Ortho" };
 const HINWEIS: Record<WerkzeugId, string> = {
   select: "Objekt anklicken. Entf löscht die Auswahl.",
@@ -24,7 +30,10 @@ const HINWEIS: Record<WerkzeugId, string> = {
   aufbau: "Punkte innerhalb einer Dachfläche klicken. Enter oder Doppelklick schließt.",
   terrasse: "Punkte innerhalb einer Dachfläche klicken. Enter oder Doppelklick schließt.",
   schwelle: "Auf eine Kante der Dachkontur klicken. Die Schwelle wird dort zentriert.",
-  gully: "Noch nicht verfügbar.",
+  gully: "In die Dachfläche klicken. Tiefenlage z des Ablaufs unten eingeben.",
+  notablauf: "In die Dachfläche klicken. Notablauf mit Tiefenlage z.",
+  dachreiter: "Auf eine Kante der Dachkontur klicken. Der Dachreiter wird dort zentriert.",
+  les: "Anfang (tiefer Punkt, z gilt dort) und Ende der Linienentwässerung klicken.",
   measure: "Mit PDF-Unterlage: zwei Punkte klicken, dann bekannte Strecke eingeben.",
 };
 
@@ -63,7 +72,11 @@ function button(text: string, onClick: () => void, cls = "btn"): HTMLButtonEleme
 export interface Editor {
   readonly modell: ProjectModel;
   lade(m: ProjectModel): void;
+  /** Befehl ausführen (Undo-fähig), z. B. aus dem Standort-Panel. */
+  ausfuehre(b: Befehl): void;
 }
+
+export const SPEICHER_KEY = "flachdachplaner-projekt";
 
 export function mountEditor(shell: Shell, stage: Stage): Editor {
   let verlauf: Verlauf = neuerVerlauf(createProject("Neues Projekt", new Date().toISOString()));
@@ -77,6 +90,16 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let meldung: string | null = null;
   let index: SnapIndex | null = null;
   let indexKey: [ProjectModel, readonly unknown[]] | null = null;
+  let ergebnis: Ergebnis | null = null;
+  let ergebnisFuer: ProjectModel | null = null;
+  let ergebnisFehler: string | null = null;
+  let standortFuer: ProjectModel["standort"] | null = null;
+  let standortPanel: ReturnType<typeof mountStandort> | null = null;
+  const leeresErgebnis = { slope: { dachflaechen: [], hinweise: [] }, catchments: { flaechen: [], nachbarn: [], hinweise: [] }, notfall: [], befunde: [], hinweise: [], eids: new Map() } as unknown as Ergebnis;
+  /** Autosave ins lokale Speichern (ohne Netz); Fehler (z. B. privater Modus) werden ignoriert. */
+  function speichere() {
+    try { localStorage.setItem(SPEICHER_KEY, serializeProject(modell())); } catch { /* ohne Speicher weiter */ }
+  }
 
   const modell = () => verlauf.aktuell;
   const tol = () => FANG_PX / stage.viewport.scale;
@@ -90,13 +113,13 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
     return index;
   }
-  const zeichnetMitFang = () => z.tool !== "select" && z.tool !== "gully";
+  const zeichnetMitFang = () => z.tool !== "select";
   function refPunkt(): Vec2 | undefined {
     if (z.tool === "measure") return kal.p1;
     return z.entwurf[z.entwurf.length - 1];
   }
   function gefangen(w: Vec2): Vec2 {
-    if (!zeichnetMitFang() || z.tool === "attika" || z.tool === "schwelle") return w;
+    if (!zeichnetMitFang() || z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") return w;
     const ref = refPunkt();
     const t = snap(fangIndex(), w, tol(), ref ? { referenzpunkt: ref } : {});
     return t ? t.punkt : w;
@@ -130,7 +153,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       (auswahl.art === "aufbau" && d.aufbauten.some((x) => x.id === auswahl!.id)) ||
       (auswahl.art === "zone" && d.zonen.some((x) => x.id === auswahl!.id)) ||
       (auswahl.art === "attika" && d.attika.some((x) => x.id === auswahl!.id)) ||
-      (auswahl.art === "tuerschwelle" && d.tuerschwellen.some((x) => x.id === auswahl!.id)));
+      (auswahl.art === "tuerschwelle" && d.tuerschwellen.some((x) => x.id === auswahl!.id)) ||
+      (auswahl.art === "entwaesserung" && d.entwaesserung.some((x) => x.id === auswahl!.id)));
     if (!ok) auswahl = null;
   }
   function loescheAuswahl() { if (auswahl) { verlauf = ausfuehren(verlauf, loesche(auswahl)); auswahl = null; refresh(); } }
@@ -238,6 +262,11 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (z.tool === "schwelle") {
       p.append(feld("Breite", zahl(z.schwellenBreite, 2), "schwelle-breite", (v) => { if (v > 0) { z = setzeSchwellenBreite(z, v); refresh(); } }));
     }
+    if (z.tool === "gully" || z.tool === "notablauf" || z.tool === "dachreiter" || z.tool === "les") {
+      p.append(feld("Tiefenlage z", zahl(z.ablaufZ, 3), "ablauf-z", (v) => { z = setzeAblaufZ(z, v); refresh(); }));
+      const t = standardTyp(z.tool);
+      p.append(el("div", "note", t ? `Produkt: ${typOptionen(z.tool).find((o) => o.wahl.eintragId === t.eintragId)?.titel ?? t.eintragId}` : "Kein Produkt im Pack: Typ bleibt unbelegt."));
+    }
     if (z.tool === "measure" && unterlage?.kalibrierung) {
       if (kal.p1 && kal.p2) {
         const d = Math.hypot(kal.p2.x - kal.p1.x, kal.p2.y - kal.p1.y);
@@ -288,6 +317,24 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
           row("Abstand", meter(x.lage.abstand, 2), "abstand"));
         break;
       }
+      case "entwaesserung": {
+        const x = d.entwaesserung.find((q) => q.id === a.id)!;
+        const art = { gully: "Gully", notablauf: "Notablauf", dachreiter: "Dachreiter", les: "Linienentwässerung" }[x.art];
+        const eid = ergebnis?.eids.get(`${d.id}/${x.id}`);
+        p.append(row("Art", eid ? `${art} (${eid})` : art, "art"),
+          feld("Tiefenlage z", zahl(x.z, 3), "z", (v) => { verlauf = ausfuehren(verlauf, setEntwaesserungZ(d.id, x.id, v)); refresh(); }));
+        const opt = typOptionen(x.art);
+        if (opt.length) {
+          const f = el("div", "field"), l = el("label", "", "Produkt"), sel = el("select");
+          sel.id = "f-typ"; l.htmlFor = sel.id;
+          const leer = el("option", "", "– nicht gewählt –"); leer.value = ""; sel.append(leer);
+          for (const o of opt) { const op = el("option", "", o.titel); op.value = o.wahl.eintragId; sel.append(op); }
+          sel.value = x.typ?.eintragId ?? "";
+          sel.addEventListener("change", () => { verlauf = ausfuehren(verlauf, setEntwaesserungTyp(d.id, x.id, opt.find((o) => o.wahl.eintragId === sel.value)?.wahl ?? null)); refresh(); });
+          f.append(l, sel); p.append(f);
+        } else p.append(el("div", "note", "Kein Produkt im Pack verfügbar."));
+        break;
+      }
     }
     const b = el("div", "pad"); b.append(button("Löschen", loescheAuswahl)); p.append(b);
   }
@@ -295,10 +342,16 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   function refresh() {
     shell.undo.disabled = !kannRueckgaengig(verlauf);
     shell.redo.disabled = !kannWiederholen(verlauf);
+    if (ergebnisFuer !== modell()) {
+      ergebnisFuer = modell();
+      try { ergebnis = modell().dachflaechen.length ? berechne(modell()) : null; ergebnisFehler = null; }
+      catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
+      speichere();
+    }
     panelUnterlage(); panelWerkzeug(); panelAuswahl();
-    const n = modell().dachflaechen.length;
-    const pl = shell.panels.pruefliste;
-    pl.textContent = n === 0 ? "Noch keine Dachfläche gezeichnet." : `${n} Dachfläche${n === 1 ? "" : "n"}, Prüfungen folgen.`;
+    if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
+    if (ergebnisFehler) { shell.panels.pruefliste.replaceChildren(el("div", "note error", `Berechnung fehlgeschlagen: ${ergebnisFehler}`)); shell.panels.ergebnis.replaceChildren(); }
+    else { fuellePruefliste(shell.panels.pruefliste, modell(), ergebnis); fuelleErgebnis(shell.panels.ergebnis, modell(), ergebnis ?? leeresErgebnis); }
     shell.status.snap.textContent = treffer ? `Fang: ${FANG_NAME[treffer.art]}` : zeichnetMitFang() ? "Fang: bereit" : "Fang: aus";
     stage.invalidate();
   }
@@ -360,7 +413,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
 
   function zeichneSymbole(ctx: CanvasRenderingContext2D, vp: Viewport) {
     const px = 1 / vp.scale;
+    const belegung = new Belegung(vp);
     for (const d of modell().dachflaechen) {
+      for (const e of d.entwaesserung) zeichneEntwaesserung(ctx, vp, d, e, belegung, ergebnis?.eids.get(`${d.id}/${e.id}`));
       for (const t of d.tuerschwellen) {
         const i = d.kontur.findIndex((q) => q.id === t.lage.kante);
         if (i < 0) continue;
@@ -390,6 +445,14 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       const i = d.kontur.findIndex((q) => q.id === s?.kante);
       if (i < 0) return;
       bahn(ctx, [d.kontur[i]!, d.kontur[(i + 1) % d.kontur.length]!], false);
+    } else if (a.art === "entwaesserung") {
+      const e = d.entwaesserung.find((x) => x.id === a.id);
+      if (!e) return;
+      const [p0, p1] = entwSegment(d, e);
+      const pt = p0 ?? (e.art === "dachreiter" ? kantenLage(d, e.lage.kante, e.lage.abstand)?.p : undefined);
+      if (!pt) return;
+      ctx.beginPath();
+      if (p1) { ctx.moveTo(pt.x, pt.y); ctx.lineTo(p1.x, p1.y); ctx.lineWidth = 4 * px; } else ctx.arc(pt.x, pt.y, 11 * px, 0, Math.PI * 2);
     } else {
       const t = d.tuerschwellen.find((x) => x.id === a.id);
       const i = d.kontur.findIndex((q) => q.id === t?.lage.kante);
@@ -438,7 +501,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       const q = kal.p2 ?? treffer?.punkt ?? cursor;
       if (q) { ctx.strokeStyle = farbe; ctx.lineWidth = 1.5 * px; bahn(ctx, [kal.p1, q], false); ctx.stroke(); }
     }
-    if (kante && (z.tool === "attika" || z.tool === "schwelle")) {
+    if (kante && (z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter")) {
       const d = modell().dachflaechen.find((x) => x.id === kante!.dachId)!;
       const i = d.kontur.findIndex((q) => q.id === kante!.kante);
       ctx.strokeStyle = farbe; ctx.lineWidth = 3 * px; ctx.globalAlpha = .7;
@@ -449,6 +512,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
 
   stage.setLayer("kontur", zeichneKontur);
+  stage.setLayer("einzugsflaechen", (ctx, vp) => { if (ergebnis) zeichneEinzugsflaechen(ctx, vp, modell(), ergebnis); });
+  stage.setLayer("pfeile", (ctx, vp) => { if (ergebnis) { zeichnePfeile(ctx, vp, ergebnis); zeichneNotbereich(ctx, vp, modell(), ergebnis); } });
+  stage.setLayer("koten", (ctx, vp) => { if (ergebnis) zeichneKoten(ctx, vp, ergebnis); });
   stage.setLayer("symbole", zeichneSymbole);
   stage.setLayer("auswahl", zeichneAuswahl);
   stage.setLayer("fang", zeichneFang);
@@ -459,7 +525,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       cursor = { x: w[0], y: w[1] };
       treffer = null; kante = null;
       if (zeichnetMitFang()) {
-        if (z.tool === "attika" || z.tool === "schwelle") kante = kantenTreffer(modell(), cursor, tol());
+        if (z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") kante = kantenTreffer(modell(), cursor, tol());
         else {
           const ref = refPunkt();
           treffer = snap(fangIndex(), cursor, tol(), ref ? { referenzpunkt: ref } : {});
@@ -476,7 +542,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         refresh();
         return;
       }
-      wende(klick(z, modell(), p, tol()));
+      wende(klick(z, modell(), p, tol(), { typ: standardTyp }));
     },
     dblclick() { if (z.entwurf.length >= 3) wende(abschliessen(z, modell())); },
     leave() { cursor = null; treffer = null; kante = null; stage.invalidate(); },
@@ -500,9 +566,12 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     else if (TASTEN[k]) setzeWerkzeug(TASTEN[k]!);
   });
 
+  const ausfuehreBefehl = (b: Befehl) => { verlauf = ausfuehren(verlauf, b); refresh(); };
+  standortPanel = mountStandort(shell.panels.standort, { modell, ausfuehre: ausfuehreBefehl });
   setzeWerkzeug("select");
   refresh();
   return {
+    ausfuehre: ausfuehreBefehl,
     get modell() { return modell(); },
     lade(m) { verlauf = neuerVerlauf(m); auswahl = null; refresh(); },
   };

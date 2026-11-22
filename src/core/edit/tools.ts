@@ -7,16 +7,17 @@ import { pointInPolygon, pointInRing } from "../geometry/polygon";
 import { closestPointOnSegment, dist, distPointSegment, projectOnSegment } from "../geometry/segment";
 import type { Vec2 } from "../geometry/types";
 import { dachPolygon, konturKante } from "../model/model";
-import type { Dachflaeche, Id, ProjectModel } from "../model/types";
+import type { Dachflaeche, EntwaesserungsArt, Id,  ProjectModel } from "../model/types";
 import type { SnapSegment } from "../snap";
 import {
-  addAufbau, addDachflaeche, addTerrasse, addTuerschwelle, neueIds, setAttika, setAttikaUmlaufend,
-  type Auswahl,
+  addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, neueIds, setAttika, setAttikaUmlaufend,
+  type Auswahl, type TypWahl,
 } from "./commands";
 import type { Befehl } from "./history";
 import { pruefePolygon } from "./polygon-check";
 
-export type WerkzeugId = "select" | "contour" | "attika" | "aufbau" | "terrasse" | "schwelle" | "measure" | "gully";
+export type WerkzeugId = "select" | "contour" | "attika" | "aufbau" | "terrasse" | "schwelle" | "measure" | "gully" | "notablauf" | "dachreiter" | "les";
+export const ENTWAESSERUNGS_WERKZEUGE: readonly WerkzeugId[] = ["gully", "notablauf", "dachreiter", "les"];
 export const POLYGON_WERKZEUGE: readonly WerkzeugId[] = ["contour", "aufbau", "terrasse"];
 
 export interface WerkzeugZustand {
@@ -27,6 +28,8 @@ export interface WerkzeugZustand {
   readonly attikaBreite: number;
   /** Breite neuer Türschwellen in m (Werkzeugeinstellung). */
   readonly schwellenBreite: number;
+  /** Tiefenlage z (m) neuer Abläufe (Werkzeugeinstellung). */
+  readonly ablaufZ: number;
   /** Letzte Meldung an den Nutzer (Hinweis, kein Befund). */
   readonly hinweis: string | null;
 }
@@ -35,7 +38,7 @@ export const STANDARD_ATTIKA_BREITE = 0.3;
 export const STANDARD_SCHWELLEN_BREITE = 1;
 
 export const neuerZustand = (tool: WerkzeugId = "select"): WerkzeugZustand =>
-  ({ tool, entwurf: [], attikaBreite: STANDARD_ATTIKA_BREITE, schwellenBreite: STANDARD_SCHWELLEN_BREITE, hinweis: null });
+  ({ tool, entwurf: [], attikaBreite: STANDARD_ATTIKA_BREITE, schwellenBreite: STANDARD_SCHWELLEN_BREITE, ablaufZ: 0, hinweis: null });
 
 export const waehleWerkzeug = (z: WerkzeugZustand, tool: WerkzeugId): WerkzeugZustand => ({ ...z, tool, entwurf: [], hinweis: null });
 
@@ -83,10 +86,32 @@ export function dachAn(m: ProjectModel, p: Vec2): Dachflaeche | null {
   return null;
 }
 
-/** Objekt unter dem Punkt (Priorität: Schwelle, Attika, Aufbau, Zone, Dachfläche). */
+/** Lage eines Ablaufs: Punkt (a) oder Strecke (a, b); Dachreiter am Kantenpunkt. */
+export function entwSegment(d: Dachflaeche, e: Dachflaeche["entwaesserung"][number]): [Vec2 | null, Vec2 | null] {
+  if (e.art === "gully" || e.art === "notablauf") return [e.position, null];
+  if (e.art === "les") return [e.von, e.bis];
+  const k = konturKante(d.kontur, e.lage.kante);
+  if (!k) return [null, null];
+  const l = dist(k[0], k[1]);
+  if (l <= EPS) return [k[0], null];
+  const t = e.lage.abstand / l;
+  return [{ x: k[0].x + (k[1].x - k[0].x) * t, y: k[0].y + (k[1].y - k[0].y) * t }, null];
+}
+
+/** Objekt unter dem Punkt (Priorität: Ablauf, Schwelle, Attika, Aufbau, Zone, Dachfläche). */
+/** Tiefenlage z neuer Abläufe einstellen (jede endliche Zahl, z. B. −0,05). */
+export const setzeAblaufZ = (z: WerkzeugZustand, v: number): WerkzeugZustand => (Number.isFinite(v) ? { ...z, ablaufZ: v } : z);
+
+/** Eintrag-Verweis je Ablaufart aus der UI (z. B. einziger Pack-Eintrag); fehlt er, bleibt der Typ unbelegt. */
+export interface KlickOptionen { readonly typ?: (art: EntwaesserungsArt) => TypWahl | null }
+
 export function waehle(m: ProjectModel, p: Vec2, tol: number): Auswahl | null {
   for (let i = m.dachflaechen.length - 1; i >= 0; i--) {
     const d = m.dachflaechen[i]!;
+    for (const e of d.entwaesserung) {
+      const [a, b] = entwSegment(d, e);
+      if (a && b ? distPointSegment(p, a, b) <= tol : a ? dist(p, a) <= tol : false) return { art: "entwaesserung", id: e.id, dachId: d.id };
+    }
     for (const t of d.tuerschwellen) {
       const k = konturKante(d.kontur, t.lage.kante);
       if (!k) continue;
@@ -123,7 +148,7 @@ export function projektSegmente(m: ProjectModel): SnapSegment[] {
 const gleich = (a: Vec2, b: Vec2) => dist(a, b) <= EPS;
 
 /** Klick auf die Zeichenfläche mit dem aktiven Werkzeug. `tol` in m (z. B. 8 px / Maßstab). */
-export function klick(z: WerkzeugZustand, m: ProjectModel, p: Vec2, tol: number): KlickErgebnis {
+export function klick(z: WerkzeugZustand, m: ProjectModel, p: Vec2, tol: number, opt: KlickOptionen = {}): KlickErgebnis {
   const ohne = (hinweis: string | null): KlickErgebnis => ({ zustand: { ...z, hinweis } });
   switch (z.tool) {
     case "select": return { zustand: { ...z, hinweis: null }, auswahl: waehle(m, p, tol) };
@@ -152,6 +177,35 @@ export function klick(z: WerkzeugZustand, m: ProjectModel, p: Vec2, tol: number)
         zustand: { ...z, hinweis: null },
         befehl: addTuerschwelle(t.dachId, t.kante, t.abstand - z.schwellenBreite / 2, z.schwellenBreite),
         auswahl: { art: "tuerschwelle", id: neueIds(m, "ts")[0]!, dachId: t.dachId },
+      };
+    }
+    case "gully": case "notablauf": {
+      const d = dachAn(m, p);
+      if (!d) return ohne("Der Ablauf muss innerhalb einer Dachfläche liegen.");
+      return {
+        zustand: { ...z, hinweis: null }, befehl: addPunktablauf(d.id, z.tool, p, z.ablaufZ, opt.typ?.(z.tool) ?? null),
+        auswahl: { art: "entwaesserung", id: neueIds(m, "en")[0]!, dachId: d.id },
+      };
+    }
+    case "dachreiter": {
+      const t = kantenTreffer(m, p, tol);
+      if (!t) return ohne("Auf eine Dachkontur klicken.");
+      return {
+        zustand: { ...z, hinweis: null }, befehl: addDachreiter(t.dachId, t.kante, t.abstand, z.ablaufZ, opt.typ?.("dachreiter") ?? null),
+        auswahl: { art: "entwaesserung", id: neueIds(m, "en")[0]!, dachId: t.dachId },
+      };
+    }
+    case "les": {
+      const d = dachAn(m, p);
+      if (!d) return ohne("Die LES muss innerhalb einer Dachfläche liegen.");
+      const e = z.entwurf;
+      if (e.length === 0) return { zustand: { ...z, entwurf: [p], hinweis: null } };
+      if (gleich(p, e[0]!)) return ohne("Das Ende muss vom Anfang abweichen.");
+      const d0 = dachAn(m, e[0]!);
+      if (!d0 || d0.id !== d.id) return ohne("Beide LES-Enden müssen in derselben Dachfläche liegen.");
+      return {
+        zustand: { ...z, entwurf: [], hinweis: null }, befehl: addLes(d.id, e[0]!, p, z.ablaufZ, opt.typ?.("les") ?? null),
+        auswahl: { art: "entwaesserung", id: neueIds(m, "en")[0]!, dachId: d.id },
       };
     }
     default: return ohne(null);

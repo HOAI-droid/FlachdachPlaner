@@ -3,8 +3,8 @@ export {
   type Befehl, type Verlauf,
 } from "./history";
 export {
-  addAufbau, addDachflaeche, addTerrasse, addTuerschwelle, loesche, neueIds, setAttika, setAttikaBreite,
-  setAttikaUmlaufend, setTuerschwelleBreite, setUnterlage, type Auswahl, type IdPraefix,
+  addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, loesche, neueIds, setAttika, setAttikaBreite,
+  setAttikaUmlaufend, setEntwaesserungTyp, setEntwaesserungZ, setRegenManuell, setStandort, setTuerschwelleBreite, setUnterlage, type Auswahl, type IdPraefix, type TypWahl,
 } from "./commands";
 export { pruefePolygon } from "./polygon-check";
 export {
@@ -12,8 +12,8 @@ export {
   konturFlaeche, konturUmfang, zonenFlaeche,
 } from "./measure";
 export {
-  POLYGON_WERKZEUGE, STANDARD_ATTIKA_BREITE, STANDARD_SCHWELLEN_BREITE, abbrechen, abschliessen, attikaUmlaufend,
-  dachAn, entfernePunkt, kantenTreffer, klick, neuerZustand, projektSegmente, setzeAttikaBreite,
+  ENTWAESSERUNGS_WERKZEUGE, POLYGON_WERKZEUGE, STANDARD_ATTIKA_BREITE, STANDARD_SCHWELLEN_BREITE, abbrechen, abschliessen, attikaUmlaufend,
+  dachAn, entfernePunkt, entwSegment, setzeAblaufZ, type KlickOptionen, kantenTreffer, klick, neuerZustand, projektSegmente, setzeAttikaBreite,
   setzeSchwellenBreite, waehle, waehleWerkzeug, type KantenTreffer, type KlickErgebnis, type WerkzeugId,
   type WerkzeugZustand,
 } from "./tools";

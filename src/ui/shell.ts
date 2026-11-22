@@ -5,6 +5,9 @@ const ICONS: Record<string, string> = {
   select: '<path d="M3 2l9 6-4 1-2 4z"/>',
   contour: '<path d="M3 3h10v10H3z"/>',
   gully: '<circle cx="8" cy="8" r="5"/><path d="M5 5l6 6M11 5l-6 6"/>',
+  notablauf: '<circle cx="8" cy="8" r="4"/><circle cx="8" cy="8" r="6.5" stroke-dasharray="2 1.5"/><path d="M6.5 10V6l3 4V6"/>',
+  dachreiter: '<path d="M3 5h10v4H3z"/><path d="M8 10l-3 4h6z"/>',
+  les: '<path d="M2 6h12M2 10h12M5 6v4M8 6v4M11 6v4"/>',
   measure: '<path d="M2 11l9-9 3 3-9 9z"/><path d="M5 8l2 2M7 6l2 2"/>',
   attika: '<path d="M2 2h12v12H2z"/><path d="M5 5h6v6H5z"/>',
   aufbau: '<path d="M3 3h10v10H3z"/><path d="M3 3l10 10M13 3L3 13"/>',
@@ -19,7 +22,7 @@ const GROUPS: { name: string; tools: [string, string, string][] }[] = [
     ["contour", "Dachkontur", "K"], ["attika", "Attika", "A"], ["aufbau", "Aufbau", "U"],
     ["terrasse", "Terrasse", "T"], ["schwelle", "Türschwelle", "S"],
   ] },
-  { name: "Entwässerung", tools: [["gully", "Gully setzen", "G"]] },
+  { name: "Entwässerung", tools: [["gully", "Gully setzen", "G"], ["notablauf", "Notablauf setzen", "N"], ["dachreiter", "Dachreiter setzen", "R"], ["les", "Linienentwässerung (LES)", "L"]] },
   { name: "Messen", tools: [["measure", "Messen / Kalibrieren", "M"]] },
 ];
 
@@ -81,7 +84,7 @@ export interface Shell {
   /** Markiert das aktive Werkzeug (z. B. nach Esc oder Tastenkürzel). */
   setTool(id: string): void;
   /** Panel-Abschnitte (Inhalt wird von der UI-Steuerung befüllt). */
-  panels: { unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement };
+  panels: { unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement; standort: HTMLElement; ergebnis: HTMLElement };
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
 }
@@ -156,10 +159,10 @@ export function mountShell(root: HTMLElement): Shell {
   inp.id = "f-gefaelle"; lbl.htmlFor = inp.id; inp.value = "2,0 %"; inp.inputMode = "decimal";
   f.append(lbl, inp);
   proj.append(f);
-  const unterlage = el("div"), werkzeug = el("div"), auswahl = el("div");
+  const unterlage = el("div"), werkzeug = el("div"), auswahl = el("div"), standort = el("div"), ergebnis = el("div");
   unterlage.append(el("div", "empty", "Keine Unterlage geladen."));
   auswahl.append(el("div", "empty", "Nichts ausgewählt."));
-  props.append(section("Unterlage", unterlage), section("Werkzeug", werkzeug), section("Auswahl", auswahl), section("Projekt", proj));
+  props.append(section("Unterlage", unterlage), section("Werkzeug", werkzeug), section("Auswahl", auswahl), section("Standort & Regenspende", standort), section("Ergebnis", ergebnis), section("Projekt", proj));
 
   const status = el("footer", "status");
   const cursor = el("span", "num", "x –  y –");
@@ -174,6 +177,6 @@ export function mountShell(root: HTMLElement): Shell {
 
   return {
     stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; },
-    setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste }, undo, redo,
+    setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis }, undo, redo,
   };
 }

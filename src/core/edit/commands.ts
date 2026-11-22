@@ -2,13 +2,15 @@
 import { dist } from "../geometry/segment";
 import { konturKante } from "../model/model";
 import type {
-  AttikaSegment, Dachflaeche, Id, Kontur, ProjectModel, Tuerschwelle, Unterlage, Zone,
+  AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Id, Koordinate, Kontur, PackRef, ProjectModel, Regenspende,
+  Tuerschwelle, Unterlage, Zone,
 } from "../model/types";
+import type { RainData } from "../rain/rain";
 import type { Vec2 } from "../geometry/types";
 import type { Befehl } from "./history";
 
-/** ID-Präfixe: d Dachfläche, p Konturpunkt, au Aufbau, zo Zone, at Attika, ts Türschwelle. */
-export type IdPraefix = "d" | "p" | "au" | "zo" | "at" | "ts";
+/** ID-Präfixe: d Dachfläche, p Konturpunkt, au Aufbau, zo Zone, at Attika, ts Türschwelle, en Entwässerung. */
+export type IdPraefix = "d" | "p" | "au" | "zo" | "at" | "ts" | "en";
 
 function alleIds(m: ProjectModel): string[] {
   const ids: string[] = [];
@@ -162,9 +164,79 @@ export function setTuerschwelleBreite(dachId: Id, id: Id, breite: number): Befeh
   };
 }
 
+const ART_NAME: Record<EntwaesserungsArt, string> = { gully: "Gully", notablauf: "Notablauf", dachreiter: "Dachreiter", les: "LES" };
+
+/** Pack-Verweis samt Pack-Version (landet in `ProjectModel.packVersionen`). */
+export interface TypWahl extends PackRef { readonly version?: string }
+const reinTyp = (t: TypWahl | null): PackRef | null => (t ? { packId: t.packId, eintragId: t.eintragId } : null);
+const mitVersion = (m: ProjectModel, t: TypWahl | null): ProjectModel =>
+  t?.version && m.packVersionen[t.packId] !== t.version ? { ...m, packVersionen: { ...m.packVersionen, [t.packId]: t.version } } : m;
+
+function addEntw(dachId: Id, label: string, bau: (id: Id, name: string) => Entwaesserung, typ: TypWahl | null = null): Befehl {
+  return {
+    label,
+    anwenden: (m0) => { const m = mitVersion(m0, typ); return mapDach(m, dachId, (d) => {
+      const [id] = neueIds(m, "en");
+      const e = bau(id!, "");
+      const nr = d.entwaesserung.filter((x) => x.art === e.art).length + 1;
+      return { ...d, entwaesserung: [...d.entwaesserung, { ...e, name: `${ART_NAME[e.art]} ${nr}` } as Entwaesserung] };
+    }); },
+  };
+}
+
+/** Gully bzw. Notablauf (Punktablauf) mit Kote `z` (OK Abdichtung am Ablauf). */
+export function addPunktablauf(dachId: Id, art: "gully" | "notablauf", position: Vec2, z = 0, typ: TypWahl | null = null): Befehl {
+  return addEntw(dachId, `${ART_NAME[art]} setzen`, (id, name) => ({ id, name, art, typ: reinTyp(typ), z, position: { x: position.x, y: position.y } }), typ);
+}
+
+/** Dachreiter auf einer Konturkante (Mitte bei `abstand`), Kote `z`. */
+export function addDachreiter(dachId: Id, kante: Id, abstand: number, z = 0, typ: TypWahl | null = null): Befehl {
+  return {
+    label: "Dachreiter setzen",
+    anwenden: (m) => {
+      const d = m.dachflaechen.find((x) => x.id === dachId);
+      const k = d && konturKante(d.kontur, kante);
+      if (!k) return m;
+      const a = Math.min(Math.max(0, abstand), dist(k[0], k[1]));
+      return addEntw(dachId, "", (id, name) => ({ id, name, art: "dachreiter", typ: reinTyp(typ), z, lage: { kante, abstand: a } }), typ).anwenden(m);
+    },
+  };
+}
+
+/** LES von (tieferes Ende, Kote `z`) nach bis. */
+export function addLes(dachId: Id, von: Vec2, bis: Vec2, z = 0, typ: TypWahl | null = null): Befehl {
+  return addEntw(dachId, "LES setzen", (id, name) => ({
+    id, name, art: "les", typ: reinTyp(typ), z, von: { x: von.x, y: von.y }, bis: { x: bis.x, y: bis.y },
+  }), typ);
+}
+
+const mapEntw = (m: ProjectModel, dachId: Id, id: Id, f: (e: Entwaesserung) => Entwaesserung): ProjectModel =>
+  mapDach(m, dachId, (d) => {
+    const e = d.entwaesserung.find((x) => x.id === id);
+    if (!e) return d;
+    const n = f(e);
+    return n === e ? d : { ...d, entwaesserung: d.entwaesserung.map((x) => (x === e ? n : x)) };
+  });
+
+/** Tiefenlage (Kote) eines Ablaufs ändern. */
+export function setEntwaesserungZ(dachId: Id, id: Id, z: number): Befehl {
+  return {
+    label: "Tiefenlage ändern",
+    anwenden: (m) => mapEntw(m, dachId, id, (e) => (!Number.isFinite(z) || e.z === z ? e : { ...e, z })),
+  };
+}
+
+/** Produkttyp (Pack-Verweis) eines Ablaufs setzen. */
+export function setEntwaesserungTyp(dachId: Id, id: Id, typ: TypWahl | null): Befehl {
+  return {
+    label: "Produkt wählen",
+    anwenden: (m) => mapEntw(mitVersion(m, typ), dachId, id, (e) => (e.typ?.packId === typ?.packId && e.typ?.eintragId === typ?.eintragId ? e : { ...e, typ: reinTyp(typ) })),
+  };
+}
+
 export type Auswahl =
   | { readonly art: "dach"; readonly id: Id; readonly dachId: Id }
-  | { readonly art: "aufbau" | "zone" | "attika" | "tuerschwelle"; readonly id: Id; readonly dachId: Id };
+  | { readonly art: "aufbau" | "zone" | "attika" | "tuerschwelle" | "entwaesserung"; readonly id: Id; readonly dachId: Id };
 
 /** Löscht das gewählte Objekt (Dachfläche samt Inhalt). */
 export function loesche(a: Auswahl): Befehl {
@@ -180,6 +252,7 @@ export function loesche(a: Auswahl): Befehl {
           case "zone": return { ...d, zonen: d.zonen.filter((x) => x.id !== a.id) };
           case "attika": return { ...d, attika: d.attika.filter((x) => x.id !== a.id) };
           case "tuerschwelle": return { ...d, tuerschwellen: d.tuerschwellen.filter((x) => x.id !== a.id) };
+          case "entwaesserung": return { ...d, entwaesserung: d.entwaesserung.filter((x) => x.id !== a.id) };
         }
       });
     },
@@ -188,4 +261,38 @@ export function loesche(a: Auswahl): Befehl {
 
 export function setUnterlage(u: Unterlage | null): Befehl {
   return { label: u ? "Unterlage setzen" : "Unterlage entfernen", anwenden: (m) => (m.unterlage === u ? m : { ...m, unterlage: u }) };
+}
+
+// ---------- Standort (Schritt 20) ----------
+/** Standort setzen; `rain` (aus ermittleRegen) füllt die Pack-Werte, Nutzerwerte bleiben erhalten. */
+export function setStandort(bezeichnung: string | undefined, koordinate: Koordinate | null, rain: RainData | null): Befehl {
+  return {
+    label: "Standort setzen",
+    anwenden: (m) => {
+      const regen = (r: Regenspende, w: number | null | undefined): Regenspende =>
+        ({ packWert: w ?? null, ...(r.manuellWert !== undefined ? { manuellWert: r.manuellWert } : {}) });
+      const pv = rain ? { ...m.packVersionen, [rain.packId]: rain.packVersion } : m.packVersionen;
+      const st = m.standort;
+      return {
+        ...m, packVersionen: pv,
+        standort: {
+          ...(bezeichnung ? { bezeichnung } : {}), koordinate,
+          regen: { r5_5: regen(st.regen.r5_5, rain?.r5_5), r5_100: regen(st.regen.r5_100, rain?.r5_100) },
+        },
+      };
+    },
+  };
+}
+
+/** Nutzerwert für r(5,5) bzw. r(5,100) setzen; `undefined` entfernt ihn (Pack-Wert gilt wieder). */
+export function setRegenManuell(name: "r5_5" | "r5_100", wert: number | undefined): Befehl {
+  return {
+    label: "Regenspende manuell",
+    anwenden: (m) => {
+      const alt = m.standort.regen[name];
+      if (wert !== undefined && !(Number.isFinite(wert) && wert > 0)) return m;
+      const neu: Regenspende = wert === undefined ? { packWert: alt.packWert } : { packWert: alt.packWert, manuellWert: wert };
+      return { ...m, standort: { ...m.standort, regen: { ...m.standort.regen, [name]: neu } } };
+    },
+  };
 }

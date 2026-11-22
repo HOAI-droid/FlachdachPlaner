@@ -84,3 +84,24 @@ button, input, select { font: inherit; color: inherit; }
 .check-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) 0; }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Ergebnis, Prüfliste, Standort */
+.ergebnis { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.ergebnis th { text-align: left; color: var(--text-muted); font-weight: 500; padding: var(--sp-2) var(--sp-3); }
+.ergebnis td { padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--line); }
+.ergebnis td.num { text-align: right; font-family: var(--font-mono); }
+.badge { display: inline-block; padding: var(--sp-1) var(--sp-3); margin: var(--sp-3);
+  border: 1px solid var(--line-strong); border-radius: 999px; font-family: var(--font-mono); font-size: var(--fs-sm); }
+.befunde { list-style: none; margin: 0; padding: var(--sp-3) var(--sp-4); display: grid; gap: var(--sp-2); }
+.befund { padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--line-strong); background: var(--surface-2); }
+.befund.warnung { border-left-color: var(--warn); background: var(--warn-soft); }
+.befund.fehler { border-left-color: var(--error); background: var(--error-soft); }
+.befund .stufe { font-weight: 600; margin-right: var(--sp-3); }
+.regen, .field-row { display: grid; grid-template-columns: 112px 1fr; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); align-items: center; }
+.regen .num { font-family: var(--font-mono); text-align: right; }
+.treffer { list-style: none; margin: 0; padding: 0; max-height: 160px; overflow: auto; }
+.treffer li { padding: var(--sp-2) var(--sp-4); cursor: pointer; }
+.treffer li:hover { background: var(--surface-2); }
+.dialog { border: 1px solid var(--line-strong); border-radius: var(--r-1); background: var(--surface); color: var(--text); padding: var(--sp-5); }
+.dialog::backdrop { background: rgb(0 0 0 / .4); }
+.dialog canvas { display: block; max-width: 100%; }
