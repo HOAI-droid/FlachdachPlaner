@@ -112,7 +112,7 @@ Fokus (alle): `outline: 2px solid var(--accent); outline-offset: 1px`, nur `:foc
 ## 6. Zeichenfläche und Plansymbole
 Größen in **Bildschirm-px bei 100 %** (skalieren nicht mit Zoom, außer Geometrie). Im PDF-Export gelten die mm-Werte in Klammern.
 
-- **Dachfläche:** Kontur 1,5 px `--text` (0,50 mm). Attika: Doppellinie, Abstand = reale Breite. Aufbauten: 1 px Kontur, Kreuz diagonal. Dachterrasse: Füllung Schraffur 0°, 8 px, `--line-strong`.
+- **Dachfläche:** Kontur 1,5 px `--text` (0,50 mm). Attika: Doppellinie, Abstand = reale Breite; Füllung in der Farbe der zugehörigen Einzugsfläche (helleres Tint, keine Schraffur); Label `E3 · Dach 296 m² + Attika 24 m² = 320 m²`. Aufbauten: 1 px Kontur, Kreuz diagonal. Dachterrasse: Füllung Schraffur 0°, 8 px, `--line-strong`.
 - **Auswahl:** Kontur 2 px `--accent`, Griffe 7x7 px weiß mit 1 px `--accent`. Hover über Objekt: Kontur 2 px `--accent` mit 50 % Deckkraft.
 - **Fang:** Endpunkt = Quadrat 9 px, Mittelpunkt = Dreieck, Schnittpunkt = X, Lot = rechter Winkel, jeweils 1,5 px `--snap`; Hilfslinien gestrichelt 4/4 `--snap` 60 %. Fang-Art als Text 11 px neben dem Cursor.
 - **Höhenkote:** gleichseitiges Dreieck 8 px, Spitze nach unten auf dem Punkt, halb gefüllt; Text Mono 12 px rechts oben: `+12,345` (m, 3 Stellen, Vorzeichen immer). Hochpunkt `HP`, Tiefpunkt `TP` als Präfix. Höhe OK Abdichtung = Standard; OK Belag zusätzlich in Klammern.
