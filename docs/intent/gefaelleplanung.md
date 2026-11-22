@@ -37,3 +37,13 @@ Flachdachrichtlinie (ZVDH) Ausgabe Januar 2026 + DIN 18531: Planungsziel i. d. R
 - Sets 1-5 (Bestell-Nr. 9610 8140/8240/8340/8440/8540), Breite 2000 mm; Höhenbereiche laut Grafik: Set 1 10-30, Set 2 30-50, Set 3 50-70, Set 4 70-90, Set 5 90-110 mm.
 - LES 1-10 (bis 10 m): Sets werden addiert (LES 1-2 = Set 1; 3-4 = 1+2; 5-6 = 1+2+3; 7-8 = 1+2+3+4; 9-10 = 1+2+3+4+5). Ab LES 11 objektspezifisch, längere Lieferzeit.
 - Die Auswertung nennt Höhe 0,25 m je m Länge und Gefälle 1/3,5/4 % ohne klare Zuordnung: widerspricht den mm-Höhen der Grafik. Vor Umsetzung mit Original-PDF/Hersteller klären.
+
+## Entwässerung: Regeln und Berechnung (aus Flachdachrichtlinie 12/2025, S. 56/57, Nutzer-Scan; vor Einsatz gegen Original prüfen)
+- Flächengrenzen **je Ablauf** (nicht je Dachfläche): Hinweis ab 300 m², Fehler > 350 m².
+- **Barrierefreie Schwellen** (Balkone, Loggien, Dachterrassen): Hauptentwässerung Sicherheitsbeiwert ≥ 1; **Notentwässerung Sicherheitsbeiwert ≥ 2** und für den gesamten Jahrhundertregen; Haupt- und Notentwässerung ≤ 10,0 m Abstand vom Übergang.
+- **Anstauhöhe** der Notentwässerung max. **35 mm** (Abflussleistung nur bis dort ansetzen, nicht die 75-mm-Spalte der Herstellertabelle). Wehrhöhe zählt erst ab Wehrkante (z. B. Loro 37 mm).
+- **Überflutungskante Notentwässerung ≥ 5 cm niedriger** als OK Flüssigkunststoff am Schwellenprofil.
+- Anschlusshöhe barrierefrei ≥ 5 cm; Aufkantung OK Flächenabdichtung bis OK Flüssigkunststoff ≥ 10 cm (Belag inkl. Stelzlager/Kies ≥ 10 cm).
+- Gefälle Abdichtung zur Hauptentwässerung bei Kies/Splitt und Stelzlagern **soll/sollte ≥ 1 %**; Kies: Drainagematte ≥ 1,5 cm, Stichkanäle ≥ 20 cm² im Abstand ≤ 2,1 m; Stelzlager ≥ 2 cm. Beläge ≥ 1 % Gefälle zu Gullys/Speiern.
+- Ab Schneelastzone 3: Rinnen/Abläufe/Speier beheizt.
+- **Anzahl Notabläufe (Schätzung)**: Q = r · C · A / 10 000 (l/s) je Einzugsfläche; n_not = aufrunden(Q_Notfall · 2 / Q_Ablauf bei 35 mm Anstau), mindestens 1. Eingaben: Regenspende (Standort, Jahrhundertregen), Abflussbeiwert (Gründach), Abflussleistungstabelle des Ablaufs (Herstellerdaten, z. B. Loro). Ausgabe als Schätzung mit Bereich/Position, keine Bemessung.
