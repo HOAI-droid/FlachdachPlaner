@@ -10,6 +10,7 @@ import {
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
 import type { Viewport } from "./canvas/viewport";
+import { Ansicht3D } from "./ansicht3d";
 import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
 import { berechne, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
 import { meter, quadratmeter, zahl } from "./format";
@@ -477,6 +478,14 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let ansicht: "gefaelle" | "daemmplan" = "gefaelle";
   let plan: InsulationLayout | null = null, planFuer: Ergebnis | null = null;
   shell.onAnsicht((a) => { ansicht = a; stage.invalidate(); });
+  const ansicht3d = new Ansicht3D(shell.stage);
+  let ist3d = false;
+  function aktualisiere3d() {
+    if (!ist3d) return;
+    if (ergebnis && planFuer !== ergebnis) { planFuer = ergebnis; try { plan = berechnePlan(modell(), ergebnis.slope); } catch { plan = null; } }
+    ansicht3d.daten(ergebnis?.slope ?? null, ergebnis ? plan : null);
+  }
+  shell.onModus((m) => { ist3d = m === "3d"; ansicht3d.zeigen(ist3d); aktualisiere3d(); });
   const api: Editor = { beiAenderung: null } as unknown as Editor;
   function refresh() {
     queueMicrotask(() => api.beiAenderung?.());
@@ -495,6 +504,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     else { fuellePruefliste(shell.panels.pruefliste, modell(), ergebnis, (z) => { if (z.auswahl) { auswahl = z.auswahl; } if (z.mitte) stage.centerOn(z.mitte.x, z.mitte.y); refresh(); }); fuelleErgebnis(shell.panels.ergebnis, modell(), ergebnis ?? leeresErgebnis); }
     shell.status.snap.textContent = treffer ? `Fang: ${FANG_NAME[treffer.art]}` : zeichnetMitFang() ? "Fang: bereit" : "Fang: aus";
     stage.invalidate();
+    aktualisiere3d();
   }
 
   // ---------- Zeichnung ----------

@@ -83,6 +83,8 @@ export interface Shell {
   onTool(cb: (id: string) => void): void;
   /** Planansicht: "gefaelle" (Gefälleplan) oder "daemmplan" (Gefälledämmplan). */
   onAnsicht(cb: (a: "gefaelle" | "daemmplan") => void): void;
+  /** Umschalter 2D | 3D. */
+  onModus(cb: (m: "2d" | "3d") => void): void;
   /** Markiert das aktive Werkzeug (z. B. nach Esc oder Tastenkürzel). */
   setTool(id: string): void;
   /** Panel-Abschnitte (Inhalt wird von der UI-Steuerung befüllt). */
@@ -98,7 +100,8 @@ export function mountShell(root: HTMLElement): Shell {
   const hint = el("div", "hint-bar", "Mindestbreite 1280 px: bitte Fenster vergrößern.");
   const head = el("header", "head");
   head.append(el("h1", "", "Flachdachplaner"));
-  head.append(segment([["2d", "2D"], ["3d", "3D"]], () => {}, "2d"));
+  let modusCb: (m: "2d" | "3d") => void = () => {};
+  head.append(segment([["2d", "2D"], ["3d", "3D"]], (v) => modusCb(v as "2d" | "3d"), "2d"));
   let ansichtCb: (a: "gefaelle" | "daemmplan") => void = () => {};
   const ansicht = segment([["gefaelle", "Gefälle"], ["daemmplan", "Dämmplan"]], (v) => ansichtCb(v as "gefaelle" | "daemmplan"), "gefaelle");
   ansicht.setAttribute("aria-label", "Planansicht");
@@ -182,7 +185,7 @@ export function mountShell(root: HTMLElement): Shell {
   hint.style.cssText = "position:fixed;inset:0 0 auto 0;z-index:10";
 
   return {
-    stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; }, onAnsicht: (cb) => { ansichtCb = cb; },
+    stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; }, onAnsicht: (cb) => { ansichtCb = cb; }, onModus: (cb) => { modusCb = cb; },
     setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, projekt: proj, update }, undo, redo,
   };
 }

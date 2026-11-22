@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
-  computeSlope, createProject, hoeheDachflaeche, layoutInsulation, plattenDaemmdicke, loadRulePack, polygonArea, pruefeVerlegeplan,
+  computeSlope, createProject, daemmBasis, meshDach, meshDaemmung, hoeheDachflaeche, layoutInsulation, plattenDaemmdicke, loadRulePack, polygonArea, pruefeVerlegeplan,
   validateRulePack,
   type Dachflaeche, type DachGefaelle, type DaemmplattenPack, type Entwaesserung, type Facette, type InsulationLayout,
   type Kontur, type ProjectModel, type SlopeResult, type Vec2,
@@ -267,3 +267,30 @@ describe("Schritt 26: Ø Gefälledämmung aus dem Plattenlayout", () => {
     for (const n of ["K8 L", "K8 R"]) expect(namen.has(n)).toBe(false);
   });
 });
+
+describe("Schritt 27: 3D-Netz", () => {
+  it("Dachfläche: Eckhöhen = Koten (Überhöhung 1×), Überhöhung skaliert nur z über dem Tiefpunkt", () => {
+    const { s } = plan(L_DACH);
+    const g = s.dachflaechen[0]!;
+    const netz = meshDach(s, 1);
+    for (const k of g.koten) {
+      const v = netz.flatMap((f) => f.outer).find((q) => Math.hypot(q.x - k.position.x, q.y - k.position.y) < 1e-6);
+      if (v) expect(Math.abs(v.z - k.kote)).toBeLessThan(MM);
+    }
+    const z5 = meshDach(s, 5).flatMap((f) => f.outer), z1 = netz.flatMap((f) => f.outer);
+    z1.forEach((v, i) => expect(Math.abs(z5[i]!.z - (g.tiefpunkt!.kote + 5 * (v.z - g.tiefpunkt!.kote)))).toBeLessThan(1e-9));
+  });
+  it("Dämmplatten: Blockhöhe = Plattendicke, Oberseite liegt auf der Dachoberfläche", () => {
+    const { s, l } = plan(L_DACH);
+    const g = s.dachflaechen[0]!, d = l.dachflaechen[0]!, basis = daemmBasis(g, d);
+    const platten = meshDaemmung(s, l, 1).filter((f) => f.art === "platte");
+    expect(platten.length).toBe(d.platten.length);
+    d.platten.forEach((p, i) => {
+      for (const v of platten[i]!.outer) {
+        expect(Math.abs(v.z - basis - (p.dicke.a * v.x + p.dicke.b * v.y + p.dicke.c))).toBeLessThan(MM);
+        expect(Math.abs(v.z - hoeheDachflaeche(g, v))).toBeLessThan(0.003);
+      }
+    });
+  });
+});
+
