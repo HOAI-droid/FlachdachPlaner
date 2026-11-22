@@ -190,7 +190,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const wahl = el("input");
     wahl.type = "file"; wahl.accept = ".dxf,.pdf,application/pdf"; wahl.id = "f-unterlage"; wahl.setAttribute("aria-label", "Unterlage laden (DXF oder PDF)");
     wahl.addEventListener("change", () => { const f = wahl.files?.[0]; if (f) void ladeDatei(f); });
-    const w = el("div", "pad"); w.append(wahl);
+    wahl.className = "visually-hidden"; wahl.tabIndex = -1;
+    const btn = el("button", "btn", "Unterlage laden …"); btn.type = "button";
+    btn.addEventListener("click", () => wahl.click());
+    const w = el("div", "pad"); w.append(btn, wahl);
     p.append(w);
     if (!unterlage) { p.append(el("div", "empty", "Keine Unterlage geladen.")); } else {
       const u = unterlage;

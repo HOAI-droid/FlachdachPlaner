@@ -82,3 +82,5 @@ button, input, select { font: inherit; color: inherit; }
 .note.warn { color: var(--warn); background: var(--warn-soft); }
 .note.error { color: var(--error); background: var(--error-soft); }
 .check-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) 0; }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
