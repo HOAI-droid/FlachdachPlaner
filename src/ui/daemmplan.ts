@@ -1,6 +1,6 @@
 /** 2D-Ansicht Gefälledämmplan (PLAN Schritt 26, DESIGN §11): nur Linien und Schrift, Doppelplatten gelb getönt. */
 import {
-  layoutInsulation, plattenDaemmdicke, type DaemmplattenPack, type DachGefaelle, type InsulationLayout,
+  layoutInsulation, plattenDaemmdicke, dickeAn, type DaemmplattenPack, type DachGefaelle, type InsulationLayout,
   type ProjectModel, type SlopeResult, type Vec2, type VerlegtePlatte,
 } from "../core/index";
 import type { Viewport } from "./canvas/viewport";
@@ -152,21 +152,4 @@ function schwerpunkt(p: VerlegtePlatte): Vec2 {
   const r = p.polygon.outer; let x = 0, y = 0;
   for (const v of r) { x += v.x; y += v.y; }
   return { x: x / r.length, y: y / r.length };
-}
-
-/** Dämmdicke in mm am Punkt: Ebene der nächstgelegenen Platte (Ecken/Kanten, daher Abstand zum Rand). */
-function dickeAn(platten: readonly VerlegtePlatte[], p: Vec2): number | null {
-  let best: VerlegtePlatte | null = null, bd = Infinity;
-  for (const pl of platten) {
-    const o = pl.polygon.outer;
-    for (let i = 0; i < o.length; i++) {
-      const a = o[i]!, b = o[(i + 1) % o.length]!;
-      const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
-      const t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
-      const d = Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
-      if (d < bd) { bd = d; best = pl; }
-    }
-  }
-  if (!best || bd > 0.02) return null;
-  return (best.dicke.a * p.x + best.dicke.b * p.y + best.dicke.c) * 1000;
 }

@@ -12,9 +12,10 @@ import type { Stage } from "./canvas/stage";
 import type { Viewport } from "./canvas/viewport";
 import { Ansicht3D } from "./ansicht3d";
 import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
-import { berechne, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
+import { baueProjektPdf } from "../io/pdf/plan";
+import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
 import { meter, quadratmeter, zahl } from "./format";
-import { standardTyp, typOptionen } from "./packs";
+import { packs, standardTyp, typOptionen } from "./packs";
 import { mountStandort } from "./standort";
 
 import { kantenLage, zeichneEntwaesserung } from "./symbole";
@@ -321,6 +322,26 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const f = await waehleDatei();
     if (f) await oeffneText(await f.text());
   }
+  function exportierePdf() {
+    if (!ergebnis) { projektMeldung = "PDF-Export: erst eine Dachfläche zeichnen."; refresh(); return; }
+    try {
+      let p = null;
+      try { p = berechnePlan(modell(), ergebnis.slope); } catch { /* ohne Dämmplan */ }
+      const regeln = packs.find((x) => x.typ === "regeln");
+      const heute = new Date();
+      const r = baueProjektPdf({
+        modell: modell(), slope: ergebnis.slope, catchments: ergebnis.catchments, eids: ergebnis.eids, plan: p, farbe: (i) => farbe(i)[0],
+        datum: `${String(heute.getDate()).padStart(2, "0")}.${String(heute.getMonth() + 1).padStart(2, "0")}.${heute.getFullYear()}`,
+        regelwerk: regeln ? `${regeln.titel ?? regeln.id} · ${regeln.version}` : "–",
+      });
+      const url = URL.createObjectURL(new Blob([r.bytes as BlobPart], { type: "application/pdf" }));
+      const a = document.createElement("a"); a.href = url; a.download = `${modell().meta.name || "Projekt"}-Plan.pdf`; document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      projektMeldung = `PDF erstellt (A3, Maßstab 1 : ${r.massstab}).`;
+    } catch (e) { projektMeldung = `PDF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; }
+    refresh();
+  }
+
   function panelProjekt() {
     const p = shell.panels.projekt;
     p.querySelector(".projekt-datei")?.remove();
@@ -330,7 +351,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     wahl.className = "visually-hidden"; wahl.tabIndex = -1;
     wahl.addEventListener("change", () => { const f = wahl.files?.[0]; wahl.value = ""; if (f) void f.text().then(oeffneText); });
     const zeile = el("div", "btn-row");
-    zeile.append(button("Projekt speichern", () => void speichereProjekt()), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
+    zeile.append(button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", exportierePdf), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
     const lab = el("label", "check-row");
     const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten"; cb.disabled = !unterlage;
     cb.addEventListener("change", () => { einbetten = cb.checked; });
