@@ -33,24 +33,24 @@ Verboten: Verläufe, Glas-/Blur-Effekte, Schatten über `--shadow-1`, verschacht
 **Status nie nur über Farbe:** Hinweis = Dreieck-Icon, Fehler = Achteck-Icon, OK = Kreis mit Haken, jeweils plus Textwort.
 
 ### Einzugsflächen-Palette (12, nach Paul Tol, farbenblind-geprüft)
-Füllung mit `fill-opacity: 0.35` (dunkel `0.30`), Rand 1,5 px in Randfarbe, Schraffur nach Index.
+Füllung mit `fill-opacity: 0.35` (dunkel `0.30`), Rand 1,5 px in Randfarbe. **Keine Schraffur auf Einzugsflächen** (Nutzerentscheid): nur Farbe + ID/m²-Label.
 
-| # | Füllung | Rand | Schraffur |
-|---|---|---|---|
-| 1 | `#77AADD` | `#2B5F94` | keine |
-| 2 | `#EE8866` | `#A8441F` | 45° |
-| 3 | `#EEDD88` | `#8C7A1E` | Punkte |
-| 4 | `#FFAABB` | `#B0435A` | keine |
-| 5 | `#99DDFF` | `#2E7FA8` | 45° |
-| 6 | `#44BB99` | `#1E6E57` | Punkte |
-| 7 | `#BBCC33` | `#66711A` | keine |
-| 8 | `#AAAA00` | `#5C5C00` | 45° |
-| 9 | `#AA4499` | `#6B2A60` | Punkte |
-| 10 | `#CC6677` | `#7F2E3B` | keine |
-| 11 | `#117733` | `#0B4A21` | 45° |
-| 12 | `#332288` | `#1E1450` | Punkte |
+| # | Füllung | Rand |
+|---|---|---|
+| 1 | `#77AADD` | `#2B5F94` |
+| 2 | `#EE8866` | `#A8441F` |
+| 3 | `#EEDD88` | `#8C7A1E` |
+| 4 | `#FFAABB` | `#B0435A` |
+| 5 | `#99DDFF` | `#2E7FA8` |
+| 6 | `#44BB99` | `#1E6E57` |
+| 7 | `#BBCC33` | `#66711A` |
+| 8 | `#AAAA00` | `#5C5C00` |
+| 9 | `#AA4499` | `#6B2A60` |
+| 10 | `#CC6677` | `#7F2E3B` |
+| 11 | `#117733` | `#0B4A21` |
+| 12 | `#332288` | `#1E1450` |
 
-Regeln: Nachbarflächen bekommen nie dieselbe Farbe (Greedy-Graphfärbung über gemeinsame Kanten). Ab Fläche 13 wiederholen mit -45°-Schraffur. Schraffur: 0,5 px Linien im Randton, Abstand 6 px. Jede Fläche trägt eine ID (`E1`, `E2` …), die auch im Ablauf-Label und in der Liste steht.
+Regeln: Nachbarflächen bekommen nie dieselbe Farbe (Greedy-Graphfärbung über gemeinsame Kanten). Ab Fläche 13 wiederholt sich die Palette (nicht benachbart, Label unterscheidet). Farbwechsel sind sehr weich (Verlauf zwischen Zellen nicht nötig, flache Töne). Jede Fläche trägt eine ID (`E1`, `E2` …), die auch im Ablauf-Label und in der Liste steht.
 
 ## 3. Typografie
 - **UI:** `IBM Plex Sans Condensed` (400, 500, 600), selbst gehostet als woff2 (offline). Fallback `"Segoe UI", system-ui, sans-serif`.
@@ -132,7 +132,7 @@ Hintergrund `--bg`. Licht: Hemisphere (Himmel `#FFFFFF`, Boden `#B8B2A4`, 0,8) +
 - `prefers-reduced-motion: reduce` → alle Dauern 0, Puls ersetzt durch statische 3-px-Kontur für 1,5 s.
 
 ## 9. Planexport (PDF)
-Immer hell, Papierweiß `#FFFFFF`, Linien Schwarz `#000000`; Strichstärken ISO 128: 0,18 / 0,25 / 0,35 / 0,50 / 0,70 mm. Einzugsflächen mit 25 % Tint + Schraffur (muss im Graustufendruck unterscheidbar bleiben). Schriftfeld unten rechts 180 x 50 mm: Projekt, Planinhalt, Maßstab, Datum, Bearbeiter, Regelwerk + Version, Index. Legende (Symbole, Flächen-IDs mit m², Warnungen) rechts neben dem Plan. Textgrößen 2,5 / 3,5 / 5 mm. Nordpfeil und Maßstabsbalken Pflicht. Keine UI-Farben (`--accent`, `--snap`) im Export.
+Immer hell, Papierweiß `#FFFFFF`, Linien Schwarz `#000000`; Strichstärken ISO 128: 0,18 / 0,25 / 0,35 / 0,50 / 0,70 mm. Einzugsflächen mit 25 % Tint, ohne Schraffur; im Graustufendruck unterscheidet das Label (ID + m²). Schriftfeld unten rechts 180 x 50 mm: Projekt, Planinhalt, Maßstab, Datum, Bearbeiter, Regelwerk + Version, Index. Legende (Symbole, Flächen-IDs mit m², Warnungen) rechts neben dem Plan. Textgrößen 2,5 / 3,5 / 5 mm. Nordpfeil und Maßstabsbalken Pflicht. Keine UI-Farben (`--accent`, `--snap`) im Export.
 
 ## 10. Abnahme-Checkliste (per Screenshot, hell und dunkel)
 1. Schriften sind Plex Sans Condensed / Plex Mono; keine Schrift > 18 px in der App.
@@ -141,7 +141,7 @@ Immer hell, Papierweiß `#FFFFFF`, Linien Schwarz `#000000`; Strichstärken ISO 
 4. Nur Tokenfarben sichtbar; keine Verläufe, kein Blur, keine Schatten außer an schwebenden Elementen.
 5. Keine Karte in Karte, keine farbigen Seitenstreifen an Listen-/Panel-Einträgen.
 6. Aktives Werkzeug eindeutig erkennbar (Akzent-Grund + Rahmen); Fokus-Outline per Tab sichtbar.
-7. Benachbarte Einzugsflächen haben unterschiedliche Farbe und Schraffur; jede Fläche hat ID + m²-Label.
+7. Benachbarte Einzugsflächen haben unterschiedliche Farbe; jede Fläche hat ID + m²-Label.
 8. Fläche >= 300 m² zeigt Hinweis-Badge mit Dreieck, > 350 m² Fehler-Badge mit Achteck und gestrichelte rote Kontur; beide auch in der Prüfliste mit Regel + Quelle.
 9. Symbole Gully, Notablauf, Dachreiter, LES sind im Plan ohne Legende unterscheidbar (auch in Graustufen).
 10. Gefällepfeile zeigen bergab, Text nie kopfstehend; Labels überlappen nicht.
@@ -149,3 +149,9 @@ Immer hell, Papierweiß `#FFFFFF`, Linien Schwarz `#000000`; Strichstärken ISO 
 12. Dunkelmodus: kein reines Schwarz/Weiß, Kontraste wie in Abschnitt 2, Einzugsflächen weiterhin unterscheidbar.
 13. PDF-Export: weißer Grund, Schriftfeld, Legende, Nordpfeil, Maßstabsbalken; Flächen im Graustufen-Druck unterscheidbar.
 14. Bei 1280 x 800 kein abgeschnittenes UI, kein Seiten-Scrollbalken.
+
+## 11. Gefälledämmplan (Verlegeplan) – Referenz docs/referenz/gefaelledaemmplan-*.{jpg,webp}
+Eigene Planansicht und eigener Export (2D und 3D), Nutzerwunsch: Aufbau wie die Referenzbilder.
+- 2D: Dachkontur stark (0,70 mm), Bemaßung außen, Verlegestart-Markierung + N0-Ursprung, Plattenraster als dünne Linien, je Platte Typ-Beschriftung (1…8, 8A, Kehlkeile K1…Kn), Verlegerichtungspfeil je Plattenreihe, Kehl- und Gratlinien diagonal. Nur Linien und Schrift, keine Schraffur, Flächen weiß; Hervorhebung nur durch Tint (z. B. Doppelplatten gelb).
+- 3D: Dämmkörper als Block mit Plattengrenzen, Plattentyp-Beschriftung (rot), Keil-Detail als Aufzieh-Callout; Farbe nur zur Unterscheidung von Lagen (gelb = zusätzliche Platte).
+- Stückliste (Typ, Anzahl, Maße, Gesamtvolumen) im Plan rechts oder unter dem Plan.
