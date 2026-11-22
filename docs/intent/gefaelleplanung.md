@@ -1,4 +1,4 @@
-# Intent: Gefälleplanung Flachdach (Entwurf, Stand Interview 5/6)
+# Intent: Gefälleplanung Flachdach (Entwurf, Stand Interview 6/6)
 
 ## Zweck
 Zeichen- und Planungswerkzeug für ein Architekturbüro: Gefälleplanung von Flachdächern, die heute aufwendig von Hand gelöst wird. Fokus: **Gefälleplanung**, nicht allgemeine Dachplanung.
@@ -18,6 +18,13 @@ Zeichen- und Planungswerkzeug für ein Architekturbüro: Gefälleplanung von Fla
 7. **Prüfung**: Mindestgefälle, Pfützen/Tiefpunkte, Höhenkonflikte (Attika, Türschwellen).
 8. **3D-Ansicht** zum Verständnis.
 9. **Export**: PDF und DXF (DWG später).
+
+## Ergänzungen (Interview 6)
+- **Maßstab beim Import** der Unterlage angeben (z. B. 1:100) bzw. per Zwei-Punkt-Kalibrierung (bekannte Strecke). Maßstab/Größe ist wesentlich.
+- **Entwässerungssysteme**: Gully/Ablauf, **Dachreiter** und **Linienentwässerung (LES)** herstellerabhängig (Beispiel Bauder PIR T LES: Keil-Sets, Systeme bis 10 m Länge, größere Längen objektspezifisch). Herstellerdaten als Datenbibliothek, nicht im Code.
+- **Einzugsflächen farbig**: jede Teilfläche, die in einen Ablauf entwässert, in eigener Farbe, mit **Flächengröße in m²** am Ablauf/an der Fläche.
+- **Grenzwerte (konfigurierbar)**: Hinweis ab **300 m²**, Fehler/Verstoß über **350 m²** je Ablauf/Einzugsfläche.
+- Gefällekeile (Kehlgefälleplatten, Dämmkeile, Grunddämmung) sind Teil der Aufbau- und Materialausgabe.
 
 ## Regelwerk (vom Nutzer angegeben, VOR Einsatz gegen Originaltext prüfen)
 Flachdachrichtlinie (ZVDH) Ausgabe Januar 2026 + DIN 18531: Planungsziel i. d. R. 2 %; in begründeten Fällen (Retention, Intensivbegrünung, barrierefreie Übergänge, niedrige Anschlusshöhen) Flächen ohne Gefälle zulässig; unter 5 % gilt stehendes Wasser als normal. Regeln als konfigurierbare Parameter umsetzen, nicht hart verdrahten.
