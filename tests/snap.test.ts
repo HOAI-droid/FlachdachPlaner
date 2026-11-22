@@ -104,7 +104,8 @@ describe("Toleranz und Randfälle", () => {
 });
 
 describe("Spatial-Index (Eigenschaft)", () => {
-  const coord = fc.double({ min: -50, max: 50, noNaN: true });
+  // Auf µm gerundet: keine subnormalen Zahlen (Gleitkomma-Randfall, z. B. 5e-324, ohne Praxisbezug; ließ den CI-Lauf zufällig rot werden).
+  const coord = fc.double({ min: -50, max: 50, noNaN: true }).map((x) => Math.round(x * 1e6) / 1e6);
   const segArb = fc.tuple(coord, coord, coord, coord).map(([a, b, c, d]) => seg(a, b, c, d));
   it("querySegments = Brute-Force", () => {
     fc.assert(fc.property(
