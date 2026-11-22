@@ -71,3 +71,11 @@ Keilplatten BauderPIR T LES, je Set: Breite 2000 mm, Länge (Keilrichtung) 2500 
 - Beispiel LES 6 m: Keil je Seite 1,50 m breit (quer), 6,00 m lang; Dicke 10 mm an der dünnen Kante bis 70 mm am Ende (60 mm/6,00 m = 1 %; 60 mm/1,50 m = 4 %). Plattenstücke L1…L6 mit Stufen 10/20/30/…/70 mm.
 - Wichtig: **LES wird AUF der vorhandenen Gefälledämmung angeordnet** (additiv zum Höhenfeld, nicht statt).
 - Prüfen: 3,5 % diagonal passt nicht aus 1 %/4 % ableitbar (√(1²+4²)=4,1 %); vorerst die drei Werte als gegebene Parameter des Packs führen, nicht herleiten.
+
+## Entscheidungen Runde 3 (Nutzer, verbindlich, nicht erneut fragen)
+- **Dachreiter/LES:** maßgenau und mit den Bauder-Gefällen planen (längs 1 %, quer 4 %, diagonal 3,5 %); Maße wie bereits angegeben, siehe docs/referenz/bauder-les-sets.jpg, bauder-les-gefaelle.jpg, bauder-les-keil.jpg (Keil 6,00 m lang, 1,50 m je Seite, Dicke 10→70 mm; Elemente L1…L6 mit Dicken 10/20/30; LES wird AUF der Gefälledämmung angeordnet). Keine Sets/Stückliste.
+- **Plattenkatalog Gefälledämmung:** vorerst weglassen; mit Platten 1,00 m × 1,00 m rechnen.
+- **Loro-Abflusstabelle** und **Flachdachrichtlinie:** reicht der Nutzer nach.
+- **KOSTRA:** OpenKOSTRA nutzen, keine DWD-Lizenzanfrage.
+- **Keine Schraffur** nirgends, auch nicht bei Terrassen (Flächen nur flach getönt).
+- **Gefällerichtung immer mit Pfeilen** angeben.
