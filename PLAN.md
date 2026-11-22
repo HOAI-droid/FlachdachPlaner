@@ -49,7 +49,7 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 **[E]** = `engineer` (Opus, Kernlogik), **[X]** = `executor` (Hauptsession, Sonnet).
 
 ### M0 Grundgerüst
-1. **[X] Setup**: Vite+TS strict, ESLint, Vitest, Skripte `lint typecheck test build`. *Abnahme:* `check.sh` grün; ESLint schlägt fehl, wenn `src/core` DOM oder `src/ui` importiert.
+1. **[X] ✅ Setup**: Vite+TS strict, ESLint, Vitest, Skripte `lint typecheck test build`. *Abnahme:* `check.sh` grün; ESLint schlägt fehl, wenn `src/core` DOM oder `src/ui` importiert.
 
 ### M1 Kern-Bibliothek (UI-unabhängig)
 2. **[E] Geometrie**: Polygon, Fläche, Punkt-in-Polygon, Abstände, Schnitt, Clipper-Adapter. *Abnahme:* 20×10 = 200 m²; Referenz-L-Dach exakt; fast-check: Fläche invariant unter Verschiebung/Drehung.
@@ -111,8 +111,8 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 - Offen: Anschlusshöhen/Notabdichtung; Abflussbeiwert Gründach; Erfolgskriterium V1 (Vorschlag: Bürodach inkl. Dämmplan in < 30 min, Ergebnis vom Planer bestätigt).
 
 ## Übergabe
-- Nächster Schritt: **1 Setup** (executor).
-- Stand: DESIGN.md (inkl. §11 Dämmplan, Einzugsflächen ohne Schraffur), Intent, Referenzbilder vorhanden; noch kein Code.
+- Nächster Schritt: **2 Geometrie-Grundlagen** [E] via `engineer`. Schritt 1 erledigt (check.sh grün, Lint-Grenze per Test belegt).
+- Stand: DESIGN.md (inkl. §11 Dämmplan, Einzugsflächen ohne Schraffur), Intent, Referenzbilder vorhanden; Setup-Code vorhanden (Vite, TS strict, ESLint, Vitest; `tsconfig.core.json` ohne DOM).
 - Entscheidungen: Kern rein in `src/core`; Regeln, Herstellerdaten, KOSTRA, PLZ nur in `rulepacks/`; V1 = M1–M5 inkl. Gefälledämmplan; Standort offline, Geocoding optional per Opt-in.
 - Vom Nutzer anfordern: Plattenkatalog (R6), Loro-Tabelle, LES-Klärung, KOSTRA-Lizenzprüfung, Original-Regelwerk.
 - Stolperfallen: keine Grenzwerte im Code; Regenspende immer Pack-Wert und Nutzerwert speichern; Einzugsflächen nie schraffieren; Attikafläche zählt zur Ablauffläche, steht aber nie im Gefälle-/Dämmplan; Koten 3 Nachkommastellen nur in der UI formatieren.
