@@ -113,6 +113,19 @@ export function zeichneEinzugsflaechen(ctx: CanvasRenderingContext2D, vp: Viewpo
   ctx.restore();
 }
 
+/** Grate (durchgezogen) und Kehlen (gestrichelt, betont) der Gefälleplanung inkl. Zonen. */
+export function zeichneFaltlinien(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
+  const px = 1 / vp.scale;
+  ctx.save(); ctx.lineCap = "round";
+  for (const d of e.slope.dachflaechen) for (const l of [...d.linien, ...d.zonen.flatMap((z) => z.linien)]) {
+    const kehle = l.art === "kehle";
+    ctx.strokeStyle = css(kehle ? "--accent" : "--text", "#222"); ctx.globalAlpha = kehle ? 0.95 : 0.7;
+    ctx.lineWidth = (kehle ? 2 : 1.4) * px; ctx.setLineDash(kehle ? [7 * px, 4 * px] : []);
+    ctx.beginPath(); ctx.moveTo(l.von.x, l.von.y); ctx.lineTo(l.bis.x, l.bis.y); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
   const px = 1 / vp.scale, belegung = new Belegung(vp);
   ctx.save(); ctx.setLineDash([]); ctx.strokeStyle = css("--text-muted", "#555"); ctx.lineWidth = px; ctx.lineCap = "round";
