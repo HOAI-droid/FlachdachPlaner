@@ -11,7 +11,8 @@ export function bahn(ctx: CanvasRenderingContext2D, pts: readonly Vec2[], zu = t
   if (zu) ctx.closePath();
 }
 
-export interface TextOpt { px?: number; farbe?: string; mono?: boolean; winkel?: number; ankerMitte?: boolean }
+export interface TextOpt {
+  halo?: boolean; px?: number; farbe?: string; mono?: boolean; winkel?: number; ankerMitte?: boolean }
 
 /** Text aufrecht am Weltpunkt; `winkel` (Bildschirm, rad, y nach unten) wird so normiert, dass er nie kopfsteht. */
 export function text(ctx: CanvasRenderingContext2D, vp: Viewport, s: string, x: number, y: number, o: TextOpt = {}): void {
@@ -24,6 +25,7 @@ export function text(ctx: CanvasRenderingContext2D, vp: Viewport, s: string, x: 
   ctx.fillStyle = o.farbe ?? css("--text-muted", "#555");
   ctx.textBaseline = "alphabetic";
   if (o.ankerMitte) { ctx.textAlign = "center"; }
+  if (o.halo !== false) { ctx.lineJoin = "round"; ctx.lineWidth = 3; ctx.strokeStyle = css("--surface", "#fff"); ctx.globalAlpha = 0.85; ctx.strokeText(s, 0, 0); ctx.globalAlpha = 1; }
   ctx.fillText(s, 0, 0);
   ctx.restore();
 }

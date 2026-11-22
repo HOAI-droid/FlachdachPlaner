@@ -93,10 +93,14 @@ button, input, select { font: inherit; color: inherit; }
 .badge { display: inline-block; padding: var(--sp-1) var(--sp-3); margin: var(--sp-3);
   border: 1px solid var(--line-strong); border-radius: 999px; font-family: var(--font-mono); font-size: var(--fs-sm); }
 .befunde { list-style: none; margin: 0; padding: var(--sp-3) var(--sp-4); display: grid; gap: var(--sp-2); }
-.befund { padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--line-strong); background: var(--surface-2); }
-.befund.warnung { border-left-color: var(--warn); background: var(--warn-soft); }
-.befund.fehler { border-left-color: var(--error); background: var(--error-soft); }
+.befund { padding: var(--sp-2) var(--sp-3); border-radius: var(--r-1); background: var(--surface-2); }
+.befund.warnung { background: var(--warn-soft); }
+.befund.fehler { background: var(--error-soft); }
 .befund .stufe { font-weight: 600; margin-right: var(--sp-3); }
+.befund .stufe::before { margin-right: var(--sp-2); }
+.befund.hinweis .stufe::before { content: "●"; }
+.befund.warnung .stufe::before { content: "▲"; color: var(--warn); }
+.befund.fehler .stufe::before { content: "⬣"; color: var(--error); }
 .regen, .field-row { display: grid; grid-template-columns: 112px 1fr; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); align-items: center; }
 .regen .num { font-family: var(--font-mono); text-align: right; }
 .treffer { list-style: none; margin: 0; padding: 0; max-height: 160px; overflow: auto; }
@@ -105,3 +109,9 @@ button, input, select { font: inherit; color: inherit; }
 .dialog { border: 1px solid var(--line-strong); border-radius: var(--r-1); background: var(--surface); color: var(--text); padding: var(--sp-5); }
 .dialog::backdrop { background: rgb(0 0 0 / .4); }
 .dialog canvas { display: block; max-width: 100%; }
+
+.props { overflow-x: hidden; }
+.field input, .field select { min-width: 0; }
+.field-row { grid-template-columns: 1fr 1fr; }
+.field-row .field { grid-template-columns: 1fr; gap: var(--sp-1); padding: 0; }
+.regen .field { grid-template-columns: 1fr 96px; }

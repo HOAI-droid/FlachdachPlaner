@@ -116,6 +116,7 @@ export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Er
   const px = 1 / vp.scale, belegung = new Belegung(vp);
   ctx.save(); ctx.setLineDash([]); ctx.strokeStyle = css("--text-muted", "#555"); ctx.lineWidth = px; ctx.lineCap = "round";
   for (const d of e.slope.dachflaechen) for (const a of d.pfeile) {
+    if (d.koten.some((k) => k.art === "ablauf" && Math.hypot(k.position.x - a.start.x, k.position.y - a.start.y) * vp.scale < 120)) continue;
     const len = 44 * px, { x, y } = a.start, rx = a.richtung.x, ry = a.richtung.y;
     const ex = x + rx * len, ey = y + ry * len, k = 8 * px;
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey);
@@ -143,8 +144,9 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
     text(ctx, vp, s, p.x + 10 * px, p.y + dy * px, { px: 12, mono: true, farbe: fett ? css("--accent", "#1F4FA3") : tx });
   };
   for (const d of e.slope.dachflaechen) {
-    if (d.hochpunkt) for (const o of d.hochpunkt.orte.slice(0, 2)) marke(o, `HP ${kote(d.hochpunkt.kote)}`, true);
-    if (d.tiefpunkt) for (const o of d.tiefpunkt.orte.slice(0, 2)) marke(o, `TP ${kote(d.tiefpunkt.kote)}`, true);
+    const amAblauf = (o: Vec2) => d.koten.some((k) => k.art === "ablauf" && Math.hypot(k.position.x - o.x, k.position.y - o.y) < 0.05);
+    if (d.hochpunkt) for (const o of d.hochpunkt.orte.filter((q) => !amAblauf(q)).slice(0, 2)) marke(o, `HP ${kote(d.hochpunkt.kote)}`, true);
+    if (d.tiefpunkt) for (const o of d.tiefpunkt.orte.filter((q) => !amAblauf(q)).slice(0, 2)) marke(o, `TP ${kote(d.tiefpunkt.kote)}`, true);
     for (const k of d.koten) if (k.art !== "ablauf") marke(k.position, kote(k.kote), false);
   }
   ctx.restore();
@@ -163,7 +165,7 @@ export function zeichneNotbereich(ctx: CanvasRenderingContext2D, vp: Viewport, m
       bahn(ctx, q); ctx.globalAlpha = 0.1; ctx.fillStyle = warn; ctx.fill();
       ctx.globalAlpha = 1; ctx.setLineDash([6 * px, 3 * px]); ctx.strokeStyle = warn; ctx.lineWidth = 1.5 * px; ctx.stroke();
       const mx = (b.von.x + b.bis.x) / 2 + n.x * t * 0.5, my = (b.von.y + b.bis.y) / 2 + n.y * t * 0.5;
-      text(ctx, vp, "Bereich Notentwässerung", mx, my - 4 * px, { px: 11, farbe: warn, ankerMitte: true, winkel: Math.atan2(-(b.bis.y - b.von.y), b.bis.x - b.von.x) });
+      if (Math.hypot(b.bis.x - b.von.x, b.bis.y - b.von.y) * vp.scale > 320) text(ctx, vp, "Bereich Notentwässerung", mx, my - 4 * px, { px: 11, farbe: warn, ankerMitte: true, winkel: Math.atan2(-(b.bis.y - b.von.y), b.bis.x - b.von.x) });
     }
   }
   ctx.restore();

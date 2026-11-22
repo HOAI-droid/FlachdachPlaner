@@ -37,7 +37,7 @@ export function mountStandort(panel: HTMLElement, api: StandortApi): StandortPan
   let rain: RainData | null = null;
   let meldung: string | null = null;
   let treffer: { plz: string; ort: string; lat: number; lon: number }[] = [];
-  let utm = { zone: "32", ost: "", nord: "" };
+  const utm = { zone: "32", ost: "", nord: "" };
   let sucheText = "";
 
   async function setzeKoordinate(k: Koordinate, bezeichnung?: string) {

@@ -11,7 +11,7 @@ import {
 import type { Stage } from "./canvas/stage";
 import type { Viewport } from "./canvas/viewport";
 import { berechne, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
-import { kote, meter, quadratmeter, zahl } from "./format";
+import { meter, quadratmeter, zahl } from "./format";
 import { standardTyp, typOptionen } from "./packs";
 import { mountStandort } from "./standort";
 
