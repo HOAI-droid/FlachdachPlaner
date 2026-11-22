@@ -32,3 +32,8 @@ Flachdachrichtlinie (ZVDH) Ausgabe Januar 2026 + DIN 18531: Planungsziel i. d. R
 ## Offen
 - Frage 6: Umfang der ersten Version (MVP) und Erfolgskriterium.
 - Konkrete Maße Abdichtung/Notabdichtung/Anschlusshöhen.
+
+## Herstellerdaten Bauder PIR T LES (Auszug aus PDF, UNGEPRÜFT)
+- Sets 1-5 (Bestell-Nr. 9610 8140/8240/8340/8440/8540), Breite 2000 mm; Höhenbereiche laut Grafik: Set 1 10-30, Set 2 30-50, Set 3 50-70, Set 4 70-90, Set 5 90-110 mm.
+- LES 1-10 (bis 10 m): Sets werden addiert (LES 1-2 = Set 1; 3-4 = 1+2; 5-6 = 1+2+3; 7-8 = 1+2+3+4; 9-10 = 1+2+3+4+5). Ab LES 11 objektspezifisch, längere Lieferzeit.
+- Die Auswertung nennt Höhe 0,25 m je m Länge und Gefälle 1/3,5/4 % ohne klare Zuordnung: widerspricht den mm-Höhen der Grafik. Vor Umsetzung mit Original-PDF/Hersteller klären.
