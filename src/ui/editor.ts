@@ -4,8 +4,8 @@ import {
   aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
-  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, serializeProject, snap, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
-  type Abweichung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
+  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
+  type Abweichung, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
@@ -28,7 +28,7 @@ import { autosaveSchreiben, base64ZuBytes, bytesZuBase64, leseProjekt, speichere
 
 const FANG_PX = 10;
 const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", g: "gully", n: "notablauf", r: "dachreiter", l: "les", m: "measure" };
-const FANG_NAME: Record<SnapArt, string> = { endpunkt: "Endpunkt", schnittpunkt: "Schnittpunkt", mittelpunkt: "Mittelpunkt", lot: "Lot", ortho: "Ortho" };
+const FANG_NAME: Record<SnapArt | "ausrichtung", string> = { ausrichtung: "Ausrichtung", endpunkt: "Endpunkt", schnittpunkt: "Schnittpunkt", mittelpunkt: "Mittelpunkt", lot: "Lot", ortho: "Ortho" };
 const HINWEIS: Record<WerkzeugId, string> = {
   select: "Objekt anklicken. Entf löscht die Auswahl.",
   contour: "Punkte klicken. Enter, Doppelklick oder Klick auf den Startpunkt schließt. Esc bricht ab, Rücktaste nimmt den letzten Punkt zurück.",
@@ -92,6 +92,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let unterlage: UnterlageUI | null = null;
   let cursor: Vec2 | null = null;
   let treffer: SnapTreffer | null = null;
+  /** Per Verweilen erfasste Punkte (Objektfang-Spur) und die aktuell wirkende Ausrichtung. */
+  let erfasst: Vec2[] = [];
+  let ausricht: Ausrichtung | null = null;
+  let verweil: { punkt: Vec2; timer: ReturnType<typeof setTimeout> } | null = null;
   let kante: ReturnType<typeof kantenTreffer> = null;
   let kal: { p1?: Vec2; p2?: Vec2 } = {};
   let meldung: string | null = null;
@@ -132,16 +136,40 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (z.tool === "measure") return kal.p1;
     return z.entwurf[z.entwurf.length - 1];
   }
-  function gefangen(w: Vec2): Vec2 {
-    if (!zeichnetMitFang() || z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") return w;
+  const ERFASS_MS = 450, MAX_ERFASST = 4;
+  const spurPunkte = (): Vec2[] => [...erfasst, ...z.entwurf];
+  /** Fangtreffer plus Ausrichtung an erfassten Punkten und bisherigen Entwurfspunkten (ersetzt Ortho). */
+  function fangAuswerten(w: Vec2): { treffer: SnapTreffer | null; ausricht: Ausrichtung | null; punkt: Vec2 } {
     const ref = refPunkt();
     const t = snap(fangIndex(), w, tol(), ref ? { referenzpunkt: ref } : {});
-    return t ? t.punkt : w;
+    if (t && t.art !== "ortho") return { treffer: t, ausricht: null, punkt: t.punkt };
+    const a = ausrichten(spurPunkte(), w, tol());
+    if (a) return { treffer: null, ausricht: a, punkt: a.punkt };
+    return { treffer: t, ausricht: null, punkt: t ? t.punkt : w };
   }
+  function gefangen(w: Vec2): Vec2 {
+    if (!zeichnetMitFang() || z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") return w;
+    return fangAuswerten(w).punkt;
+  }
+  function verweilen(t: SnapTreffer | null) {
+    if (!t || t.art === "ortho" || t.art === "lot") { if (verweil) { clearTimeout(verweil.timer); verweil = null; } return; }
+    if (verweil && Math.hypot(verweil.punkt.x - t.punkt.x, verweil.punkt.y - t.punkt.y) < 1e-9) return;
+    if (verweil) clearTimeout(verweil.timer);
+    const punkt = t.punkt;
+    verweil = { punkt, timer: setTimeout(() => {
+      verweil = null;
+      if (erfasst.some((q) => Math.hypot(q.x - punkt.x, q.y - punkt.y) < 1e-9)) return;
+      erfasst = [...erfasst, punkt].slice(-MAX_ERFASST);
+      stage.invalidate();
+    }, ERFASS_MS) };
+  }
+  const vergissErfasste = () => { erfasst = []; ausricht = null; if (verweil) { clearTimeout(verweil.timer); verweil = null; } };
 
   // ---------- Aktionen ----------
   function wende(r: KlickErgebnis) {
+    const warEntwurf = z.entwurf.length > 0;
     z = r.zustand;
+    if (warEntwurf && z.entwurf.length === 0) vergissErfasste();
     if (r.befehl) {
       const alt = verlauf;
       verlauf = ausfuehren(verlauf, r.befehl);
@@ -152,7 +180,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   function setzeWerkzeug(id: WerkzeugId) {
     z = waehleWerkzeug(z, id);
-    kal = {}; meldung = null; treffer = null; kante = null;
+    kal = {}; meldung = null; treffer = null; kante = null; vergissErfasste();
     shell.setTool(id);
     stage.setCursor(id === "select" ? "" : "crosshair");
     refresh();
@@ -688,7 +716,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const farbe = css("--snap", "#D4007A");
     if (z.entwurf.length > 0) {
       ctx.strokeStyle = css("--text", "#222"); ctx.lineWidth = 1.5 * px;
-      const pts = cursor && zeichnetMitFang() ? [...z.entwurf, treffer?.punkt ?? cursor] : z.entwurf;
+      const pts = cursor && zeichnetMitFang() ? [...z.entwurf, treffer?.punkt ?? ausricht?.punkt ?? cursor] : z.entwurf;
       bahn(ctx, pts, false); ctx.stroke();
       if (z.entwurf.length >= 2) { ctx.save(); ctx.setLineDash([4 * px, 4 * px]); ctx.globalAlpha = .6; bahn(ctx, [pts[pts.length - 1]!, pts[0]!], false); ctx.stroke(); ctx.restore(); }
       for (const p of z.entwurf) { ctx.fillStyle = css("--text", "#222"); ctx.fillRect(p.x - 2.5 * px, p.y - 2.5 * px, 5 * px, 5 * px); }
@@ -705,6 +733,59 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       marker(ctx, vp, { art: "mittelpunkt", punkt: kante.punkt, segmente: [], abstand: kante.distanz });
     }
     if (treffer) marker(ctx, vp, treffer, refPunkt());
+    zeichneSpuren(ctx, vp);
+    zeichneWinkel(ctx, vp);
+  }
+
+  /** Erfasste Punkte (Kreuz) und Hilfslinien der wirkenden Ausrichtung. */
+  function zeichneSpuren(ctx: CanvasRenderingContext2D, vp: Viewport) {
+    if (!zeichnetMitFang()) return;
+    const px = 1 / vp.scale, farbe = css("--snap", "#D4007A"), h = 5 * px;
+    ctx.save(); ctx.strokeStyle = farbe; ctx.lineWidth = 1.5 * px; ctx.setLineDash([]);
+    for (const p of erfasst) { ctx.beginPath(); ctx.moveTo(p.x - h, p.y); ctx.lineTo(p.x + h, p.y); ctx.moveTo(p.x, p.y - h); ctx.lineTo(p.x, p.y + h); ctx.stroke(); }
+    if (ausricht) {
+      ctx.globalAlpha = .7; ctx.setLineDash([5 * px, 4 * px]); ctx.lineWidth = 1 * px;
+      const q = ausricht.punkt, ueber = 24 * px;
+      for (const sp of ausricht.spuren) {
+        const dx = sp.richtung === "y" ? Math.sign(q.x - sp.von.x) || 1 : 0, dy = sp.richtung === "x" ? Math.sign(q.y - sp.von.y) || 1 : 0;
+        bahn(ctx, [sp.von, { x: q.x + dx * ueber, y: q.y + dy * ueber }], false); ctx.stroke();
+      }
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(q.x, q.y, 4 * px, 0, Math.PI * 2); ctx.stroke();
+      text(ctx, vp, FANG_NAME.ausrichtung, q.x + 8 * px, q.y + 8 * px, 11, "--snap");
+    }
+    ctx.restore();
+  }
+
+  /** Winkel ≠ 90° anzeigen: beim Zeichnen am letzten Punkt, sonst an den Ecken der gewählten Dachfläche. */
+  function zeichneWinkel(ctx: CanvasRenderingContext2D, vp: Viewport) {
+    const px = 1 / vp.scale, abw = (w: number) => Number.isFinite(w) && Math.abs(w - 90) > 0.05;
+    const beschrifte = (w: number, s: Vec2, richtung: Vec2) => {
+      const l = Math.hypot(richtung.x, richtung.y) || 1;
+      text(ctx, vp, `${zahl(w, 1)}°`, s.x + (richtung.x / l) * 26 * px - 10 * px, s.y + (richtung.y / l) * 26 * px - 4 * px, 11, "--accent");
+    };
+    const n = z.entwurf.length;
+    if (n >= 1 && cursor && zeichnetMitFang()) {
+      const q = treffer?.punkt ?? ausricht?.punkt ?? cursor, s = z.entwurf[n - 1]!;
+      if (n >= 2) {
+        const a = z.entwurf[n - 2]!, w = winkelGrad(a, s, q);
+        if (abw(w)) beschrifte(w, s, { x: (a.x - s.x) / (Math.hypot(a.x - s.x, a.y - s.y) || 1) + (q.x - s.x) / (Math.hypot(q.x - s.x, q.y - s.y) || 1), y: (a.y - s.y) / (Math.hypot(a.x - s.x, a.y - s.y) || 1) + (q.y - s.y) / (Math.hypot(q.x - s.x, q.y - s.y) || 1) });
+      }
+      return;
+    }
+    const d = auswahl ? modell().dachflaechen.find((x) => x.id === auswahl!.dachId) : undefined;
+    if (!d || z.tool !== "select") return;
+    const k = d.kontur, m = k.length;
+    for (let i = 0; i < m; i++) {
+      const a = k[(i + m - 1) % m]!, s = k[i]!, b = k[(i + 1) % m]!;
+      let w = winkelGrad(a, s, b);
+      if (!Number.isFinite(w)) continue;
+      const ua = Math.hypot(a.x - s.x, a.y - s.y), ub = Math.hypot(b.x - s.x, b.y - s.y);
+      let r = { x: (a.x - s.x) / ua + (b.x - s.x) / ub, y: (a.y - s.y) / ua + (b.y - s.y) / ub };
+      const probe = { x: s.x + r.x * 1e-4, y: s.y + r.y * 1e-4 };
+      if (pointInPolygon(probe, { outer: k, holes: [] }) === "outside") { w = 360 - w; r = { x: -r.x, y: -r.y }; }
+      if (abw(w) && Math.abs(w - 270) > 0.05) beschrifte(w, s, r);
+    }
   }
 
   stage.setLayer("kontur", zeichneKontur);
@@ -724,15 +805,17 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   stage.onPointer({
     move(w) {
       cursor = { x: w[0], y: w[1] };
-      treffer = null; kante = null;
+      treffer = null; kante = null; ausricht = null;
       if (zeichnetMitFang()) {
         if (z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") kante = kantenTreffer(modell(), cursor, tol());
         else {
-          const ref = refPunkt();
-          treffer = snap(fangIndex(), cursor, tol(), ref ? { referenzpunkt: ref } : {});
+          const f = fangAuswerten(cursor);
+          treffer = f.treffer; ausricht = f.ausricht;
+          verweilen(f.treffer);
         }
       }
-      shell.status.snap.textContent = treffer ? `Fang: ${FANG_NAME[treffer.art]}` : zeichnetMitFang() ? "Fang: bereit" : "Fang: aus";
+      if (!zeichnetMitFang() || kante) ausricht = null;
+      shell.status.snap.textContent = treffer ? `Fang: ${FANG_NAME[treffer.art]}` : ausricht ? "Fang: Ausrichtung" : zeichnetMitFang() ? "Fang: bereit" : "Fang: aus";
       stage.invalidate();
     },
     click(w) {
@@ -746,7 +829,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       wende(klick(z, modell(), p, tol(), { typ: standardTyp }));
     },
     dblclick() { if (z.entwurf.length >= 3) wende(abschliessen(z, modell())); },
-    leave() { cursor = null; treffer = null; kante = null; stage.invalidate(); },
+    leave() { cursor = null; treffer = null; kante = null; ausricht = null; if (verweil) { clearTimeout(verweil.timer); verweil = null; } stage.invalidate(); },
   });
 
   shell.onTool((id) => setzeWerkzeug(id as WerkzeugId));
@@ -761,7 +844,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
     if (e.altKey) return;
     if (k === "enter") { if (z.entwurf.length) { e.preventDefault(); wende(abschliessen(z, modell())); } }
-    else if (k === "escape") { if (z.entwurf.length || kal.p1) { z = abbrechen(z); kal = {}; refresh(); } else if (z.tool !== "select") setzeWerkzeug("select"); else setzeAuswahl(null); }
+    else if (k === "escape") { if (z.entwurf.length || kal.p1 || erfasst.length) { z = abbrechen(z); kal = {}; vergissErfasste(); refresh(); } else if (z.tool !== "select") setzeWerkzeug("select"); else setzeAuswahl(null); }
     else if (k === "backspace") { if (z.entwurf.length) { e.preventDefault(); z = entfernePunkt(z); refresh(); } }
     else if (k === "delete") loescheAuswahl();
     else if (TASTEN[k]) setzeWerkzeug(TASTEN[k]!);

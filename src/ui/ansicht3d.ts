@@ -32,7 +32,7 @@ export class Ansicht3D {
     this.canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; this.canvas.setPointerCapture(e.pointerId); this.canvas.style.cursor = "grabbing"; });
     this.canvas.addEventListener("pointermove", (e) => {
       if (!drag) return;
-      this.yaw -= (e.clientX - drag.x) * 0.008; this.pitch = Math.max(0.05, Math.min(Math.PI / 2, this.pitch + (e.clientY - drag.y) * 0.008));
+      this.yaw += (e.clientX - drag.x) * 0.008; this.pitch = Math.max(0.05, Math.min(Math.PI / 2, this.pitch + (e.clientY - drag.y) * 0.008));
       drag = { x: e.clientX, y: e.clientY }; this.zeichne();
     });
     const ende = (e: PointerEvent) => { drag = null; this.canvas.releasePointerCapture(e.pointerId); this.canvas.style.cursor = "grab"; };
