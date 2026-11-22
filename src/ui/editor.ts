@@ -3,9 +3,9 @@ import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
   aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
-  neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setAttikaSeite, setTuerschwelleBreite,
+  neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
-  type Abweichung, type AttikaSeite, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
+  type Abweichung, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
@@ -66,21 +66,6 @@ function feld(label: string, wert: string, key: string, commit: (v: number) => v
   i.addEventListener("change", () => { const v = num(i.value); if (Number.isFinite(v)) commit(v); });
   i.addEventListener("keydown", (e) => { if (e.key === "Enter") i.blur(); });
   f.append(l, i);
-  return f;
-}
-/** Umschalter „innen | außen“ für den Attikastreifen (ein Klick). */
-function attikaSeiteWahl(aktiv: AttikaSeite, wahl: (s: AttikaSeite) => void): HTMLElement {
-  const f = el("div", "field");
-  f.append(el("span", "feld-label", "Streifen"));
-  const seg = el("div", "segment");
-  seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Lage des Attikastreifens"); seg.dataset.k = "attika-seite";
-  for (const [v, t] of [["innen", "innen"], ["aussen", "außen"]] as const) {
-    const b = el("button", "", t);
-    b.type = "button"; b.dataset.v = v; b.setAttribute("aria-pressed", String(v === aktiv));
-    b.addEventListener("click", () => { if (v !== aktiv) wahl(v); });
-    seg.append(b);
-  }
-  f.append(seg);
   return f;
 }
 function button(text: string, onClick: () => void, cls = "btn"): HTMLButtonElement {
@@ -531,7 +516,6 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         const x = d.attika.find((q) => q.id === a.id)!;
         p.append(row("Art", "Attika", "art"), row("Länge", meter(attikaLaenge(d, x), 2), "laenge"),
           feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { verlauf = ausfuehren(verlauf, setAttikaBreite(d.id, x.id, v)); refresh(); } }),
-          attikaSeiteWahl(x.seite ?? "innen", (s) => { verlauf = ausfuehren(verlauf, setAttikaSeite(d.id, x.id, s)); refresh(); }),
           row("Fläche", quadratmeter(attikaSegmentFlaeche(d, x), 2), "flaeche"));
         break;
       }
@@ -634,7 +618,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         text(ctx, vp, zn.name, c.x, c.y);
       }
       for (const s of d.attika) {
-        // Streifen innen (Standard) oder außen an der Kante (attikaStreifen).
+        // Streifen immer außen an der Kante (attikaStreifen); Dachkontur bleibt Gefällefläche.
         const q = attikaStreifen(d, s);
         if (q.length < 4) continue;
         bahn(ctx, q);

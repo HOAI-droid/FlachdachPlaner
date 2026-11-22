@@ -97,14 +97,7 @@ export interface AttikaSegment {
   readonly breite: number;
   /** Oberkante Attika z in m, falls bekannt. */
   readonly oberkante?: number;
-  /**
-   * Lage des Streifens zur Konturkante: „innen“ (auf der Dachfläche, Standard) oder „aussen“ (außerhalb
-   * der Kontur). Nur Darstellung/Plan; die Einzugsfläche (Länge × Breite) bleibt gleich.
-   */
-  readonly seite?: AttikaSeite;
 }
-
-export type AttikaSeite = "innen" | "aussen";
 
 export interface Tuerschwelle {
   readonly id: Id;

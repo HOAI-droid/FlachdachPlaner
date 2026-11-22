@@ -2,7 +2,7 @@
 import { dist } from "../geometry/segment";
 import { konturKante } from "../model/model";
 import type {
-  AttikaSegment, AttikaSeite, Dachflaeche, Entwaesserung, EntwaesserungsArt, Gully, Id, Koordinate, Kontur, PackRef, ProjectModel, Regenspende,
+  AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Gully, Id, Koordinate, Kontur, PackRef, ProjectModel, Regenspende,
   Tuerschwelle, Unterlage, Zone,
 } from "../model/types";
 import type { RainData } from "../rain/rain";
@@ -115,19 +115,6 @@ export function setAttikaUmlaufend(dachId: Id, breite: number): Befehl {
       });
       const gleich = attika.length === d.attika.length && attika.every((a, i) => a.id === d.attika[i]?.id && a.breite === d.attika[i]?.breite);
       return gleich ? d : { ...d, attika };
-    }),
-  };
-}
-
-/** Attikastreifen nach innen (auf der Dachfläche) oder außen (außerhalb der Kontur) legen. „innen“ = Standard (Feld entfällt). */
-export function setAttikaSeite(dachId: Id, attikaId: Id, seite: AttikaSeite): Befehl {
-  return {
-    label: seite === "aussen" ? "Attika nach außen" : "Attika nach innen",
-    anwenden: (m) => mapDach(m, dachId, (d) => {
-      const a = d.attika.find((x) => x.id === attikaId);
-      if (!a || (a.seite ?? "innen") === seite || (seite !== "innen" && seite !== "aussen")) return d;
-      const neu: AttikaSegment = seite === "innen" ? { id: a.id, kante: a.kante, breite: a.breite, ...(a.oberkante !== undefined ? { oberkante: a.oberkante } : {}) } : { ...a, seite };
-      return { ...d, attika: d.attika.map((x) => (x === a ? neu : x)) };
     }),
   };
 }

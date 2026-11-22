@@ -241,7 +241,7 @@ function pruefeDach(c: Pruefer, p: string, v: unknown): void {
     const q = sub(sub(p, "attika"), i);
     const a = c.obj(q, e, ["id", "kante", "breite"], ["oberkante", "seite"]);
     if (!a) return;
-    if (a["seite"] !== undefined) c.oneOf(sub(q, "seite"), a["seite"], ["innen", "aussen"] as const);
+    // „seite“ (Altdaten, innen/außen-Umschaltung entfallen): toleriert und ignoriert; Attika liegt immer außen.
     c.id(sub(q, "id"), a["id"]);
     c.num(sub(q, "breite"), a["breite"], { gt: 0 });
     c.optNum(q, a, "oberkante");

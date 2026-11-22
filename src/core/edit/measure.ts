@@ -20,7 +20,8 @@ export function attikaLaenge(d: Dachflaeche, a: AttikaSegment): number {
 }
 /**
  * Attikastreifen als Viereck [von, bis, bis + n·b, von + n·b] auf dem Kantenabschnitt von→bis (Standard:
- * ganze Kante); n zeigt bei Seite „innen“ ins Dachinnere, bei „aussen“ nach außen. Leer, wenn die Kante fehlt.
+ * ganze Kante); n zeigt immer nach außen (Attika liegt außerhalb der Dachkontur, die Kontur bleibt die
+ * Gefällefläche). Leer, wenn die Kante fehlt.
  */
 export function attikaStreifen(d: Dachflaeche, a: AttikaSegment, abschnitt?: readonly [Vec2, Vec2]): Vec2[] {
   const k = konturKante(d.kontur, a.kante);
@@ -28,8 +29,8 @@ export function attikaStreifen(d: Dachflaeche, a: AttikaSegment, abschnitt?: rea
   const [von, bis] = abschnitt ?? k;
   const l = dist(k[0], k[1]);
   if (!(l > 0)) return [];
-  // Linke Normale der Kante zeigt bei Gegenuhrzeigersinn (Fläche > 0) nach innen.
-  const vz = (signedArea(d.kontur) > 0 ? 1 : -1) * (a.seite === "aussen" ? -1 : 1);
+  // Linke Normale der Kante zeigt bei Gegenuhrzeigersinn (Fläche > 0) nach innen; daher umgekehrt.
+  const vz = signedArea(d.kontur) > 0 ? -1 : 1;
   const nx = (-(k[1].y - k[0].y) / l) * vz * a.breite, ny = ((k[1].x - k[0].x) / l) * vz * a.breite;
   return [von, bis, { x: bis.x + nx, y: bis.y + ny }, { x: von.x + nx, y: von.y + ny }];
 }

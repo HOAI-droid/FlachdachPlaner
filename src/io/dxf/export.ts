@@ -62,7 +62,7 @@ function dachObjekte(w: Schreiber, d: Dachflaeche): void {
   ring(w, DXF_LAYER.kontur, d.kontur, true);
   for (const a of d.aufbauten) ring(w, DXF_LAYER.aufbau, a.kontur, true);
   for (const z of d.zonen) ring(w, DXF_LAYER.zone, z.kontur, true);
-  // Attika: Kante und Streifenkante (innen oder außen, attikaStreifen).
+  // Attika: Kante und Streifenkante (immer außen, attikaStreifen).
   for (const a of d.attika) {
     const k = konturKante(d.kontur, a.kante);
     if (!k) continue;

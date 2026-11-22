@@ -3,7 +3,7 @@ export {
   type Befehl, type Verlauf,
 } from "./history";
 export {
-  addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, loesche, neueIds, setAttika, setAttikaBreite, setAttikaSeite,
+  addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, loesche, neueIds, setAttika, setAttikaBreite,
   setAttikaUmlaufend, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, setRegenManuell, setStandort, setTuerschwelleBreite, setUnterlage, type Auswahl, type IdPraefix, type TypWahl,
 } from "./commands";
 export { pruefePolygon } from "./polygon-check";

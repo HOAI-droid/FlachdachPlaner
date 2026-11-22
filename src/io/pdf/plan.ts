@@ -4,7 +4,7 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  dickeAn, kotenMarken, plattenDaemmdicke, polygonCentroid,
+  attikaStreifen, dickeAn, kotenMarken, plattenDaemmdicke, polygonCentroid,
   type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfSeite, type Punkt } from "./pdf";
@@ -78,7 +78,7 @@ class Frei {
 }
 
 function umfang(m: ProjectModel): { x0: number; y0: number; x1: number; y1: number } | null {
-  const pts = m.dachflaechen.flatMap((d) => d.kontur);
+  const pts = m.dachflaechen.flatMap((d) => [...d.kontur, ...d.attika.flatMap((a) => attikaStreifen(d, a))]);
   if (pts.length === 0) return null;
   return {
     x0: Math.min(...pts.map((p) => p.x)), y0: Math.min(...pts.map((p) => p.y)),
@@ -248,6 +248,11 @@ function konturen(s: PdfSeite, a: Abbildung, m: ProjectModel): void {
   for (const d of m.dachflaechen) {
     for (const au of d.aufbauten) s.linie(au.kontur.map((p) => a.p(p)), { breite: LW.mittel, zu: true });
     for (const z of d.zonen) s.linie(z.kontur.map((p) => a.p(p)), { breite: LW.mittel, zu: true, strich: [3, 1.2] });
+    // Attika immer außen an der Kante: Streifen-Außenkante und Stirnseiten (Kante selbst = Dachkontur).
+    for (const at of d.attika) {
+      const q = attikaStreifen(d, at);
+      if (q.length === 4) s.linie([q[1]!, q[2]!, q[3]!, q[0]!].map((p) => a.p(p)), { breite: LW.mittel });
+    }
   }
   for (const d of m.dachflaechen) s.linie(d.kontur.map((p) => a.p(p)), { breite: LW.kontur, zu: true });
 }
