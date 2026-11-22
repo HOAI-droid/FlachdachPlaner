@@ -61,3 +61,7 @@ Richtlinien, Grenzwerte, Sicherheitsbeiwerte, Mindestmaße, Herstellerdaten (Abl
 - **Keine LES-/Keil-Sets, keine Stücklisten** – aber **korrekte Dachreiter-Maße** und **korrekte Plattenmaße** (Herstellerdaten als Pack).
 - Loro-Abflusstabelle folgt später.
 - Attika: Tool mit Breite; Attikafläche zählt zur Ablauffläche (300/350 m²), nicht im Gefälle-/Dämmplan, gleiche Farbe wie zugehörige Dachfläche, Anzeige Attika/Dach/Gesamt.
+
+## LES-Maße (Nutzer: "nimm die LES-Maße von Bauder") – Quelle docs/referenz/bauder-les-sets.jpg
+Keilplatten BauderPIR T LES, je Set: Breite 2000 mm, Länge (Keilrichtung) 2500 mm laut Grafik; Dicke dünn -> dick: Set 1 10→30, Set 2 30→50, Set 3 50→70, Set 4 70→90, Set 5 90→110 mm. Nutzer will KEINE Set-Logik/Stückliste, nur diese korrekten Maße als LES-Plattenmaße im Pack (`geprueft:false` bis gegen Datenblatt bestätigt).
+OFFEN: 20 mm Höhenzunahme auf 2500 mm = 0,8 % Gefälle; widerspricht dem Auszug "1/3,5/4 %" aus dem PDF. Vor Umsetzung klären, ob 2500 mm die Keil-Länge ist.
