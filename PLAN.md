@@ -76,7 +76,8 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 19. **[X] Ergebnisdarstellung**: Einzugsflächen farbig ohne Schraffur + Labels, Koten, Pfeile, Notentwässerungsbereich. *Abnahme:* DESIGN §10 Punkte 2, 7–11. Attikafläche in derselben Farbe wie die Dachzelle, in die sie entwässert (etwas hellere Tönung, gleiche Farbe, kein Muster); Label je Ablauf `E3 · Dach 296 m² + Attika 24 m² = 320 m²`.
 20. **[X] Standort + Regenspende-Panel**: Eingabe per Koordinaten (WGS84/UTM), PLZ/Ort-Suche (offline Pack) oder Klick auf offline Deutschlandkarte mit KOSTRA-Raster; Anzeige Zelle, r(5,5), r(5,100), Quelle/Stand; Feld "manuell" überschreibt, Pack-Wert bleibt sichtbar (Abgleich, Differenz in %). Adress-Geocoding nur optional per Opt-in-Dialog, sendet nur die eingegebene Adresse. *Abnahme:* PLZ-Eingabe füllt Werte ohne Netz (Netz im E2E blockiert); Überschreiben erzeugt Hinweis; Reload behält beide Werte.
 21. **[X] Eigenschaften-Panel + Prüfliste** (Befunde sortiert, Klick zentriert). *Abnahme:* Zähler korrekt; Klick markiert Objekt (E2E).
-22. **[X] Speichern/Laden + Autosave**. *Abnahme:* Reload stellt Zustand inkl. Pack-Versionen her; fremde Version → Hinweis.
+22. **[X] Speichern/Laden lokal (Datenschutz)**: Projekt als Datei (`.fdp`, JSON, versioniert) auf Festplatte speichern und wieder öffnen (File System Access API, Fallback Download/Datei-Dialog), Unterlage (PDF/DXF) eingebettet oder per Hash referenziert; Autosave nur lokal (IndexedDB). Keine Datenübertragung, kein Backend, keine Telemetrie. *Abnahme:* Reload/Öffnen stellt Zustand inkl. Pack-Versionen her; fremde Version → Hinweis; E2E mit blockiertem Netz; keine Netzwerkanfragen mit Projektdaten (Test).
+22a. **[X] Unterlage austauschen + Abweichungen nachziehen (Planaktualisierung)**: neue PDF/DXF-Version ersetzt die Unterlage; Maßstab/Ausrichtung per Zwei-Punkt-Zuordnung (Passpunkte) übernehmen. Danach prüft die Software jeden gezeichneten Punkt gegen die neuen Fangpunkte: Abweichungen > Toleranz (einstellbar, Standard 2 cm) werden in einer Liste markiert (alt → vorgeschlagener neuer Punkt). Nutzer zieht Punkte einzeln (Vorschlag übernehmen / händisch verschieben / unverändert lassen) oder gesammelt nach; Ergebnis neu berechnet, Prüfliste aktualisiert. *Abnahme:* DXF-Fixture v1→v2 mit 3 verschobenen Ecken: genau diese 3 werden gemeldet; Übernehmen setzt Punkt auf neuen Fangpunkt ± 1 mm; unveränderte Punkte bleiben; Undo/Redo je Aktion.
 
 ### M4 Gefälledämmplan (Kern + 2D)
 23. **[E] Plattenkatalog-Pack**: Hersteller, Produkt, Format (L×B), Gefälle, Dickenstufen je Typ, Sonderplatten (8A), Zusatzlagen, Kehlkeile Kn L/R mit Maßen. Nur **korrekte Plattenmaße** zählen; keine LES-Sets. *Abnahme:* Beispielpack (fiktiv, `geprueft:false`) validiert; Loader meldet Lücke, wenn Enddicke Typ n ≠ Anfangsdicke Typ n+1.
@@ -92,7 +93,7 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 
 ### M6 Modus C (V1.1), M7 Desktop
 31. **[E] Vorschlag Abläufe**: Anzahl/Position so, dass alle Flächen ≤ Grenzwert und HP ≤ max. *Abnahme:* 40×20 → ≥ 3 Abläufe, alle < 300 m²; deterministisch.
-32. **[X] Tauri-Wrapper** (DWG entfällt, Nutzerentscheid).
+32. **[X] Tauri-Wrapper** (bevorzugte Verteilung wegen Datenschutz: Installer statt öffentlicher Webseite; ein öffentliches GitHub Pages nur ohne Hersteller-/Kundendaten und nur nach Rücksprache) (DWG entfällt, Nutzerentscheid).
 
 ## 7. Teststrategie
 - Kern: Vitest-Unit-Tests, fast-check-Eigenschaften (Flächensumme, Invarianz, Färbung, Lückenfreiheit der Platten), Golden-Fixtures mit erwarteten Koten, Flächen, Plattenlisten. Ziel ≥ 90 % Zeilenabdeckung in `src/core`.
@@ -113,6 +114,6 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 ## Übergabe
 - Nächster Schritt: **2 Geometrie-Grundlagen** [E] via `engineer`. Schritt 1 erledigt (check.sh grün, Lint-Grenze per Test belegt).
 - Stand: DESIGN.md (inkl. §11 Dämmplan, Einzugsflächen ohne Schraffur), Intent, Referenzbilder vorhanden; Setup-Code vorhanden (Vite, TS strict, ESLint, Vitest; `tsconfig.core.json` ohne DOM).
-- Entscheidungen: Kern rein in `src/core`; Regeln, Herstellerdaten, KOSTRA, PLZ nur in `rulepacks/`; V1 = M1–M5 inkl. Gefälledämmplan; Standort offline, Geocoding optional per Opt-in.
+- Entscheidungen: Daten bleiben ausschließlich lokal (Datei auf Festplatte); kein öffentliches Hosting (siehe Schritt 22/32); Kern rein in `src/core`; Regeln, Herstellerdaten, KOSTRA, PLZ nur in `rulepacks/`; V1 = M1–M5 inkl. Gefälledämmplan; Standort offline, Geocoding optional per Opt-in.
 - Vom Nutzer anfordern: Plattenkatalog (R6), Loro-Tabelle, LES-Klärung, KOSTRA-Lizenzprüfung, Original-Regelwerk.
 - Stolperfallen: keine Grenzwerte im Code; Regenspende immer Pack-Wert und Nutzerwert speichern; Einzugsflächen nie schraffieren; Attikafläche zählt zur Ablauffläche, steht aber nie im Gefälle-/Dämmplan; Koten 3 Nachkommastellen nur in der UI formatieren.
