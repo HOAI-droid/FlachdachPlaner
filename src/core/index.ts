@@ -4,3 +4,4 @@ export * from "./geometry";
 export * from "./model";
 export * from "./rules";
 export * from "./slope";
+export * from "./catchment";
