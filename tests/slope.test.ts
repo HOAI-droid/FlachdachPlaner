@@ -143,16 +143,11 @@ describe("Sonderfälle und Hinweise", () => {
     expect(g.daemmung!.flaeche).toBeCloseTo(196, 3);
     expect(koteAn(g, { x: 2, y: 2 })?.kote).toBeCloseTo(0.16, 12);
   });
-  it("ohne Punktablauf: keine Facetten, Hinweis; LES/Dachreiter noch nicht berücksichtigt", () => {
-    const m = projekt({
-      kontur: rechteck("k", 10, 10),
-      entwaesserung: [{ id: "l1", art: "les", name: "LES", typ: null, von: { x: 1, y: 1 }, bis: { x: 7, y: 1 }, z: 0 }],
-    });
-    const r = computeSlope(m);
+  it("ohne Ablauf: keine Facetten, Hinweis keine-ablaeufe", () => {
+    const r = computeSlope(projekt({ kontur: rechteck("k", 10, 10), entwaesserung: [] }));
     expect(r.dachflaechen[0]!.facetten).toEqual([]);
     expect(r.dachflaechen[0]!.daemmung).toBeNull();
-    expect(r.hinweise.map((h) => h.code).sort()).toEqual(["ablauf-nicht-beruecksichtigt", "keine-punktablaeufe"]);
-    expect(r.hinweise.find((h) => h.code === "ablauf-nicht-beruecksichtigt")?.objektId).toBe("l1");
+    expect(r.hinweise.map((h) => h.code)).toEqual(["keine-ablaeufe"]);
   });
   it("Notablauf wirkt als Punktablauf; Ablauf außerhalb → Hinweis", () => {
     const m = projekt({

@@ -134,6 +134,7 @@ export interface Dachreiter extends EntwaesserungBasis {
 }
 export interface Linienentwaesserung extends EntwaesserungBasis {
   readonly art: "les";
+  /** Tieferes Ende (Kote `z`); das Gegenende liegt um LES-Längsgefälle · Länge höher. */
   readonly von: Vec2;
   readonly bis: Vec2;
 }

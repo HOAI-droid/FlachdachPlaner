@@ -1,6 +1,7 @@
 /**
- * computeSlope (PLAN §5, Schritt 5): Höhenfeld aus Punktabläufen (Gully, Notablauf) je Dachfläche,
- * Facetten, Grate/Kehlen, Koten, HP/TP, Gefällepfeile und mittlere Gefälledämmdicke (A2b).
+ * computeSlope (PLAN §5, Schritte 5/6): Höhenfeld aus Abläufen je Dachfläche (Gully/Notablauf als
+ * Punkt, LES als Strecke, Dachreiter als Randquelle, siehe quellen.ts), Facetten, Grate/Kehlen,
+ * Koten, HP/TP, Gefällepfeile, LES-Keile (additiv) und mittlere Gefälledämmdicke (A2b).
  *
  * Facetten: Seite k der Pyramide i gilt dort, wo (1) sie innerhalb der Pyramide i die höchste Ebene
  * ist (Keil, konvex) und (2) keine andere Pyramide j tiefer liegt. Das Gebiet „j liegt tiefer“ ist
@@ -9,25 +10,26 @@
  * mit kleinerem Index. Grate/Kehlen werden exakt (ohne Clipper-Raster) auf den Schnittgeraden der
  * Ebenen bestimmt. Rein und deterministisch.
  */
-import { CLIPPER_SCALE, difference, intersection } from "../geometry/clipper";
+import { difference, intersection } from "../geometry/clipper";
 import { EPS } from "../geometry/eps";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geometry/polygon";
 import type { Polygon, Ring, Vec2 } from "../geometry/types";
 import { dachPolygon } from "../model/model";
-import type { Dachflaeche, Entwaesserung, Gully, Notablauf, ProjectModel } from "../model/types";
+import type { Dachflaeche, ProjectModel } from "../model/types";
 import {
-  SEITEN, auswerten, dachachse, differenz, ebeneVon, hoeheAm, seitenRichtung,
+  SEITEN, auswerten, dachachse, differenz, ebeneVon, hoeheAm, quellLaenge, seitenRichtung,
 } from "./hoehenfeld";
+import { istSplitter, quellenAus } from "./quellen";
 import type {
   DachGefaelle, Ebene, Extrempunkt, Facette, Faltlinie, Gefaelledaemmung, Gefaellepfeil,
-  Hoehenfeld, Kote, KotenArt, SlopeHinweis, SlopeOptionen, SlopeResult,
+  Hoehenfeld, Kote, KotenArt, LesKeil, SlopeHinweis, SlopeOptionen, SlopeResult,
 } from "./types";
 
 /** Umrechnung m → mm (Einheit, kein Grenzwert). */
 const MM_JE_M = 1000;
 
-type Punktablauf = Gully | Notablauf;
-const istPunktablauf = (e: Entwaesserung): e is Punktablauf => e.art === "gully" || e.art === "notablauf";
+/** Gradient einer Ebenendifferenz ≈ 0: parallele Ebenen. */
+const parallel = (e: Ebene) => Math.hypot(e.a, e.b) <= EPS;
 
 export function computeSlope(m: ProjectModel, opt: SlopeOptionen = {}): SlopeResult {
   const hinweise: SlopeHinweis[] = [];
@@ -37,30 +39,15 @@ export function computeSlope(m: ProjectModel, opt: SlopeOptionen = {}): SlopeRes
 
 function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: SlopeHinweis[]): DachGefaelle {
   const dach = dachPolygon(d);
-  for (const e of d.entwaesserung) {
-    if (!istPunktablauf(e)) {
-      hinweise.push({
-        code: "ablauf-nicht-beruecksichtigt", dachflaecheId: d.id, objektId: e.id,
-        meldung: `${e.name || e.id}: Linienentwässerung/Dachreiter geht noch nicht ins Höhenfeld ein.`,
-      });
-    } else if (pointInPolygon(e.position, dach) === "outside") {
-      hinweise.push({
-        code: "ablauf-ausserhalb", dachflaecheId: d.id, objektId: e.id,
-        meldung: `${e.name || e.id} liegt außerhalb der Dachfläche.`,
-      });
-    }
-  }
-  const punkte = d.entwaesserung.filter(istPunktablauf);
-  const feld: Hoehenfeld = {
-    gefaelle: s,
-    achse: dachachse(d.kontur),
-    quellen: punkte.map((e) => ({ ablaufId: e.id, position: { x: e.position.x, y: e.position.y }, z: e.z })),
-  };
+  const achse = dachachse(d.kontur);
+  const q = quellenAus(d, dach, achse, opt.packs ?? [], (h) => hinweise.push({ ...h, dachflaecheId: d.id }));
+  const feld: Hoehenfeld = { gefaelle: s, achse, quellen: q.quellen };
   const leer: DachGefaelle = {
     dachflaecheId: d.id, feld, facetten: [], linien: [], koten: [], hochpunkt: null, tiefpunkt: null, pfeile: [], daemmung: null,
+    les: q.les, dachreiter: q.dachreiter,
   };
-  if (punkte.length === 0) {
-    hinweise.push({ code: "keine-punktablaeufe", dachflaecheId: d.id, meldung: "Dachfläche hat keinen Gully/Notablauf; kein Gefälle berechnet." });
+  if (q.quellen.length === 0) {
+    hinweise.push({ code: "keine-ablaeufe", dachflaecheId: d.id, meldung: "Dachfläche hat keinen Ablauf; kein Gefälle berechnet." });
     return leer;
   }
   if (!(s > 0)) {
@@ -78,7 +65,7 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
     facetteId: f.id, start: innenpunkt(f.polygon), richtung: f.fallrichtung, gefaelle: f.gefaelle,
   }));
   const daemmung = tiefpunkt && hochpunkt
-    ? mittlereDaemmung(facetten, tiefpunkt.kote, hochpunkt.kote, d.daemmdickeTiefpunkt, opt.daemmdickeTiefpunktStandard)
+    ? mittlereDaemmung(facetten, q.les, tiefpunkt.kote, hochpunkt.kote, d.daemmdickeTiefpunkt, opt.daemmdickeTiefpunktStandard)
     : null;
   return { ...leer, facetten, linien, koten, hochpunkt, tiefpunkt, pfeile, daemmung };
 }
@@ -108,12 +95,6 @@ function halbebene(poly: readonly Vec2[], e: Ebene): Vec2[] {
   return out;
 }
 
-const umfang = (p: Polygon) => [p.outer, ...p.holes].reduce((s, r) =>
-  s + r.reduce((u, a, i) => { const b = r[(i + 1) % r.length]!; return u + Math.hypot(b.x - a.x, b.y - a.y); }, 0), 0);
-
-/** Rundungssplitter der Clipper-Operationen: mittlere Breite (Fläche/Umfang) unter einem Rasterschritt. */
-const istSplitter = (p: Polygon) => polygonArea(p) <= umfang(p) / CLIPPER_SCALE;
-
 function berechneFacetten(dach: Polygon, box: Vec2[], f: Hoehenfeld): Facette[] {
   const out: Facette[] = [];
   f.quellen.forEach((quelle, i) => {
@@ -129,7 +110,7 @@ function berechneFacetten(dach: Polygon, box: Vec2[], f: Hoehenfeld): Facette[] 
         let c: Vec2[] = box;
         for (const k2 of SEITEN) {
           const dlt = differenz(L, ebeneVon(f, j, k2));
-          if (k2 === k) {
+          if (parallel(dlt)) {
             // Parallele Ebenen: konstanter Abstand dlt.c. Koplanar → Gleichstand an den kleineren Index.
             const verliert = dlt.c > EPS || (Math.abs(dlt.c) <= EPS && j < i);
             if (!verliert) { c = []; break; }
@@ -139,7 +120,7 @@ function berechneFacetten(dach: Polygon, box: Vec2[], f: Hoehenfeld): Facette[] 
         if (c.length >= 3) tiefer.push({ outer: c, holes: [] });
       });
       if (tiefer.length > 0 && teile.length > 0) teile = difference(teile, tiefer);
-      const g = seitenRichtung(f.achse, k);
+      const g = seitenRichtung(quelle.achse, k);
       teile.filter((p) => !istSplitter(p)).forEach((polygon, n) => {
         out.push({
           id: `${quelle.ablaufId}/${k}/${n}`, ablaufId: quelle.ablaufId, seite: k, polygon,
@@ -241,16 +222,18 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
   for (let x = 0; x < ebenen.length; x++) {
     for (let y = x + 1; y < ebenen.length; y++) {
       const A = ebenen[x]!, B = ebenen[y]!;
-      // Gleiche Seite = parallele Ebenen; gegenüberliegende Seiten derselben Pyramide treffen sich nur im Ablauf.
-      if (A.k === B.k || (A.i === B.i && (A.k - B.k) % 2 === 0)) continue;
+      // Parallele Ebenen schneiden sich nicht; gegenüberliegende Seiten einer Punktpyramide nur im Ablauf
+      // (bei einer Strecke treffen sich die Seiten 1/3 in der Kehle entlang der Strecke).
       const dlt = differenz(A.L, B.L);
+      if (parallel(dlt)) continue;
+      if (A.i === B.i && (A.k - B.k) % 2 === 0 && quellLaenge(f.quellen[A.i]!) <= EPS) continue;
       const norm = Math.hypot(dlt.a, dlt.b);
       const dir = { x: -dlt.b / norm, y: dlt.a / norm };
       const w = auswerten(dlt, mitte) / (norm * norm);
       const p0 = { x: mitte.x - w * dlt.a, y: mitte.y - w * dlt.b };
       const entlang = (e: Ebene): Lin1 | number => {
         const n = Math.hypot(e.a, e.b);
-        return n === 0 ? e.c : [auswerten(e, p0) / n, (e.a * dir.x + e.b * dir.y) / n];
+        return n <= EPS ? auswerten(e, p0) : [auswerten(e, p0) / n, (e.a * dir.x + e.b * dir.y) / n];
       };
 
       let iv = imDach(dach, p0, dir);
@@ -261,6 +244,7 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
           if (k2 === P.k || (P.i === Q.i && k2 === Q.k)) continue;
           const g = entlang(differenz(P.L, ebeneVon(f, P.i, k2)));
           if (typeof g !== "number") iv = mindestens(iv, g);
+          else if (g < -EPS) iv = [];
         }
       }
       // … und keine dritte Pyramide darf tiefer liegen.
@@ -296,7 +280,7 @@ function berechneKoten(dach: Polygon, f: Hoehenfeld, linien: readonly Faltlinie[
     }
     out.push({ position: { x: p.x, y: p.y }, kote: hoeheAm(f, p), art });
   };
-  for (const q of f.quellen) if (pointInPolygon(q.position, dach) !== "outside") add(q.position, "ablauf");
+  for (const q of f.quellen) for (const p of [q.position, q.bis]) if (pointInPolygon(p, dach) !== "outside") add(p, "ablauf");
   for (const r of [dach.outer, ...dach.holes]) for (const p of r) add(p, "ecke");
   for (const l of linien) { add(l.von, l.art); add(l.bis, l.art); }
   return out;
@@ -314,20 +298,40 @@ function extrem(koten: readonly Kote[], vz: 1 | -1): Extrempunkt | null {
 
 // ---------- Mittlere Gefälledämmdicke (A2b) ----------
 
+/**
+ * d_m = d_TP + (1/A)·∫(h − h_min + Keil) dA. Höhenfeld und Keildicke sind je Facette bzw. Keilseite
+ * linear, also auf jedem Schnittstück Facette ∩ Keilseite: Integral = Fläche · Wert im Schwerpunkt,
+ * Maximum an einer Ecke.
+ */
 function mittlereDaemmung(
-  facetten: readonly Facette[], hMin: number, hMax: number, vorgabe: number | undefined, standard: number | undefined,
+  facetten: readonly Facette[], keile: readonly LesKeil[], hMin: number, hMax: number,
+  vorgabe: number | undefined, standard: number | undefined,
 ): Gefaelledaemmung | null {
-  let flaeche = 0, integral = 0;
+  let flaeche = 0, integral = 0, groesste = hMax - hMin;
   for (const f of facetten) {
     flaeche += f.flaeche;
     integral += f.flaeche * (auswerten(f.ebene, polygonCentroid(f.polygon)) - hMin);
   }
   if (!(flaeche > 0)) return null;
+  for (const k of keile) {
+    for (const s of k.seiten) {
+      if (s.flaechen.length === 0) continue;
+      for (const f of facetten) {
+        for (const p of intersection([f.polygon], s.flaechen)) {
+          if (istSplitter(p)) continue;
+          integral += polygonArea(p) * auswerten(s.dicke, polygonCentroid(p));
+          for (const r of [p.outer, ...p.holes]) {
+            for (const v of r) groesste = Math.max(groesste, auswerten(f.ebene, v) - hMin + auswerten(s.dicke, v));
+          }
+        }
+      }
+    }
+  }
   const dtp = vorgabe ?? standard ?? 0;
   return {
     mittel: dtp + (MM_JE_M * integral) / flaeche,
     min: dtp,
-    max: dtp + MM_JE_M * (hMax - hMin),
+    max: dtp + MM_JE_M * groesste,
     tiefpunktDicke: dtp,
     tiefpunktVorgegeben: vorgabe !== undefined,
     flaeche,
