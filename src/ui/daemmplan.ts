@@ -4,7 +4,7 @@ import {
   type ProjectModel, type SlopeResult, type Vec2, type VerlegtePlatte,
 } from "../core/index";
 import type { Viewport } from "./canvas/viewport";
-import { meter, millimeter } from "./format";
+import { meter, millimeter, zahl } from "./format";
 import { daemmStandard, packs } from "./packs";
 import { Belegung, css, dunkel, text, textBreite } from "./zeichnen";
 
@@ -91,6 +91,30 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       ctx.lineWidth = px; ctx.strokeStyle = linie; ctx.strokeRect(x, y - 22 * px, 18 * px, 22 * px);
       text(ctx, vp, "N0", x + 2 * px, y - 15 * px, { px: 11, farbe: linie, mono: true, halo: false });
     }
+    // 5b) Dämmdicke an Ecken, Hoch-/Tiefpunkten und Knickpunkten der Kehlen/Grate (vor den Plattenlabels, damit sie Vorrang haben)
+    const dachM = m.dachflaechen.find((x) => x.id === d.dachflaecheId);
+    const punkte: Vec2[] = [];
+    const merke = (q: Vec2) => { if (!punkte.some((r) => Math.hypot(r.x - q.x, r.y - q.y) < 0.05)) punkte.push(q); };
+    if (dachM) dachM.kontur.forEach(merke);
+    if (g) {
+      for (const k of g.koten) merke(k.position);
+      for (const l of [...g.linien, ...g.zonen.flatMap((z) => z.linien)]) { merke(l.von); merke(l.bis); }
+      for (const e of [g.hochpunkt, g.tiefpunkt]) for (const o of e?.orte ?? []) merke(o);
+    }
+    const mx = (bx0 + bx1) / 2, my = (by0 + by1) / 2;
+    for (const q of punkte) {
+      const mm = dickeAn(d.platten, q);
+      if (mm === null) continue;
+      const t = zahl(mm, 0), w = textBreite(ctx, t, 12, true) + 4;
+      const ox = q.x <= mx ? 1 : -1, oy = q.y <= my ? 1 : -1; // nach innen (außen liegen Maße und Verlegestart)
+      const kand: [number, number][] = [];
+      for (const [fx, fy] of [[ox, oy], [ox, -oy], [-ox, oy], [-ox, -oy]] as const) {
+        kand.push([fx < 0 ? -(w + 5) : 5, fy < 0 ? -19 : 5]);
+      }
+      const z = kand.find(([dx, dy]) => belegung.belege(q, dx, dy, w, 14));
+      ctx.fillStyle = linie; ctx.beginPath(); ctx.arc(q.x, q.y, 2.2 * px, 0, Math.PI * 2); ctx.fill();
+      if (z) text(ctx, vp, t, q.x + z[0] * px, q.y + z[1] * px, { px: 12, mono: true, farbe: css("--accent", "#1F4FA3") });
+    }
     // 3) Labels: große Stücke zuerst, keine Überlappung (DESIGN §6)
     const nachGroesse = [...d.platten].sort((a, b) => b.flaeche - a.flaeche || (a.id < b.id ? -1 : 1));
     const platz = new Map<string, boolean>();
@@ -115,7 +139,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     const k = plattenDaemmdicke(d);
     const dach = m.dachflaechen.find((x) => x.id === d.dachflaecheId);
     if (k && dach) {
-      const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)})`;
+      const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)}) · blau: Dämmdicke in mm`;
       const ys = dach.kontur.map((q) => q.y), xs = dach.kontur.map((q) => q.x);
       text(ctx, vp, `${dach.name || dach.id}: ${zeilen}`, Math.min(...xs), Math.max(...ys) + 52 * px, { px: 12, mono: true, farbe: linie, halo: false });
     }
@@ -128,4 +152,21 @@ function schwerpunkt(p: VerlegtePlatte): Vec2 {
   const r = p.polygon.outer; let x = 0, y = 0;
   for (const v of r) { x += v.x; y += v.y; }
   return { x: x / r.length, y: y / r.length };
+}
+
+/** Dämmdicke in mm am Punkt: Ebene der nächstgelegenen Platte (Ecken/Kanten, daher Abstand zum Rand). */
+function dickeAn(platten: readonly VerlegtePlatte[], p: Vec2): number | null {
+  let best: VerlegtePlatte | null = null, bd = Infinity;
+  for (const pl of platten) {
+    const o = pl.polygon.outer;
+    for (let i = 0; i < o.length; i++) {
+      const a = o[i]!, b = o[(i + 1) % o.length]!;
+      const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+      const d = Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+      if (d < bd) { bd = d; best = pl; }
+    }
+  }
+  if (!best || bd > 0.02) return null;
+  return (best.dicke.a * p.x + best.dicke.b * p.y + best.dicke.c) * 1000;
 }
