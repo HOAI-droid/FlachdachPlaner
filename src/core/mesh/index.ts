@@ -4,7 +4,7 @@
  */
 import type { Polygon, Vec2 } from "../geometry/index";
 import type { InsulationLayout } from "../layout/index";
-import { hoeheDachflaeche, type DachGefaelle, type SlopeResult } from "../slope/index";
+import { ebeneFacetten, hoeheDachflaeche, type DachGefaelle, type SlopeResult } from "../slope/index";
 
 export interface Vec3 { readonly x: number; readonly y: number; readonly z: number }
 export type FlaechenArt = "dach" | "platte" | "seite";
@@ -32,7 +32,7 @@ export function meshDach(slope: SlopeResult, ueberhoehung = 1): Flaeche3[] {
   for (const g of slope.dachflaechen) {
     const z0 = g.tiefpunkt?.kote ?? 0;
     const ids = [...new Set(g.facetten.map((f) => f.ablaufId))];
-    for (const f of g.facetten) {
+    for (const f of ebeneFacetten(g.facetten)) {
       const e = f.ebene;
       out.push({ art: "dach", ...ringe(f.polygon, (v) => e.a * v.x + e.b * v.y + e.c, ueberhoehung, z0), gruppe: ids.indexOf(f.ablaufId), dachflaecheId: g.dachflaecheId });
     }

@@ -22,6 +22,7 @@ import type { Dachflaeche, ProjectModel } from "../model/types";
 import { standardDaemmdickeTiefpunkt } from "../rules/regeln";
 import type { Kehlkeil } from "../rules/types";
 import { auswerten } from "../slope/hoehenfeld";
+import { ebeneFacetten } from "../slope/slope";
 import type { DachGefaelle, Ebene, Facette, Faltlinie, Hoehenfeld, SlopeResult } from "../slope/types";
 import type {
   DaemmplanDach, InsulationLayout, LayoutOptionen, PlateCatalog, Verlegepfeil, Verlegestart, VerlegtePlatte,
@@ -127,7 +128,7 @@ function dachPlan(d: Dachflaeche, g: DachGefaelle, kat: Kat, cat: PlateCatalog, 
   const verlegestarts: Verlegestart[] = [];
   const gemeldet = new Set<string>();
   let gefaelleAbweichend = false;
-  for (const f of g.facetten) {
+  for (const f of ebeneFacetten(g.facetten)) {
     const grp = gr.get(f.zoneId ?? "");
     if (!grp) continue;
     if (f.gefaelle > EPS && Math.abs(f.gefaelle - kat.gefaelle) > EPS) gefaelleAbweichend = true;

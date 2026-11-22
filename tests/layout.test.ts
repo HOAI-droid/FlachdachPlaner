@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
+import { ebeneFacetten } from "../src/core/slope/index";
 import {
   computeSlope, createProject, daemmBasis, meshDach, meshDaemmung, hoeheDachflaeche, layoutInsulation, plattenDaemmdicke, loadRulePack, polygonArea, pruefeVerlegeplan,
   validateRulePack,
@@ -145,7 +146,24 @@ describe("Schritt 24: layoutInsulation", () => {
     // Gratstücke vorhanden (drei Abläufe), N0 am Tiefpunkt, Verlegestart je Facette am Ablauf
     expect(l.dachflaechen[0]!.platten.some((p) => p.gratschnitt)).toBe(true);
     expect(l.dachflaechen[0]!.n0!.kote).toBe(0);
-    expect(l.dachflaechen[0]!.verlegestarts).toHaveLength(s.dachflaechen[0]!.facetten.length);
+    expect(l.dachflaechen[0]!.verlegestarts).toHaveLength(ebeneFacetten(s.dachflaechen[0]!.facetten).length);
+  });
+
+  it("Referenz-L-Dach: keine Naht und kein Kehlkeil im Gleichstandsbereich (5,3|5,3)–(7,65|7,65)", () => {
+    const { s, l } = plan(L_DACH);
+    const g = s.dachflaechen[0]!;
+    // gleiche Ebene → eine Facette, Plattenkanten laufen nicht entlang der Diagonale
+    const f = ebeneFacetten(g.facetten);
+    expect(f.length).toBeLessThan(g.facetten.length);
+    const naht = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      [a, b].every((v) => Math.abs(v.x - v.y) < 1e-6 && v.x > 5.3 - 1e-6 && v.x < 7.65 + 1e-6);
+    for (const p of l.dachflaechen[0]!.platten) {
+      const r = p.polygon.outer;
+      for (let i = 0; i < r.length; i++) {
+        const a = r[i]!, b = r[(i + 1) % r.length]!;
+        if (Math.hypot(b.x - a.x, b.y - a.y) > 0.05 && naht(a, b)) throw new Error(`Naht in ${p.id}`);
+      }
+    }
   });
 
   it("Kehle ≠ 45° (ungleiche Gefälle) → Befund 'Kehlkeil nicht im Katalog'", () => {

@@ -10,7 +10,7 @@
  * mit kleinerem Index. Grate/Kehlen werden exakt (ohne Clipper-Raster) auf den Schnittgeraden der
  * Ebenen bestimmt. Rein und deterministisch.
  */
-import { difference, intersection } from "../geometry/clipper";
+import { difference, intersection, union } from "../geometry/clipper";
 import { EPS } from "../geometry/eps";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geometry/polygon";
 import type { Polygon, Ring, Vec2 } from "../geometry/types";
@@ -480,4 +480,30 @@ function innenpunkt(p: Polygon): Vec2 {
     if (w > breite) { breite = w; best = { x: (xs[i]! + xs[i + 1]!) / 2, y: c.y }; }
   }
   return best;
+}
+
+/**
+ * Fasst benachbarte Facetten mit identischer Ebene (gleiche Zone) zu einer zusammen: zwischen ihnen liegt
+ * kein Knick, die Grenze ist nur Folge der Ablaufzuordnung (Gleichstandsbereich). Für Darstellung (2D/3D)
+ * und Plattenraster; Einzugsflächen bleiben an den Original-Facetten. Metadaten (Id, Ablauf, Seite) vom
+ * Teil mit der größten Fläche im Ergebnisstück.
+ */
+export function ebeneFacetten(facetten: readonly Facette[]): Facette[] {
+  const gleich = (a: Ebene, b: Ebene) => Math.abs(a.a - b.a) <= 1e-9 && Math.abs(a.b - b.b) <= 1e-9 && Math.abs(a.c - b.c) <= 1e-9;
+  const out: Facette[] = [];
+  const rest = [...facetten];
+  while (rest.length > 0) {
+    const f0 = rest.shift()!;
+    const gruppe = [f0];
+    for (let i = rest.length - 1; i >= 0; i--) {
+      if (rest[i]!.zoneId === f0.zoneId && gleich(rest[i]!.ebene, f0.ebene)) gruppe.unshift(...rest.splice(i, 1));
+    }
+    if (gruppe.length === 1) { out.push(f0); continue; }
+    for (const polygon of union(gruppe.map((f) => f.polygon))) {
+      const c = innenpunkt(polygon);
+      const traeger = gruppe.find((f) => pointInPolygon(c, f.polygon) !== "outside") ?? gruppe[0]!;
+      out.push({ ...traeger, polygon, flaeche: polygonArea(polygon) });
+    }
+  }
+  return out;
 }
