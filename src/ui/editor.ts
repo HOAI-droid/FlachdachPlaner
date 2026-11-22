@@ -1,6 +1,6 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
-  abbrechen, abschliessen, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaUmlaufend,
+  abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaUmlaufend,
   aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
@@ -451,6 +451,13 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (z.hinweis) { const h = el("div", "note warn", z.hinweis); h.setAttribute("role", "status"); p.append(h); }
   }
 
+  /** Schritt 31: Vorschlag als Gullys übernehmen (ein Undo-Schritt), Ergebnis als Hinweis im Werkzeug-Panel. */
+  function schlageVor(dachId: string) {
+    const r = schlageAblaeufeVor(modell(), packs, { dachflaecheId: dachId });
+    z = { ...z, hinweis: r.befunde.map((b) => b.meldung).join(" ") || null };
+    ausfuehreBefehl(ablaeufeHinzufuegen(r.ablaeufe, standardTyp("gully")));
+  }
+
   function panelAuswahl() {
     const p = shell.panels.auswahl;
     p.replaceChildren();
@@ -465,6 +472,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
           row("Umfang", meter(konturUmfang(d.kontur), 2), "umfang"),
           row("Attika Länge", meter(attikaGesamtLaenge(d), 2), "attika-laenge"),
           row("Attika Fläche", quadratmeter(attikaGesamtFlaeche(d), 2), "attika-flaeche"));
+        { const b = el("div", "pad"); b.append(button("Abläufe vorschlagen", () => schlageVor(d.id))); p.append(b); }
         break;
       case "aufbau": {
         const x = d.aufbauten.find((q) => q.id === a.id)!;

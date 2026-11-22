@@ -16,3 +16,4 @@ export * from "./rebase";
 export * from "./update";
 export * from "./layout";
 export * from "./mesh";
+export * from "./proposal";
