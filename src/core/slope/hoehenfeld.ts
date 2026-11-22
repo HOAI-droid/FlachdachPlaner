@@ -29,6 +29,51 @@ export function dachachse(kontur: Ring): Vec2 {
   return w === 0 ? { x: 1, y: 0 } : { x: Math.cos(w), y: Math.sin(w) };
 }
 
+/**
+ * Lagetoleranz in m (Zeichengenauigkeit einer Planung im Maßstab 1:100: 0,5 mm auf dem Plan = 5 cm).
+ * Lagen, die sich um höchstens diesen Wert unterscheiden, gelten für die Konstruktion des Höhenfelds als
+ * gleich (Achse eingerastet, Quellkoordinaten angeglichen). Höhen (z, Dicken) bleiben exakt. Ohne diese
+ * Toleranz erzeugen fast fluchtende Abläufe (z. B. Δx = 2 cm) Scheinkehlen quer über die Fläche.
+ */
+export const LAGE_TOL = 0.05;
+
+/**
+ * Dachachse auf 0°/90° einrasten, wenn die längste Konturkante über ihre Länge um höchstens LAGE_TOL
+ * von der Waagerechten bzw. Senkrechten abweicht (L∞-Metrik: beide ergeben die Achse (1, 0)).
+ */
+export function achseEingerastet(kontur: Ring, achse: Vec2): Vec2 {
+  let laenge = 0;
+  for (let i = 0; i < kontur.length; i++) {
+    const a = kontur[i]!, b = kontur[(i + 1) % kontur.length]!;
+    laenge = Math.max(laenge, Math.hypot(b.x - a.x, b.y - a.y));
+  }
+  return laenge * Math.min(Math.abs(achse.y), Math.abs(achse.x)) <= LAGE_TOL ? { x: 1, y: 0 } : achse;
+}
+
+/**
+ * Punktquellen in Dachachse: Koordinaten (längs t, quer v), die um höchstens LAGE_TOL auseinanderliegen,
+ * auf den Wert der ersten Quelle der Gruppe (Eingabereihenfolge) angleichen. Nur intern für die
+ * Konstruktion; z bleibt unverändert (Kote am Ablauf = z). Strecken (LES, Dachreiter) bleiben wie sie sind.
+ */
+export function quellenAngeglichen(quellen: readonly Hoehenquelle[], achse: Vec2): Hoehenquelle[] {
+  const punkt = (q: Hoehenquelle) => quellLaenge(q) === 0 && q.achse.x === achse.x && q.achse.y === achse.y;
+  const tv = quellen.map((q) => [q.position.x * achse.x + q.position.y * achse.y, -q.position.x * achse.y + q.position.y * achse.x]);
+  const neu = tv.map((x) => [...x]);
+  for (const ax of [0, 1]) {
+    quellen.forEach((q, i) => {
+      if (!punkt(q)) return;
+      const j = quellen.findIndex((r, k) => k < i && punkt(r) && Math.abs(tv[k]![ax]! - tv[i]![ax]!) <= LAGE_TOL);
+      if (j >= 0) neu[i]![ax] = neu[j]![ax]!;
+    });
+  }
+  return quellen.map((q, i) => {
+    if (neu[i]![0] === tv[i]![0] && neu[i]![1] === tv[i]![1]) return q;
+    const [t, v] = neu[i]! as [number, number];
+    const p = { x: t * achse.x - v * achse.y, y: t * achse.y + v * achse.x };
+    return { ...q, position: p, bis: { ...p } };
+  });
+}
+
 /** Einheitsvektor der Pyramidenseite: 0 = +Achse, 1 = +Querachse, 2 = −Achse, 3 = −Querachse. */
 export function seitenRichtung(achse: Vec2, seite: Seite): Vec2 {
   switch (seite) {

@@ -74,10 +74,10 @@ function pruefeDach(d: Dachflaeche, g: DachGefaelle, opt: VorgabenOptionen, out:
         meldung: `${b.name}: Hochpunkt ${kote(b.hochpunkt.kote)} überschreitet max. Hochpunkt ${kote(v.maxHochpunkt)} um ${mm(diff)}.`,
       });
     }
-    // min. Tiefpunkt: Hauptfläche je Ablaufkote z, Zone über ihren Tiefpunkt (Ablaufkoten + Versatz)
+    // min. Tiefpunkt: Hauptfläche je Ablaufkote z (ohne Notabläufe: kein Tiefpunkt der Gefälleplanung), Zone über ihren Tiefpunkt (Ablaufkoten + Versatz)
     const tiefpunkte: { objektId: string; name: string; kote: number; ort?: { x: number; y: number } }[] = b.zone
       ? (b.tiefpunkt ? [{ objektId: b.objektId, name: b.name, kote: b.tiefpunkt.kote, ...(b.tiefpunkt.orte[0] ? { ort: b.tiefpunkt.orte[0] } : {}) }] : [])
-      : d.entwaesserung.map((e) => ({ objektId: e.id, name: `${dachName}, Ablauf ${e.name || e.id}`, kote: e.z,
+      : d.entwaesserung.filter((e) => e.art !== "notablauf" && g.dachreiter.find((x) => x.ablaufId === e.id)?.masse?.art !== "not").map((e) => ({ objektId: e.id, name: `${dachName}, Ablauf ${e.name || e.id}`, kote: e.z,
           ...(ablaufOrt(g, e.id) ? { ort: ablaufOrt(g, e.id)! } : {}) }));
     for (const t of tiefpunkte) {
       if (v.minTiefpunkt !== undefined && t.kote < v.minTiefpunkt - EPS) {

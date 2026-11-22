@@ -149,13 +149,14 @@ describe("Sonderfälle und Hinweise", () => {
     expect(r.dachflaechen[0]!.daemmung).toBeNull();
     expect(r.hinweise.map((h) => h.code)).toEqual(["keine-ablaeufe"]);
   });
-  it("Notablauf wirkt als Punktablauf; Ablauf außerhalb → Hinweis", () => {
+  it("Notablauf ist keine Höhenquelle; Ablauf außerhalb → Hinweis", () => {
     const m = projekt({
       kontur: rechteck("k", 10, 10),
-      entwaesserung: [{ id: "n1", art: "notablauf", name: "N", typ: null, position: { x: 5, y: 5 }, z: 0 }, gully("g9", 30, 5)],
+      entwaesserung: [{ id: "n1", art: "notablauf", name: "N", typ: null, position: { x: 5, y: 5 }, z: -1 }, gully("g9", 30, 5)],
     });
     const r = computeSlope(m);
-    expect(r.dachflaechen[0]!.facetten.every((f) => f.ablaufId === "n1")).toBe(true);
+    expect(r.dachflaechen[0]!.feld.quellen.map((q) => q.ablaufId)).toEqual(["g9"]);
+    expect(r.dachflaechen[0]!.facetten.every((f) => f.ablaufId === "g9")).toBe(true);
     expect(r.hinweise.map((h) => [h.code, h.objektId])).toEqual([["ablauf-ausserhalb", "g9"]]);
   });
   it("Gefälle 0 → Hinweis, keine Facetten", () => {
@@ -236,7 +237,10 @@ describe("Eigenschaften", () => {
   it("Drehung von Dach samt Abläufen ändert d_m und HP nicht (L∞ in Dachachsrichtung)", () => {
     fc.assert(fc.property(fall, (f) => {
       const a = erstes(ausFall(f));
-      const b = erstes(ausFall(f, 0, f.winkel));
+      const mb = ausFall(f, 0, f.winkel);
+      // Im Einrastbereich der Lagetoleranz (Kante ≤ 5 cm schief) wird die Achse bewusst auf 0° gesetzt.
+      fc.pre(dachachse(mb.dachflaechen[0]!.kontur).y === 0 || !(f.winkel > 0) || erstes(mb).feld.achse.y !== 0);
+      const b = erstes(mb);
       expect(Math.abs(a.daemmung!.mittel - b.daemmung!.mittel)).toBeLessThan(0.05);
       expect(b.hochpunkt!.kote).toBeCloseTo(a.hochpunkt!.kote, 9);
       expect(b.facetten.reduce((s, x) => s + x.flaeche, 0)).toBeCloseTo(f.w * f.h, 2);

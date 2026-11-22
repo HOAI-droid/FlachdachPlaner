@@ -17,7 +17,7 @@ import type { Polygon, Ring, Vec2 } from "../geometry/types";
 import { dachPolygon } from "../model/model";
 import type { Dachflaeche, ProjectModel, Zone } from "../model/types";
 import {
-  SEITEN, auswerten, dachachse, differenz, ebeneVon, hoeheAm, quellLaenge, seitenRichtung,
+  SEITEN, achseEingerastet, auswerten, dachachse, differenz, ebeneVon, hoeheAm, quellLaenge, quellenAngeglichen, seitenRichtung,
 } from "./hoehenfeld";
 import { istSplitter, quellenAus } from "./quellen";
 import type {
@@ -41,15 +41,19 @@ export function computeSlope(m: ProjectModel, opt: SlopeOptionen = {}): SlopeRes
 
 function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: SlopeHinweis[]): DachGefaelle {
   const dach = dachPolygon(d);
-  const achse = dachachse(d.kontur);
+  // Lagetoleranz (LAGE_TOL): Achse einrasten, fast fluchtende Punktabläufe angleichen (gegen Scheinkehlen).
+  const achse = achseEingerastet(d.kontur, dachachse(d.kontur));
   const q = quellenAus(d, dach, achse, opt.packs ?? [], (h) => hinweise.push({ ...h, dachflaecheId: d.id }));
-  const feld: Hoehenfeld = { gefaelle: s, achse, quellen: q.quellen };
+  const feld: Hoehenfeld = { gefaelle: s, achse, quellen: quellenAngeglichen(q.quellen, achse) };
   const leer: DachGefaelle = {
     dachflaecheId: d.id, feld, facetten: [], linien: [], koten: [], hochpunkt: null, tiefpunkt: null, pfeile: [], daemmung: null,
     daemmungHaupt: null, zonen: [], les: q.les, dachreiter: q.dachreiter,
   };
   if (q.quellen.length === 0) {
-    hinweise.push({ code: "keine-ablaeufe", dachflaecheId: d.id, meldung: "Dachfläche hat keinen Ablauf; kein Gefälle berechnet." });
+    const nurNot = d.entwaesserung.length > 0 && d.entwaesserung.every((e) => e.art === "notablauf");
+    hinweise.push({ code: "keine-ablaeufe", dachflaecheId: d.id, meldung: nurNot
+      ? "Dachfläche hat nur Notabläufe (zählen nicht für das Gefälle); kein Gefälle berechnet."
+      : "Dachfläche hat keinen Ablauf; kein Gefälle berechnet." });
     return leer;
   }
   if (!(s > 0)) {

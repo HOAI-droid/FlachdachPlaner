@@ -1,6 +1,8 @@
 /**
  * Entwässerungselemente → Quellen des Höhenfelds (PLAN A2/A2a, Schritt 6).
- * - Gully/Notablauf: Punktquelle, Abstandsmaß in Dachachse.
+ * - Gully: Punktquelle, Abstandsmaß in Dachachse. Verbundene Gullys (`verbundenMit`, gleiche Kote):
+ *   eine Strecke A–B wie die LES (waagerechte Kehle), die Punktquellen entfallen. Sonst Hinweis, einzeln.
+ * - Notablauf und Not-Dachreiter: keine Quelle (nur Nachweis Jahrhundertregen, Anzeige/Export); nur Lageprüfung.
  * - LES: Strecke von (tieferes Ende, Kote z) → bis; die Gefälledämmung bildet eine waagerechte
  *   Kehle entlang der LES, Seitenflächen fallen senkrecht zu ihr. Der LES-Keil liegt AUF der
  *   Gefälledämmung (additiv) und liefert das Längsgefälle; Maße/Gefälle nur aus dem Pack.
@@ -13,7 +15,7 @@ import { EPS } from "../geometry/eps";
 import { pointInPolygon, polygonArea } from "../geometry/polygon";
 import type { Polygon, Vec2 } from "../geometry/types";
 import { konturKante } from "../model/model";
-import type { Dachflaeche, Dachreiter, Linienentwaesserung, PackRef } from "../model/types";
+import type { Dachflaeche, Dachreiter, Gully, Id, Linienentwaesserung, PackRef } from "../model/types";
 import type { DachreiterEintrag, LesEintrag, PackKopf, RulePack } from "../rules/types";
 import type { DachreiterLage, Ebene, Hoehenquelle, LesKeil, LesKeilSeite, SlopeHinweis } from "./types";
 
@@ -33,6 +35,43 @@ export interface Quellen {
 }
 
 type Hinweis = (h: Omit<SlopeHinweis, "dachflaecheId">) => void;
+
+/**
+ * Höhengleichheit verbundener Gullys in m: nur Rechenrauschen, keine fachliche Toleranz. Die Kehle
+ * zwischen den Gullys ist waagerecht; unterschiedliche Koten würden verfälscht, daher Hinweis und einzeln.
+ */
+export const VERBINDUNG_Z_TOL = 1e-6;
+
+/**
+ * Paare verbundener Gullys (Schlüssel: erster Gully in Modellreihenfolge → zweiter). Ein Gully gehört
+ * höchstens zu einem Paar; einseitige Verweise genügen, ein Partner mit anderem Verweis ist ungültig.
+ */
+function gullyPaare(d: Dachflaeche, hinweis: Hinweis): Map<Id, Gully> {
+  const gullys = d.entwaesserung.filter((e): e is Gully => e.art === "gully");
+  const paare = new Map<Id, Gully>(), belegt = new Set<Id>();
+  for (const a of gullys) {
+    if (a.verbundenMit === undefined || belegt.has(a.id)) continue;
+    const name = a.name || a.id;
+    const b = gullys.find((x) => x.id === a.verbundenMit);
+    const ungueltig = (grund: string) => hinweis({ code: "gully-verbindung-ungueltig", objektId: a.id,
+      meldung: `${name}: Verbindung ${grund}; Gully wirkt einzeln.` });
+    if (!b || b.id === a.id) { ungueltig(`zu „${a.verbundenMit}“ nicht möglich (kein Gully dieser Dachfläche)`); continue; }
+    if (belegt.has(b.id) || (b.verbundenMit !== undefined && b.verbundenMit !== a.id)) {
+      ungueltig(`zu ${b.name || b.id} nicht eindeutig (Partner ist anders verbunden)`); continue;
+    }
+    if (Math.hypot(b.position.x - a.position.x, b.position.y - a.position.y) <= EPS) {
+      ungueltig(`zu ${b.name || b.id} ohne Abstand`); continue;
+    }
+    belegt.add(a.id).add(b.id);
+    if (Math.abs(a.z - b.z) > VERBINDUNG_Z_TOL) {
+      hinweis({ code: "gully-verbindung-hoehe", objektId: a.id,
+        meldung: `${name} und ${b.name || b.id}: unterschiedliche Koten, keine waagerechte Kehle; Gullys wirken einzeln.` });
+      continue;
+    }
+    paare.set(a.id, b);
+  }
+  return paare;
+}
 
 /** Eintrag `ref` im Pack vom Typ `typ`; null, wenn Pack oder Eintrag fehlt. */
 function finde<E extends { readonly id: string }>(
@@ -59,13 +98,25 @@ export function quellenAus(
       hinweis({ code: "ablauf-ausserhalb", objektId: id, meldung: `${name || id} liegt außerhalb der Dachfläche.` });
     }
   };
+  const paare = gullyPaare(d, hinweis);
+  const partner = new Set([...paare.values()].map((b) => b.id));
   for (const e of d.entwaesserung) {
     switch (e.art) {
-      case "gully":
       case "notablauf":
+        // Notabläufe liegen über der Abdichtung und entwässern erst bei Anstau: kein Einfluss auf das Gefälle.
         ausserhalb(e.id, e.name, e.position);
-        out.quellen.push({ ablaufId: e.id, position: { ...e.position }, bis: { ...e.position }, achse: dachAchse, z: e.z });
         break;
+      case "gully": {
+        ausserhalb(e.id, e.name, e.position);
+        if (partner.has(e.id)) break; // Teil einer Paar-Strecke (beim ersten Gully angelegt)
+        const b = paare.get(e.id);
+        if (b) {
+          const l = Math.hypot(b.position.x - e.position.x, b.position.y - e.position.y);
+          const achse = { x: (b.position.x - e.position.x) / l, y: (b.position.y - e.position.y) / l };
+          out.quellen.push({ ablaufId: e.id, partnerId: b.id, position: { ...e.position }, bis: { ...b.position }, achse, z: e.z });
+        } else out.quellen.push({ ablaufId: e.id, position: { ...e.position }, bis: { ...e.position }, achse: dachAchse, z: e.z });
+        break;
+      }
       case "les":
         lesQuelle(e, dach, dachAchse, packs, hinweis, out, ausserhalb);
         break;
@@ -176,6 +227,7 @@ function dachreiterQuelle(e: Dachreiter, d: Dachflaeche, packs: readonly RulePac
     hinweis({ code: "dachreiter-lage-ungueltig", objektId: e.id, meldung: `${e.name || e.id}: Einlauföffnung ragt über die Kante; auf die Kante begrenzt.` });
   }
   const von = plus(p, achse, a), bis = plus(p, achse, b);
-  out.quellen.push({ ablaufId: e.id, position: von, bis, achse, z: e.z });
+  // Not-Dachreiter (Pack-Art "not") entwässern erst bei Anstau: wie Notabläufe keine Höhenquelle.
+  if (t?.eintrag.art !== "not") out.quellen.push({ ablaufId: e.id, position: von, bis, achse, z: e.z });
   out.dachreiter.push({ ablaufId: e.id, eintrag: e.typ ? { ...e.typ } : null, mitte, von, bis, breite: b - a, masse: t?.eintrag ?? null });
 }

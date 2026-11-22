@@ -124,6 +124,11 @@ interface EntwaesserungBasis {
 export interface Gully extends EntwaesserungBasis {
   readonly art: "gully";
   readonly position: Vec2;
+  /**
+   * Verbundener Gully derselben Dachfläche (optional): beide wirken als eine waagerechte Kehle
+   * zwischen den Gullys statt als zwei Punkte (Voraussetzung: gleiche Kote z). Fehlt = einzeln.
+   */
+  readonly verbundenMit?: Id;
 }
 export interface Notablauf extends EntwaesserungBasis {
   readonly art: "notablauf";

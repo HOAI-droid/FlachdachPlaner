@@ -5,10 +5,13 @@ import type { DachreiterEintrag, RulePack } from "../rules/types";
 
 /**
  * Ablauf als Quelle des Höhenfelds: Punkt (`bis` = `position`) oder Strecke `position`–`bis`
- * (LES: `position` = tieferes Ende; Dachreiter: Einlauföffnung auf der Konturkante), Kote z.
+ * (LES: `position` = tieferes Ende; Dachreiter: Einlauföffnung auf der Konturkante; verbundene
+ * Gullys: `position` = Gully `ablaufId`, `bis` = Gully `partnerId`, waagerechte Kehle), Kote z.
  */
 export interface Hoehenquelle {
   readonly ablaufId: Id;
+  /** Nur bei verbundenen Gullys: zweiter Gully am Ende `bis`. */
+  readonly partnerId?: Id;
   readonly position: Vec2;
   readonly bis: Vec2;
   /** Einheitsvektor der 1. Achse des Abstandsmaßes: Streckenrichtung bzw. Dach-/Kantenachse bei Punkten. */
@@ -195,7 +198,8 @@ export interface DachGefaelle {
 export type SlopeHinweisCode =
   | "keine-ablaeufe" | "ablauf-ausserhalb" | "gefaelle-null" | "pack-ungeprueft"
   | "les-typ-fehlt" | "les-laenge-null" | "les-laenge-abweichend" | "les-zu-lang" | "les-pack-inkonsistent" | "les-gefaelle-ungueltig"
-  | "dachreiter-masse-fehlen" | "dachreiter-lage-ungueltig" | "zone-ausserhalb" | "zonen-ueberlappen";
+  | "dachreiter-masse-fehlen" | "dachreiter-lage-ungueltig" | "zone-ausserhalb" | "zonen-ueberlappen"
+  | "gully-verbindung-hoehe" | "gully-verbindung-ungueltig";
 
 export interface SlopeHinweis {
   readonly code: SlopeHinweisCode;

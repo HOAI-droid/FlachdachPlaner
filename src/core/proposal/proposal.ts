@@ -95,7 +95,9 @@ function schlageVorFuerDach(
       quelle: regeln?.quelle ?? QUELLE_PROGRAMM,
       meldung: `${name}: Regel „${REGEL_FLAECHE_JE_ABLAUF}“ fehlt und kein max. Hochpunkt vorgegeben; kein Ablaufvorschlag möglich.` }] };
   }
-  const z = opt.z ?? (d.entwaesserung.length > 0 ? Math.min(...d.entwaesserung.map((e) => e.z)) : d.vorgaben.minTiefpunkt ?? 0);
+  // Notabläufe zählen nicht als Hauptabläufe (kein Einfluss auf Gefälle und Einzugsflächen).
+  const haupt = d.entwaesserung.filter((e) => e.art !== "notablauf");
+  const z = opt.z ?? (haupt.length > 0 ? Math.min(...haupt.map((e) => e.z)) : d.vorgaben.minTiefpunkt ?? 0);
   const poly = dachPolygon(d);
   const raster = rasterPunkte(poly, opt.rasterPunkte ?? STANDARD_RASTER);
   if (raster.length === 0) return { ablaeufe: [], befunde: [] };
@@ -116,7 +118,7 @@ function schlageVorFuerDach(
     return { ok: flaecheOk && hpOk, flaecheOk, hpOk, maxFlaeche };
   };
 
-  const vorhanden = d.entwaesserung.length;
+  const vorhanden = haupt.length;
   if (vorhanden > 0 && bewerte(m).ok) {
     return { ablaeufe: [], befunde: [{ ...basis, stufe: "hinweis", code: "vorschlag-nicht-noetig", regelId: REGEL_VORSCHLAG_ABLAEUFE,
       quelle: QUELLE_PROGRAMM, meldung: `${name}: vorhandene Abläufe genügen; kein weiterer Ablauf nötig.` }] };
@@ -166,7 +168,8 @@ interface FesterPunkt { readonly p: Vec2; readonly z: number }
 function festePunkte(d: Dachflaeche): FesterPunkt[] {
   return d.entwaesserung.flatMap((e: Entwaesserung): FesterPunkt[] => {
     switch (e.art) {
-      case "gully": case "notablauf": return [{ p: e.position, z: e.z }];
+      case "gully": return [{ p: e.position, z: e.z }];
+      case "notablauf": return [];
       case "les": return [{ p: { x: (e.von.x + e.bis.x) / 2, y: (e.von.y + e.bis.y) / 2 }, z: e.z }];
       case "dachreiter": {
         const k = konturKante(d.kontur, e.lage.kante);

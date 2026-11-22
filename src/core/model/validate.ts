@@ -185,9 +185,11 @@ function pruefeEntwaesserung(c: Pruefer, p: string, v: unknown, kanten: Map<stri
   if (!c.oneOf(sub(p, "art"), v["art"], ["gully", "notablauf", "dachreiter", "les"] as const)) return;
   const art = v["art"];
   const extra = art === "dachreiter" ? ["lage"] : art === "les" ? ["von", "bis"] : ["position"];
-  const o = c.obj(p, v, [...basis, ...extra]);
+  const o = c.obj(p, v, [...basis, ...extra], art === "gully" ? ["verbundenMit"] : []);
   if (!o) return;
   c.id(sub(p, "id"), o["id"]);
+  // Nur Form; ein fehlender/fremder Partner ist ein Hinweis der Gefälleplanung, kein Ladefehler.
+  if (art === "gully") c.optStr(p, o, "verbundenMit");
   c.str(sub(p, "name"), o["name"]);
   c.packRef(sub(p, "typ"), o["typ"]);
   c.num(sub(p, "z"), o["z"]);
