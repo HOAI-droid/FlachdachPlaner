@@ -73,8 +73,10 @@ describe("Schritt 10: resolveRain", () => {
     expect(ermittleRegen(null, kostra).befunde[0]!.code).toBe("standort-fehlt");
   });
 
-  it("Platzhalter-Pack (KBS offen) → null + Befund, keine Zahl", () => {
-    const platzhalter = lade<RegenspendenPack>(JSON.parse(packTexte["../rulepacks/kostra-dwd-2020/pack.json"]!));
+  it("Pack mit unbekanntem KBS → null + Befund, keine Zahl", () => {
+    const echt = JSON.parse(packTexte["../rulepacks/kostra-dwd-2020/pack.json"]!);
+    echt.daten.raster.crs = "offen";
+    const platzhalter = lade<RegenspendenPack>(echt);
     const e = ermittleRegen({ lat: 52.52, lon: 13.4 }, platzhalter);
     expect(e.rain).toBeNull();
     expect(e.befunde[0]!.code).toBe("regen-kbs-unbekannt");
