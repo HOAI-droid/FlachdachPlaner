@@ -72,3 +72,13 @@ button, input, select { font: inherit; color: inherit; }
 .hint-bar { display: none; padding: var(--sp-3) var(--sp-4); background: var(--warn-soft); color: var(--warn);
   border-bottom: 1px solid var(--line); }
 @media (max-width: 1279px) { .hint-bar { display: block; } }
+
+.btn.icon { width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.btn.icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.pad { padding: var(--sp-3) var(--sp-4); }
+.row { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); }
+.row > span:first-child { color: var(--text-muted); }
+.note { padding: var(--sp-3) var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.note.warn { color: var(--warn); background: var(--warn-soft); }
+.note.error { color: var(--error); background: var(--error-soft); }
+.check-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) 0; }

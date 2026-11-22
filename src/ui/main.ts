@@ -10,6 +10,7 @@ import { mountStage } from "./canvas/stage";
 import { scaleDenominator } from "./canvas/viewport";
 import { demoUnderlay } from "./demo";
 import { zahl } from "./format";
+import { mountEditor } from "./editor";
 
 const root = document.getElementById("app");
 if (root) {
@@ -25,5 +26,7 @@ if (root) {
     stage.setLayer("unterlage", d.draw);
     stage.fit(...d.bounds);
   }
-  (window as unknown as { __stage: typeof stage }).__stage = stage;
+  const editor = mountEditor(shell, stage);
+  (window as unknown as { __stage: typeof stage; __editor: typeof editor }).__stage = stage;
+  (window as unknown as { __editor: typeof editor }).__editor = editor;
 }

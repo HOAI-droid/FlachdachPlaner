@@ -9,12 +9,22 @@ export type LayerId = (typeof LAYER_ORDER)[number];
 /** Zeichnet in Welt-Koordinaten (m, y nach oben); Strichstärken in px = px / vp.scale. */
 export type LayerDraw = (ctx: CanvasRenderingContext2D, vp: Viewport) => void;
 
+export interface PointerHandlers {
+  move?(w: [number, number]): void;
+  click?(w: [number, number]): void;
+  dblclick?(w: [number, number]): void;
+  leave?(): void;
+}
+
 export interface Stage {
   setLayer(id: LayerId, draw: LayerDraw | null): void;
   invalidate(): void;
   fit(minX: number, minY: number, maxX: number, maxY: number): void;
   readonly viewport: Viewport;
   onChange(cb: (vp: Viewport, cursor: [number, number] | null) => void): void;
+  /** Zeigerereignisse in Weltkoordinaten (m). Klicks mit Space/Mitteltaste (Pan) werden nicht gemeldet. */
+  onPointer(h: PointerHandlers): void;
+  setCursor(css: string): void;
   destroy(): void;
 }
 
@@ -78,6 +88,8 @@ export function mountStage(host: HTMLElement): Stage {
     changed();
   }, { passive: false });
 
+  let ph: PointerHandlers = {};
+  let idleCursor = "";
   let drag: { x: number; y: number } | null = null;
   let space = false;
   canvas.addEventListener("pointerdown", (e) => {
@@ -96,17 +108,28 @@ export function mountStage(host: HTMLElement): Stage {
     }
     cursor = screenToWorld(vp, sx, sy);
     changed();
+    if (!drag) ph.move?.(cursor);
+  });
+  canvas.addEventListener("click", (e) => {
+    if (space || e.button !== 0) return;
+    const [sx, sy] = pos(e);
+    ph.click?.(screenToWorld(vp, sx, sy));
+  });
+  canvas.addEventListener("dblclick", (e) => {
+    if (space || e.button !== 0) return;
+    const [sx, sy] = pos(e);
+    ph.dblclick?.(screenToWorld(vp, sx, sy));
   });
   const end = (e: PointerEvent) => {
-    if (drag) { drag = null; canvas.releasePointerCapture(e.pointerId); canvas.style.cursor = space ? "grab" : ""; }
+    if (drag) { drag = null; canvas.releasePointerCapture(e.pointerId); canvas.style.cursor = space ? "grab" : idleCursor; }
   };
   canvas.addEventListener("pointerup", end);
   canvas.addEventListener("pointercancel", end);
-  canvas.addEventListener("pointerleave", () => { cursor = null; cb(vp, null); });
+  canvas.addEventListener("pointerleave", () => { cursor = null; cb(vp, null); ph.leave?.(); });
   const key = (down: boolean) => (e: KeyboardEvent) => {
     if (e.code !== "Space" || (e.target instanceof HTMLElement && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
     space = down;
-    if (!drag) canvas.style.cursor = down ? "grab" : "";
+    if (!drag) canvas.style.cursor = down ? "grab" : idleCursor;
     if (down) e.preventDefault();
   };
   const kd = key(true), ku = key(false);
@@ -119,6 +142,8 @@ export function mountStage(host: HTMLElement): Stage {
     fit(a, b, c, d) { vp = fitBounds(vp, a, b, c, d); changed(); },
     get viewport() { return vp; },
     onChange(f) { cb = f; },
+    onPointer(h) { ph = h; },
+    setCursor(c) { idleCursor = c; if (!drag && !space) canvas.style.cursor = c; },
     destroy() { ro.disconnect(); window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); canvas.remove(); },
   };
 }

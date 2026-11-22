@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "ajv": "^8.20.0",
-    "clipper2-ts": "^2.0.1"
+    "clipper2-ts": "^2.0.1",
+    "pdfjs-dist": "^5.4.149"
   }
 }
