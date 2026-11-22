@@ -79,9 +79,12 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     }
     // 5) Verlegestart + N0
     ctx.fillStyle = linie;
+    const ex = d.platten.flatMap((q) => q.polygon.outer), bx0 = Math.min(...ex.map((q) => q.x)), bx1 = Math.max(...ex.map((q) => q.x)), by0 = Math.min(...ex.map((q) => q.y)), by1 = Math.max(...ex.map((q) => q.y));
     for (const v of d.verlegestarts) {
       ctx.beginPath(); ctx.arc(v.punkt.x, v.punkt.y, 4 * px, 0, Math.PI * 2); ctx.fill();
-      if (belegung.belege(v.punkt, 8, 8, 78, 14)) text(ctx, vp, "Verlegestart", v.punkt.x + 8 * px, v.punkt.y + 8 * px, { px: 12, farbe: linie });
+      const rechts = v.punkt.x <= (bx0 + bx1) / 2, unten = v.punkt.y <= (by0 + by1) / 2;
+      const dx = rechts ? -86 : 8, dy = unten ? -22 : 8;
+      if (belegung.belege(v.punkt, dx, dy, 78, 14)) text(ctx, vp, "Verlegestart", v.punkt.x + dx * px, v.punkt.y + dy * px, { px: 12, farbe: linie });
     }
     if (d.n0) {
       const { x, y } = d.n0.position;
@@ -97,7 +100,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       const frei = ausdehnung(p, vp.scale) >= 13 && Math.max(p.laenge, p.breite) * vp.scale >= w + 4;
       const ok = frei && belegung.belege(c, 4, -6, w, 13);
       platz.set(p.id, ok);
-      if (ok) text(ctx, vp, s, c.x + 4 * px, c.y - 6 * px, { px: 13, farbe: linie, halo: false });
+      if (ok) text(ctx, vp, s, c.x + 4 * px, c.y - 6 * px, { px: 13, farbe: linie });
     }
     // 4) Verlegepfeile je Reihe, nur wenn das zugehörige Label Platz hat
     ctx.strokeStyle = linie; ctx.lineWidth = px;
