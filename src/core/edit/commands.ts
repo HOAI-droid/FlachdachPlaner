@@ -2,7 +2,7 @@
 import { dist } from "../geometry/segment";
 import { konturKante } from "../model/model";
 import type {
-  AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Id, Koordinate, Kontur, PackRef, ProjectModel, Regenspende,
+  AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Gully, Id, Koordinate, Kontur, PackRef, ProjectModel, Regenspende,
   Tuerschwelle, Unterlage, Zone,
 } from "../model/types";
 import type { RainData } from "../rain/rain";
@@ -234,6 +234,46 @@ export function setEntwaesserungTyp(dachId: Id, id: Id, typ: TypWahl | null): Be
   };
 }
 
+/** Gully ohne Feld `verbundenMit` (Feld entfällt ganz, alte Dateien bleiben byte-gleich). */
+function ohneVerweis(e: Gully): Gully {
+  const r: { -readonly [K in keyof Gully]: Gully[K] } = { ...e };
+  delete r.verbundenMit;
+  return r;
+}
+
+/** Entfernt `verbundenMit`-Verweise auf `ids` (z. B. gelöschte oder neu verbundene Gullys). */
+function ohneVerbindungZu(es: readonly Entwaesserung[], ids: readonly Id[]): Entwaesserung[] {
+  return es.map((e) => {
+    if (e.art !== "gully" || e.verbundenMit === undefined || !ids.includes(e.verbundenMit)) return e;
+    return ohneVerweis(e);
+  });
+}
+
+/**
+ * Gully `id` mit Gully `partnerId` derselben Dachfläche verbinden (beidseitig) oder lösen (null).
+ * Frühere Verbindungen beider Gullys werden aufgehoben. Ungültige Partner ändern nichts.
+ */
+export function setGullyVerbindung(dachId: Id, id: Id, partnerId: Id | null): Befehl {
+  return {
+    label: partnerId ? "Gullys verbinden" : "Verbindung lösen",
+    anwenden: (m) => mapDach(m, dachId, (d) => {
+      const a = d.entwaesserung.find((x) => x.id === id);
+      if (a?.art !== "gully" || partnerId === id) return d;
+      const b = partnerId === null ? undefined : d.entwaesserung.find((x) => x.id === partnerId);
+      if (partnerId !== null && b?.art !== "gully") return d;
+      if ((a.verbundenMit ?? null) === partnerId && (!b || (b.art === "gully" && b.verbundenMit === id))) return d;
+      const beteiligt = [id, ...(partnerId ? [partnerId] : [])];
+      // Verweise von und auf die Beteiligten lösen, dann neu setzen.
+      const geloest = ohneVerbindungZu(d.entwaesserung, beteiligt).map((e) => {
+        if (e.art !== "gully" || !beteiligt.includes(e.id)) return e;
+        const rest = ohneVerweis(e);
+        return partnerId === null ? rest : { ...rest, verbundenMit: e.id === id ? partnerId : id };
+      });
+      return { ...d, entwaesserung: geloest };
+    }),
+  };
+}
+
 export type Auswahl =
   | { readonly art: "dach"; readonly id: Id; readonly dachId: Id }
   | { readonly art: "aufbau" | "zone" | "attika" | "tuerschwelle" | "entwaesserung"; readonly id: Id; readonly dachId: Id };
@@ -252,7 +292,7 @@ export function loesche(a: Auswahl): Befehl {
           case "zone": return { ...d, zonen: d.zonen.filter((x) => x.id !== a.id) };
           case "attika": return { ...d, attika: d.attika.filter((x) => x.id !== a.id) };
           case "tuerschwelle": return { ...d, tuerschwellen: d.tuerschwellen.filter((x) => x.id !== a.id) };
-          case "entwaesserung": return { ...d, entwaesserung: d.entwaesserung.filter((x) => x.id !== a.id) };
+          case "entwaesserung": return { ...d, entwaesserung: ohneVerbindungZu(d.entwaesserung.filter((x) => x.id !== a.id), [a.id]) };
         }
       });
     },

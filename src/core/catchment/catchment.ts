@@ -1,12 +1,13 @@
 /**
  * computeCatchments (PLAN Schritt 7): Einzugsflächen = Zellen des Höhenfelds je Ablauf (Vereinigung
  * seiner Facetten aus computeSlope; diese sind bereits an Kontur und Aufbauten geschnitten).
+ * Verbundene Gullys (eine Quelle A–B): Zelle an der Mittelsenkrechten von A–B auf A und B geteilt.
  * Attika: Streifen Länge × Breite (Horizontalprojektion) je Kantenabschnitt, dem Ablauf der dort
  * angrenzenden Zelle zugeschlagen; zählt für die Flächengrenze, nie für Gefälle/Dämmung.
  * Färbung: Greedy in Smallest-Last-Reihenfolge, Nachbarn (gemeinsame Kante) nie gleich.
  * Grenzwerte nur aus dem Regel-Pack. Rein und deterministisch.
  */
-import { union } from "../geometry/clipper";
+import { intersection, union } from "../geometry/clipper";
 import { EPS } from "../geometry/eps";
 import { pointInPolygon, polygonArea, signedArea } from "../geometry/polygon";
 import { distPointSegment } from "../geometry/segment";
@@ -77,17 +78,32 @@ export function computeCatchments(m: ProjectModel, slope: SlopeResult, opt: Catc
 
 // ---------- Zellen ----------
 
+/** Halbebene diesseits (vz = −1, Seite `a`) bzw. jenseits (+1) der Mittelsenkrechten von a–b, groß genug für `ps`. */
+function halbebene(a: Vec2, b: Vec2, vz: 1 | -1, ps: readonly Polygon[]): Polygon {
+  const pts = ps.flatMap((p) => p.outer);
+  const r = 2 * Math.max(1, ...pts.map((p) => Math.hypot(p.x - a.x, p.y - a.y)));
+  const l = Math.hypot(b.x - a.x, b.y - a.y), u = { x: (b.x - a.x) / l, y: (b.y - a.y) / l }, n = { x: -u.y, y: u.x };
+  const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const at = (s: number, t: number) => ({ x: m.x + s * u.x + t * n.x, y: m.y + s * u.y + t * n.y });
+  const outer = vz === 1 ? [at(0, -r), at(r, -r), at(r, r), at(0, r)] : [at(0, r), at(-r, r), at(-r, -r), at(0, -r)];
+  return { outer, holes: [] };
+}
+
 function zellenAus(d: Dachflaeche, g: DachGefaelle): Zelle[] {
-  const ids: string[] = [];
-  for (const q of g.feld.quellen) if (!ids.includes(q.ablaufId)) ids.push(q.ablaufId);
-  return ids.map((ablaufId) => {
-    const teile = g.facetten.filter((f) => f.ablaufId === ablaufId).map((f) => f.polygon);
-    const polygone = teile.length > 0 ? union(teile) : [];
-    return {
-      id: `${d.id}/${ablaufId}`, dachflaecheId: d.id, ablaufId, polygone,
-      dachFlaeche: polygone.reduce((s, p) => s + polygonArea(p), 0), attika: [],
-    };
+  const zelle = (ablaufId: string, polygone: Polygon[]): Zelle => ({
+    id: `${d.id}/${ablaufId}`, dachflaecheId: d.id, ablaufId, polygone,
+    dachFlaeche: polygone.reduce((s, p) => s + polygonArea(p), 0), attika: [],
   });
+  const out: Zelle[] = [];
+  for (const q of g.feld.quellen) {
+    if (out.some((z) => z.ablaufId === q.ablaufId)) continue;
+    const teile = g.facetten.filter((f) => f.ablaufId === q.ablaufId).map((f) => f.polygon);
+    const polygone = teile.length > 0 ? union(teile) : [];
+    if (q.partnerId === undefined) { out.push(zelle(q.ablaufId, polygone)); continue; }
+    out.push(zelle(q.ablaufId, intersection(polygone, [halbebene(q.position, q.bis, -1, polygone)])));
+    out.push(zelle(q.partnerId, intersection(polygone, [halbebene(q.position, q.bis, 1, polygone)])));
+  }
+  return out;
 }
 
 const ringe = (p: Polygon): readonly Ring[] => [p.outer, ...p.holes];

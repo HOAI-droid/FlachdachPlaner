@@ -4,7 +4,7 @@ import {
   aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
-  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
+  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
   type Abweichung, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
@@ -542,6 +542,18 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
           sel.addEventListener("change", () => { verlauf = ausfuehren(verlauf, setEntwaesserungTyp(d.id, x.id, opt.find((o) => o.wahl.eintragId === sel.value)?.wahl ?? null)); refresh(); });
           f.append(l, sel); p.append(f);
         } else p.append(el("div", "note", "Kein Produkt im Pack verfügbar."));
+        if (x.art === "gully") {
+          const f = el("div", "field"), l = el("label", "", "Verbunden mit"), sel = el("select");
+          sel.id = "f-verbunden"; l.htmlFor = sel.id;
+          const keine = el("option", "", "keine"); keine.value = ""; sel.append(keine);
+          for (const o of d.entwaesserung) {
+            if (o.art !== "gully" || o.id === x.id) continue;
+            const op = el("option", "", o.name || o.id); op.value = o.id; sel.append(op);
+          }
+          sel.value = x.verbundenMit ?? "";
+          sel.addEventListener("change", () => { verlauf = ausfuehren(verlauf, setGullyVerbindung(d.id, x.id, sel.value || null)); refresh(); });
+          f.append(l, sel); p.append(f);
+        }
         break;
       }
     }

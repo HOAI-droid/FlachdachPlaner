@@ -137,5 +137,6 @@ function hauptExtreme(g: DachGefaelle): { hochpunkt: Extrempunkt | null; tiefpun
 }
 
 function ablaufOrt(g: DachGefaelle, id: string) {
-  return g.feld.quellen.find((q) => q.ablaufId === id)?.position;
+  const q = g.feld.quellen.find((x) => x.ablaufId === id || x.partnerId === id);
+  return q && (q.partnerId === id ? q.bis : q.position);
 }
