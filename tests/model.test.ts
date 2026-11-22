@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
-  SCHEMA_VERSION, createProject, dachPolygon, konturKante, parseProject, polygonArea,
+  MIGRATIONS, SCHEMA_VERSION, createProject, dachPolygon, konturKante, parseProject, polygonArea,
   serializeProject, validateProject,
   type Dachflaeche, type Entwaesserung, type Kontur, type MigrationChain, type ProjectModel,
 } from "../src/core/index";
@@ -24,11 +24,12 @@ function beispiel(): ProjectModel {
     attika: [{ id: "at1", kante: "k1", breite: 0.3, oberkante: 0.5 }, { id: "at2", kante: "k2", breite: 0.25 }],
     tuerschwellen: [{ id: "t1", name: "Tür Treppenhaus", lage: { kante: "k4", abstand: 2 }, breite: 1.01, oberkante: 0.15, barrierefrei: true }],
     entwaesserung: [
-      { id: "e1", art: "gully", name: "G1", typ: { packId: "loro", eintragId: "x-100" }, position: { x: 10, y: 5 } },
-      { id: "e2", art: "notablauf", name: "N1", typ: null, position: { x: 12, y: 5 } },
-      { id: "e3", art: "dachreiter", name: "DR1", typ: { packId: "loro", eintragId: "dr-1" }, lage: { kante: "k1", abstand: 5 } },
-      { id: "e4", art: "les", name: "LES 6 m", typ: { packId: "bauder-les", eintragId: "pir-t-les" }, von: { x: 2, y: 1 }, bis: { x: 8, y: 1 } },
+      { id: "e1", art: "gully", name: "G1", typ: { packId: "loro", eintragId: "x-100" }, position: { x: 10, y: 5 }, z: 0 },
+      { id: "e2", art: "notablauf", name: "N1", typ: null, position: { x: 12, y: 5 }, z: 0.035 },
+      { id: "e3", art: "dachreiter", name: "DR1", typ: { packId: "loro", eintragId: "dr-1" }, lage: { kante: "k1", abstand: 5 }, z: -0.02 },
+      { id: "e4", art: "les", name: "LES 6 m", typ: { packId: "bauder-les", eintragId: "pir-t-les" }, von: { x: 2, y: 1 }, bis: { x: 8, y: 1 }, z: 0 },
     ],
+    daemmdickeTiefpunkt: 20,
   };
   return {
     ...createProject("Musterstraße 1", "2026-11-22T10:00:00Z"),
@@ -88,7 +89,7 @@ describe("Projekt-JSON Round-Trip", () => {
     const umgedreht = JSON.parse(JSON.stringify(p), (_k, v) =>
       v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).reverse()) : v);
     expect(serializeProject(umgedreht)).toBe(serializeProject(p));
-    expect(serializeProject(p).startsWith('{\n  "schemaVersion": 1,')).toBe(true);
+    expect(serializeProject(p).startsWith(`{\n  "schemaVersion": ${SCHEMA_VERSION},`)).toBe(true);
   });
   it("undefined-Felder entfallen", () => {
     const p = { ...beispiel(), meta: { ...beispiel().meta, notiz: undefined } };
@@ -168,6 +169,20 @@ describe("Validierung: strukturierte Fehlerliste mit Pfaden (wirft nie)", () => 
     const p = { ...beispiel(), gefaelleStandard: Number.NaN };
     expect(fehlerPfade(p)).toEqual(["/gefaelleStandard"]);
   });
+  it("Ablauf-Kote z: Pflicht, endliche Zahl; daemmdickeTiefpunkt optional, ≥ 0", () => {
+    const d = roh(beispiel());
+    delete d["dachflaechen"][0]["entwaesserung"][0]["z"];
+    d["dachflaechen"][0]["entwaesserung"][3]["z"] = "0,00";
+    d["dachflaechen"][0]["daemmdickeTiefpunkt"] = -5;
+    expect(fehlerPfade(d)).toEqual([
+      "/dachflaechen/0/daemmdickeTiefpunkt",
+      "/dachflaechen/0/entwaesserung/0/z",
+      "/dachflaechen/0/entwaesserung/3/z",
+    ]);
+    const ohne = roh(beispiel());
+    delete ohne["dachflaechen"][0]["daemmdickeTiefpunkt"];
+    expect(fehlerPfade(ohne)).toEqual([]);
+  });
   it("Schlüssel mit / und ~ werden im Pfad maskiert", () => {
     const d = roh(beispiel());
     d["packVersionen"]["a/b~c"] = "1";
@@ -196,27 +211,56 @@ describe("Schemaversion und Migration", () => {
       if (!r.ok) expect(r.fehler[0]!.pfad).toBe("/schemaVersion");
     }
   });
-  it("Beispiel-Migration v1→v2: altes Dokument wird migriert und validiert", () => {
-    // Angenommene v1: Gefälle in Prozent unter "gefaelleProzent"; v2 = heutige Form (m/m).
+  it("Migration v1→v2: Abläufe erhalten z = 0, Rest unverändert", () => {
+    const neu = beispiel();
+    const v1 = roh(neu);
+    v1["schemaVersion"] = 1;
+    for (const e of v1["dachflaechen"][0]["entwaesserung"]) delete e["z"];
+    const r = parseProject(JSON.stringify(v1));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const erwartet = {
+      ...neu,
+      dachflaechen: neu.dachflaechen.map((d) => ({ ...d, entwaesserung: d.entwaesserung.map((e) => ({ ...e, z: 0 })) })),
+    };
+    expect(r.projekt).toEqual(erwartet);
+    expect(r.hinweise).toEqual(["Projekt von Schemaversion 1 auf 2 migriert."]);
+  });
+  it("Migration v1→v2 wirft nicht bei kaputter Struktur; Validierung meldet Fehler mit Pfad", () => {
+    const v1 = roh(beispiel());
+    v1["schemaVersion"] = 1;
+    v1["dachflaechen"][0]["entwaesserung"][1] = 7;
+    v1["dachflaechen"][1] = { entwaesserung: "x" };
+    expect(() => parseProject(JSON.stringify(v1))).not.toThrow();
+    const r = parseProject(JSON.stringify(v1));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.fehler.map((f) => f.pfad)).toEqual(expect.arrayContaining(["/dachflaechen/0/entwaesserung/1", "/dachflaechen/1/entwaesserung"]));
+    const leer = { ...roh(beispiel()), schemaVersion: 1, dachflaechen: "kaputt" };
+    expect(parseProject(JSON.stringify(leer)).ok).toBe(false);
+  });
+  it("Beispiel-Migration v2→v3 (angenommen): Kette wird fortgesetzt", () => {
+    // Angenommene v2: Gefälle in Prozent unter "gefaelleProzent"; v3 = heutige Form (m/m).
     const kette: MigrationChain = {
-      1: (doc) => {
+      ...MIGRATIONS,
+      2: (doc) => {
         const { gefaelleProzent, ...rest } = doc;
         return { ...rest, gefaelleStandard: (gefaelleProzent as number) / 100 };
       },
     };
-    const neu = { ...beispiel(), schemaVersion: 2 };
+    const neu = { ...beispiel(), schemaVersion: 3 };
     const { gefaelleStandard, ...alt } = roh(neu);
-    const v1 = { ...alt, schemaVersion: 1, gefaelleProzent: gefaelleStandard * 100 };
-    const r = parseProject(JSON.stringify(v1), { migrations: kette, zielVersion: 2 });
+    const v2 = { ...alt, schemaVersion: 2, gefaelleProzent: gefaelleStandard * 100 };
+    const r = parseProject(JSON.stringify(v2), { migrations: kette, zielVersion: 3 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.projekt).toEqual(neu);
-    expect(r.hinweise).toEqual(["Projekt von Schemaversion 1 auf 2 migriert."]);
+    expect(r.hinweise).toEqual(["Projekt von Schemaversion 2 auf 3 migriert."]);
   });
   it("Lücke in der Migrationskette → Fehler", () => {
-    const r = parseProject(serializeProject(beispiel()), { migrations: {}, zielVersion: 3 });
+    const r = parseProject(serializeProject(beispiel()), { migrations: MIGRATIONS, zielVersion: SCHEMA_VERSION + 1 });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.fehler[0]!.meldung).toMatch(/Keine Migration von Schemaversion 1 auf 2/);
+    if (!r.ok) expect(r.fehler[0]!.meldung).toMatch(new RegExp(`Keine Migration von Schemaversion ${SCHEMA_VERSION} auf ${SCHEMA_VERSION + 1}`));
   });
 });
 
@@ -252,8 +296,9 @@ const dachRoh = fc.record({
   tuerschwellen: fc.array(fc.record({ k: fc.nat(), t: zahl(0, 1), name: text, barrierefrei: fc.boolean(), oberkante: opt(zahl(-1, 1)) }), { maxLength: 2 }),
   entwaesserung: fc.array(fc.record({
     art: fc.constantFrom("gully" as const, "notablauf" as const, "dachreiter" as const, "les" as const),
-    name: text, typ: packRef, a: vec, b: vec, k: fc.nat(), t: zahl(0, 1),
+    name: text, typ: packRef, a: vec, b: vec, k: fc.nat(), t: zahl(0, 1), z: zahl(-1, 1),
   }), { maxLength: 4 }),
+  daemmdickeTiefpunkt: opt(zahl(0, 300)),
 });
 
 const projektArb: fc.Arbitrary<ProjectModel> = fc.record({
@@ -294,13 +339,14 @@ const projektArb: fc.Arbitrary<ProjectModel> = fc.record({
         return { id: id(), name: t.name, lage: pos(t.k, t.t, breite), breite, oberkante: t.oberkante, barrierefrei: t.barrierefrei };
       }),
       entwaesserung: d.entwaesserung.map((e): Entwaesserung => {
-        const basis = { id: id(), name: e.name, typ: e.typ };
+        const basis = { id: id(), name: e.name, typ: e.typ, z: e.z };
         switch (e.art) {
           case "dachreiter": return { ...basis, art: e.art, lage: pos(e.k, e.t) };
           case "les": return { ...basis, art: e.art, von: e.a, bis: { x: e.a.x + 1 + Math.abs(e.b.x) / 10, y: e.b.y } };
           default: return { ...basis, art: e.art, position: e.a };
         }
       }),
+      daemmdickeTiefpunkt: d.daemmdickeTiefpunkt,
     };
   });
   const p: ProjectModel = {

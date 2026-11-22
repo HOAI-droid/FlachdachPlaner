@@ -113,6 +113,11 @@ interface EntwaesserungBasis {
   readonly name: string;
   /** Produkttyp aus einem Pack; null = noch nicht gewählt. */
   readonly typ: PackRef | null;
+  /**
+   * Kote des Tiefpunkts (OK Abdichtung am Ablauf) in m, Bezug Projekt-Nullpunkt; Standard 0.
+   * LES: Kote am tieferen Ende.
+   */
+  readonly z: number;
 }
 export interface Gully extends EntwaesserungBasis {
   readonly art: "gully";
@@ -149,6 +154,8 @@ export interface Dachflaeche {
   readonly attika: readonly AttikaSegment[];
   readonly tuerschwellen: readonly Tuerschwelle[];
   readonly entwaesserung: readonly Entwaesserung[];
+  /** Mindestdämmdicke der Gefälledämmung am Tiefpunkt in mm (optional; sonst Standard). */
+  readonly daemmdickeTiefpunkt?: number;
 }
 
 /** Passpunkt: Punkt in Unterlagenkoordinaten ↔ Weltkoordinate (m). */

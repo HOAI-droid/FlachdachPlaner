@@ -1,7 +1,7 @@
 /** Migrationskette für Projekt-JSON. Jede Migration hebt ein Dokument von Version n auf n+1. */
 
 /** Aktuelle Schemaversion des Projektformats. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** Rohes JSON-Dokument (vor Validierung). */
 export type RohDokument = Record<string, unknown>;
@@ -10,8 +10,30 @@ export type RohDokument = Record<string, unknown>;
 export type Migration = (doc: RohDokument) => RohDokument;
 export type MigrationChain = Readonly<Record<number, Migration>>;
 
-/** Registrierte Migrationen des Programms (bisher keine: es gibt nur Version 1). */
-export const MIGRATIONS: MigrationChain = {};
+const istObjekt = (v: unknown): v is RohDokument => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * v1 → v2: Entwässerungselemente erhalten die Kote des Tiefpunkts `z` (Standard 0 m).
+ * Fehlerhafte Strukturen bleiben unverändert (die Validierung meldet sie danach).
+ */
+export const migriereV1nachV2: Migration = (doc) => {
+  const daecher = doc["dachflaechen"];
+  if (!Array.isArray(daecher)) return doc;
+  return {
+    ...doc,
+    dachflaechen: daecher.map((d: unknown) => {
+      if (!istObjekt(d) || !Array.isArray(d["entwaesserung"])) return d;
+      return {
+        ...d,
+        entwaesserung: d["entwaesserung"].map((e: unknown) =>
+          istObjekt(e) && !Object.hasOwn(e, "z") ? { ...e, z: 0 } : e),
+      };
+    }),
+  };
+};
+
+/** Registrierte Migrationen des Programms. */
+export const MIGRATIONS: MigrationChain = { 1: migriereV1nachV2 };
 
 export type MigrationResult =
   | { readonly ok: true; readonly doc: RohDokument; readonly hinweise: readonly string[] }

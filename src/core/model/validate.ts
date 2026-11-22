@@ -180,7 +180,7 @@ function pruefeStandort(c: Pruefer, p: string, v: unknown): void {
 
 function pruefeEntwaesserung(c: Pruefer, p: string, v: unknown, kanten: Map<string, number> | undefined): void {
   if (!isObj(v)) { c.err(p, "Objekt erwartet"); return; }
-  const basis = ["id", "name", "typ", "art"];
+  const basis = ["id", "name", "typ", "art", "z"];
   if (!c.oneOf(sub(p, "art"), v["art"], ["gully", "notablauf", "dachreiter", "les"] as const)) return;
   const art = v["art"];
   const extra = art === "dachreiter" ? ["lage"] : art === "les" ? ["von", "bis"] : ["position"];
@@ -189,6 +189,7 @@ function pruefeEntwaesserung(c: Pruefer, p: string, v: unknown, kanten: Map<stri
   c.id(sub(p, "id"), o["id"]);
   c.str(sub(p, "name"), o["name"]);
   c.packRef(sub(p, "typ"), o["typ"]);
+  c.num(sub(p, "z"), o["z"]);
   if (art === "dachreiter") c.kantenPos(sub(p, "lage"), o["lage"], kanten);
   else if (art === "les") {
     const a = c.vec(sub(p, "von"), o["von"]);
@@ -198,8 +199,9 @@ function pruefeEntwaesserung(c: Pruefer, p: string, v: unknown, kanten: Map<stri
 }
 
 function pruefeDach(c: Pruefer, p: string, v: unknown): void {
-  const o = c.obj(p, v, ["id", "name", "typ", "kontur", "aufbauten", "zonen", "vorgaben", "attika", "tuerschwellen", "entwaesserung"]);
+  const o = c.obj(p, v, ["id", "name", "typ", "kontur", "aufbauten", "zonen", "vorgaben", "attika", "tuerschwellen", "entwaesserung"], ["daemmdickeTiefpunkt"]);
   if (!o) return;
+  c.optNum(p, o, "daemmdickeTiefpunkt", { min: 0 });
   c.id(sub(p, "id"), o["id"]);
   c.str(sub(p, "name"), o["name"]);
   c.oneOf(sub(p, "typ"), o["typ"], ["dach", "terrasse"] as const);
