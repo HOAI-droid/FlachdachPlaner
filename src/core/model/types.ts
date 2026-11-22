@@ -65,6 +65,8 @@ export interface Standort {
 export interface Hoehenvorgaben {
   readonly maxHochpunkt?: number;
   readonly minTiefpunkt?: number;
+  /** OK Rohdecke/Unterkonstruktion z in m: am Tiefpunkt muss z − okRohdecke ≥ Mindestdämmdicke bleiben. */
+  readonly okRohdecke?: number;
 }
 
 /** Aufbau (Lichtkuppel, Technik o. Ä.): Loch in der Dachfläche. */

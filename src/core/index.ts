@@ -5,3 +5,6 @@ export * from "./model";
 export * from "./rules";
 export * from "./slope";
 export * from "./catchment";
+export * from "./checks";
+export * from "./rain";
+export * from "./drainage";

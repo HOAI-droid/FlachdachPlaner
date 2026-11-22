@@ -143,8 +143,9 @@ class Pruefer {
   }
 
   vorgaben(p: string, v: unknown): void {
-    const o = this.obj(p, v, [], ["maxHochpunkt", "minTiefpunkt"]);
+    const o = this.obj(p, v, [], ["maxHochpunkt", "minTiefpunkt", "okRohdecke"]);
     if (!o) return;
+    this.optNum(p, o, "okRohdecke");
     this.optNum(p, o, "maxHochpunkt");
     this.optNum(p, o, "minTiefpunkt");
     const hp = o["maxHochpunkt"], tp = o["minTiefpunkt"];

@@ -2,7 +2,7 @@
  * Zugriff auf Regelparameter. Grenzwerte stehen ausschließlich im Regel-Pack;
  * der Code kennt nur Regel- und Parameternamen.
  */
-import type { Einheit, RegelPack } from "./types";
+import type { DaemmplattenPack, Einheit, RegelPack, RulePack } from "./types";
 
 /** Regel-ID der Flächengrenze je Ablauf (Parameter hinweisAb ≥, fehlerUeber >). */
 export const REGEL_FLAECHE_JE_ABLAUF = "flaeche-je-ablauf";
@@ -47,3 +47,25 @@ export function bewerteEinzugsflaeche(flaeche: number, pack: RegelPack): Flaeche
   const stufe: FlaechenStufe = flaeche > fehlerUeber.wert ? "fehler" : flaeche >= hinweisAb.wert ? "hinweis" : "ok";
   return { stufe, hinweisAb, fehlerUeber };
 }
+
+/** Sucht einen Regelparameter in allen geladenen Regel-Packs (erstes Vorkommen); null, wenn er fehlt. */
+export function findeRegelParameter(packs: readonly RulePack[], regelId: string, name: string): RegelWert | null {
+  for (const p of packs) {
+    if (p.typ !== "regeln") continue;
+    const w = regelParameter(p, regelId, name);
+    if (w) return w;
+  }
+  return null;
+}
+
+const MM_JE_M = 1000;
+
+/**
+ * Standard-Mindestdämmdicke am Tiefpunkt in mm (A2b): Anfangsdicke der dünnsten Gefälleplatte
+ * des Plattenpacks; null bei leerem Pack.
+ */
+export function standardDaemmdickeTiefpunkt(pack: DaemmplattenPack): number | null {
+  if (pack.daten.typen.length === 0) return null;
+  return MM_JE_M * Math.min(...pack.daten.typen.map((t) => t.dickeAnfang));
+}
+

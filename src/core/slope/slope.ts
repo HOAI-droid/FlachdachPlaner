@@ -15,18 +15,20 @@ import { EPS } from "../geometry/eps";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geometry/polygon";
 import type { Polygon, Ring, Vec2 } from "../geometry/types";
 import { dachPolygon } from "../model/model";
-import type { Dachflaeche, ProjectModel } from "../model/types";
+import type { Dachflaeche, ProjectModel, Zone } from "../model/types";
 import {
   SEITEN, auswerten, dachachse, differenz, ebeneVon, hoeheAm, quellLaenge, seitenRichtung,
 } from "./hoehenfeld";
 import { istSplitter, quellenAus } from "./quellen";
 import type {
   DachGefaelle, Ebene, Extrempunkt, Facette, Faltlinie, Gefaelledaemmung, Gefaellepfeil,
-  Hoehenfeld, Kote, KotenArt, LesKeil, SlopeHinweis, SlopeOptionen, SlopeResult,
+  Hoehenfeld, Kote, KotenArt, LesKeil, SlopeHinweis, SlopeOptionen, SlopeResult, ZonenGefaelle,
 } from "./types";
 
 /** Umrechnung m → mm (Einheit, kein Grenzwert). */
 const MM_JE_M = 1000;
+/** Flächentoleranz für Zonen-Lageprüfungen in m² (Clipper-Raster). */
+const FLAECHEN_TOL = 1e-3;
 
 /** Gradient einer Ebenendifferenz ≈ 0: parallele Ebenen. */
 const parallel = (e: Ebene) => Math.hypot(e.a, e.b) <= EPS;
@@ -44,7 +46,7 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
   const feld: Hoehenfeld = { gefaelle: s, achse, quellen: q.quellen };
   const leer: DachGefaelle = {
     dachflaecheId: d.id, feld, facetten: [], linien: [], koten: [], hochpunkt: null, tiefpunkt: null, pfeile: [], daemmung: null,
-    les: q.les, dachreiter: q.dachreiter,
+    daemmungHaupt: null, zonen: [], les: q.les, dachreiter: q.dachreiter,
   };
   if (q.quellen.length === 0) {
     hinweise.push({ code: "keine-ablaeufe", dachflaecheId: d.id, meldung: "Dachfläche hat keinen Ablauf; kein Gefälle berechnet." });
@@ -56,18 +58,115 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
   }
 
   const box = huelle(dach.outer);
-  const facetten = berechneFacetten(dach, box, feld);
-  const linien = berechneFaltlinien(dach, box, feld);
-  const koten = berechneKoten(dach, feld, linien);
-  const hochpunkt = extrem(koten, 1);
-  const tiefpunkt = extrem(koten, -1);
-  const pfeile: Gefaellepfeil[] = facetten.map((f) => ({
+  const zonenTeile = zonenPolygone(d, dach, hinweise);
+  const haupt = zonenTeile.length > 0
+    ? difference([dach], zonenTeile.flatMap((z) => z.polygone)).filter((p) => !istSplitter(p))
+    : [dach];
+  const facettenHaupt = haupt.length > 0 ? berechneFacetten(haupt, box, feld, "") : [];
+  const linien = haupt.flatMap((t) => berechneFaltlinien(t, box, feld));
+  const koten = haupt.length > 0 ? berechneKoten(haupt, feld, linien) : [];
+  const hpHaupt = extrem(koten, 1), tpHaupt = extrem(koten, -1);
+  const daemmungHaupt = tpHaupt && hpHaupt && facettenHaupt.length > 0
+    ? mittlereDaemmung(facettenHaupt, q.les, tpHaupt.kote, hpHaupt.kote, d.daemmdickeTiefpunkt, opt.daemmdickeTiefpunktStandard)
+    : null;
+  const zonen = zonenTeile.map((z) => zonenGefaelle(z.zone, z.polygone, box, feld, d, opt));
+
+  const facetten = [...facettenHaupt, ...zonen.flatMap((z) => z.facetten)];
+  const alleKoten = [...koten, ...zonen.flatMap((z) => z.koten)];
+  const pfeile: Gefaellepfeil[] = facetten.filter((f) => f.gefaelle > 0).map((f) => ({
     facetteId: f.id, start: innenpunkt(f.polygon), richtung: f.fallrichtung, gefaelle: f.gefaelle,
   }));
-  const daemmung = tiefpunkt && hochpunkt
-    ? mittlereDaemmung(facetten, q.les, tiefpunkt.kote, hochpunkt.kote, d.daemmdickeTiefpunkt, opt.daemmdickeTiefpunktStandard)
+  const daemmung = gewichtet([daemmungHaupt, ...zonen.map((z) => z.daemmung)]);
+  return {
+    ...leer, facetten, linien, koten, hochpunkt: extrem(alleKoten, 1), tiefpunkt: extrem(alleKoten, -1), pfeile,
+    daemmung, daemmungHaupt, zonen,
+  };
+}
+
+// ---------- Zonen/Stufen (Schritt 8) ----------
+
+/** Zonenflächen: Zone ∩ Dach, ohne Anteile früherer Zonen (Überlappung → Hinweis). */
+function zonenPolygone(d: Dachflaeche, dach: Polygon, hinweise: SlopeHinweis[]): { zone: Zone; polygone: Polygon[] }[] {
+  const out: { zone: Zone; polygone: Polygon[] }[] = [];
+  const belegt: Polygon[] = [];
+  for (const zone of d.zonen) {
+    const roh: Polygon = { outer: zone.kontur, holes: [] };
+    let teile = intersection([dach], [roh]).filter((p) => !istSplitter(p));
+    const imDachFlaeche = summe(teile);
+    if (imDachFlaeche < polygonArea(roh) - FLAECHEN_TOL) {
+      hinweise.push({ code: "zone-ausserhalb", dachflaecheId: d.id, objektId: zone.id,
+        meldung: `Zone ${zone.name || zone.id} liegt ${teile.length === 0 ? "" : "teilweise "}außerhalb der Dachfläche oder auf Aufbauten.` });
+    }
+    if (belegt.length > 0 && teile.length > 0) {
+      teile = difference(teile, belegt).filter((p) => !istSplitter(p));
+      if (summe(teile) < imDachFlaeche - FLAECHEN_TOL) {
+        hinweise.push({ code: "zonen-ueberlappen", dachflaecheId: d.id, objektId: zone.id,
+          meldung: `Zone ${zone.name || zone.id} überlappt eine frühere Zone; der Überlappungsteil gehört zur früheren Zone.` });
+      }
+    }
+    if (teile.length === 0) continue;
+    belegt.push(...teile);
+    out.push({ zone, polygone: teile });
+  }
+  return out;
+}
+
+const summe = (ps: readonly Polygon[]) => ps.reduce((a, p) => a + polygonArea(p), 0);
+
+function zonenGefaelle(zone: Zone, polygone: Polygon[], box: Vec2[], haupt: Hoehenfeld, d: Dachflaeche, opt: SlopeOptionen): ZonenGefaelle {
+  const feld: Hoehenfeld = {
+    gefaelle: zone.gefaelle ?? haupt.gefaelle, achse: haupt.achse,
+    quellen: haupt.quellen.map((q) => ({ ...q, z: q.z + zone.hoehenversatz })),
+  };
+  const flaeche = summe(polygone);
+  let facetten: Facette[], linien: Faltlinie[], koten: Kote[];
+  if (feld.gefaelle > EPS) {
+    facetten = berechneFacetten(polygone, box, feld, `${zone.id}:`).map((f) => ({ ...f, zoneId: zone.id }));
+    linien = polygone.flatMap((t) => berechneFaltlinien(t, box, feld));
+    koten = berechneKoten(polygone, feld, linien);
+  } else {
+    // 0-%-Zone: waagerecht auf der Kote des tiefsten Ablaufs (+ Versatz); dem tiefsten Ablauf zugeordnet.
+    const tiefste = feld.quellen.reduce((b, q) => (q.z < b.z ? q : b));
+    const ebene: Ebene = { a: 0, b: 0, c: tiefste.z };
+    facetten = polygone.map((polygon, n) => ({
+      id: `${zone.id}:${tiefste.ablaufId}/0/${n}`, ablaufId: tiefste.ablaufId, zoneId: zone.id, seite: 0, polygon,
+      flaeche: polygonArea(polygon), ebene, gefaelle: 0, fallrichtung: { x: 0, y: 0 },
+    }));
+    linien = [];
+    koten = berechneKoten(polygone, feld, linien);
+  }
+  const hochpunkt = extrem(koten, 1), tiefpunkt = extrem(koten, -1);
+  const daemmung = hochpunkt && tiefpunkt
+    ? mittlereDaemmung(facetten, [], tiefpunkt.kote, hochpunkt.kote, d.daemmdickeTiefpunkt, opt.daemmdickeTiefpunktStandard)
     : null;
-  return { ...leer, facetten, linien, koten, hochpunkt, tiefpunkt, pfeile, daemmung };
+  return { zoneId: zone.id, versatz: zone.hoehenversatz, feld, polygone, flaeche, facetten, linien, koten, hochpunkt, tiefpunkt, daemmung };
+}
+
+/** Flächengewichtetes Zusammenführen getrennt gemittelter Teilflächen (A2b). */
+function gewichtet(teile: readonly (Gefaelledaemmung | null)[]): Gefaelledaemmung | null {
+  const t = teile.filter((x): x is Gefaelledaemmung => x !== null && x.flaeche > 0);
+  if (t.length === 0) return null;
+  if (t.length === 1) return t[0]!;
+  const flaeche = t.reduce((a, x) => a + x.flaeche, 0);
+  return {
+    mittel: t.reduce((a, x) => a + x.flaeche * x.mittel, 0) / flaeche,
+    min: Math.min(...t.map((x) => x.min)),
+    max: Math.max(...t.map((x) => x.max)),
+    tiefpunktDicke: t[0]!.tiefpunktDicke,
+    tiefpunktVorgegeben: t[0]!.tiefpunktVorgegeben,
+    flaeche,
+  };
+}
+
+/**
+ * Höhe (OK Abdichtung, m) im Punkt p der Dachfläche: in einer Zone deren Feld (inkl. Versatz),
+ * sonst das Hauptfeld. Auf einem Zonenrand gilt die Zone. NaN ohne Abläufe.
+ */
+export function hoeheDachflaeche(g: DachGefaelle, p: Vec2): number {
+  for (const z of g.zonen) {
+    if (z.polygone.some((poly) => pointInPolygon(p, poly) !== "outside")) return hoeheAm(z.feld, p);
+  }
+  return hoeheAm(g.feld, p);
 }
 
 // ---------- Facetten ----------
@@ -95,7 +194,7 @@ function halbebene(poly: readonly Vec2[], e: Ebene): Vec2[] {
   return out;
 }
 
-function berechneFacetten(dach: Polygon, box: Vec2[], f: Hoehenfeld): Facette[] {
+function berechneFacetten(dach: readonly Polygon[], box: Vec2[], f: Hoehenfeld, prefix: string): Facette[] {
   const out: Facette[] = [];
   f.quellen.forEach((quelle, i) => {
     for (const k of SEITEN) {
@@ -103,7 +202,7 @@ function berechneFacetten(dach: Polygon, box: Vec2[], f: Hoehenfeld): Facette[] 
       let keil: Vec2[] = box;
       for (const k2 of SEITEN) if (k2 !== k) keil = halbebene(keil, differenz(L, ebeneVon(f, i, k2)));
       if (keil.length < 3) continue;
-      let teile = intersection([dach], [{ outer: keil, holes: [] }]);
+      let teile = intersection(dach, [{ outer: keil, holes: [] }]);
       const tiefer: Polygon[] = [];
       f.quellen.forEach((_, j) => {
         if (j === i) return;
@@ -123,7 +222,7 @@ function berechneFacetten(dach: Polygon, box: Vec2[], f: Hoehenfeld): Facette[] 
       const g = seitenRichtung(quelle.achse, k);
       teile.filter((p) => !istSplitter(p)).forEach((polygon, n) => {
         out.push({
-          id: `${quelle.ablaufId}/${k}/${n}`, ablaufId: quelle.ablaufId, seite: k, polygon,
+          id: `${prefix}${quelle.ablaufId}/${k}/${n}`, ablaufId: quelle.ablaufId, seite: k, polygon,
           flaeche: polygonArea(polygon), ebene: L, gefaelle: f.gefaelle, fallrichtung: { x: -g.x, y: -g.y },
         });
       });
@@ -270,7 +369,7 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
 const nah = (p: Vec2, q: Vec2) => Math.hypot(p.x - q.x, p.y - q.y) <= EPS;
 const RANG: Record<KotenArt, number> = { ablauf: 0, ecke: 1, grat: 2, kehle: 3 };
 
-function berechneKoten(dach: Polygon, f: Hoehenfeld, linien: readonly Faltlinie[]): Kote[] {
+function berechneKoten(teile: readonly Polygon[], f: Hoehenfeld, linien: readonly Faltlinie[]): Kote[] {
   const out: Kote[] = [];
   const add = (p: Vec2, art: KotenArt) => {
     const i = out.findIndex((k) => nah(k.position, p));
@@ -280,8 +379,9 @@ function berechneKoten(dach: Polygon, f: Hoehenfeld, linien: readonly Faltlinie[
     }
     out.push({ position: { x: p.x, y: p.y }, kote: hoeheAm(f, p), art });
   };
-  for (const q of f.quellen) for (const p of [q.position, q.bis]) if (pointInPolygon(p, dach) !== "outside") add(p, "ablauf");
-  for (const r of [dach.outer, ...dach.holes]) for (const p of r) add(p, "ecke");
+  const drin = (p: Vec2) => teile.some((t) => pointInPolygon(p, t) !== "outside");
+  for (const q of f.quellen) for (const p of [q.position, q.bis]) if (drin(p)) add(p, "ablauf");
+  for (const t of teile) for (const r of [t.outer, ...t.holes]) for (const p of r) add(p, "ecke");
   for (const l of linien) { add(l.von, l.art); add(l.bis, l.art); }
   return out;
 }

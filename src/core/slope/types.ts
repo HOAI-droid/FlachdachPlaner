@@ -87,6 +87,8 @@ export interface Ebene {
 export interface Facette {
   readonly id: string;
   readonly ablaufId: Id;
+  /** Zone/Stufe, zu der die Facette gehört (fehlt = Hauptfläche der Dachfläche). */
+  readonly zoneId?: Id;
   /** Pyramidenseite: 0 = +Achse, 1 = +Querachse, 2 = −Achse, 3 = −Querachse. */
   readonly seite: 0 | 1 | 2 | 3;
   readonly polygon: Polygon;
@@ -146,18 +148,46 @@ export interface Gefaelledaemmung {
   readonly flaeche: number;
 }
 
-export interface DachGefaelle {
-  readonly dachflaecheId: Id;
+/**
+ * Zone/Stufe (PLAN Schritt 8): eigenes Höhenfeld h_Z(x) = versatz + min_i (z_i + s_Z · d(x, E_i)) über
+ * die Abläufe der Dachfläche, nur innerhalb der Zone (an Dach und früheren Zonen geschnitten).
+ * s_Z = Zonengefälle oder Gefälle-Standard; s_Z = 0 ergibt eine waagerechte Fläche auf min z + versatz.
+ * Dämmung getrennt gemittelt (eigener Tiefpunkt), in `DachGefaelle.daemmung` flächengewichtet.
+ */
+export interface ZonenGefaelle {
+  readonly zoneId: Id;
+  readonly versatz: number;
   readonly feld: Hoehenfeld;
+  readonly polygone: readonly Polygon[];
+  /** m² */
+  readonly flaeche: number;
+  /** Facetten der Zone (auch in `DachGefaelle.facetten` enthalten, dort mit `zoneId`). */
   readonly facetten: readonly Facette[];
   readonly linien: readonly Faltlinie[];
-  /** Koten an Ecken (Kontur, Aufbauten), Abläufen und Enden der Grate/Kehlen. */
   readonly koten: readonly Kote[];
   readonly hochpunkt: Extrempunkt | null;
   readonly tiefpunkt: Extrempunkt | null;
-  readonly pfeile: readonly Gefaellepfeil[];
-  /** Mittlere Gefälledämmung inkl. LES-Keile (additiv). */
   readonly daemmung: Gefaelledaemmung | null;
+}
+
+export interface DachGefaelle {
+  readonly dachflaecheId: Id;
+  readonly feld: Hoehenfeld;
+  /** Facetten der Hauptfläche und aller Zonen (Zonenfacetten mit `zoneId`). */
+  readonly facetten: readonly Facette[];
+  /** Grate/Kehlen der Hauptfläche (Zonen: `zonen[].linien`). */
+  readonly linien: readonly Faltlinie[];
+  /** Koten der Hauptfläche an Ecken (Kontur, Aufbauten, Zonenränder), Abläufen und Enden der Grate/Kehlen. */
+  readonly koten: readonly Kote[];
+  /** HP/TP über Hauptfläche und Zonen. */
+  readonly hochpunkt: Extrempunkt | null;
+  readonly tiefpunkt: Extrempunkt | null;
+  readonly pfeile: readonly Gefaellepfeil[];
+  /** Mittlere Gefälledämmung der ganzen Dachfläche: Hauptfläche und Zonen getrennt gemittelt, flächengewichtet. */
+  readonly daemmung: Gefaelledaemmung | null;
+  /** Nur Hauptfläche (ohne Zonen) inkl. LES-Keile (additiv). */
+  readonly daemmungHaupt: Gefaelledaemmung | null;
+  readonly zonen: readonly ZonenGefaelle[];
   readonly les: readonly LesKeil[];
   readonly dachreiter: readonly DachreiterLage[];
 }
@@ -165,7 +195,7 @@ export interface DachGefaelle {
 export type SlopeHinweisCode =
   | "keine-ablaeufe" | "ablauf-ausserhalb" | "gefaelle-null" | "pack-ungeprueft"
   | "les-typ-fehlt" | "les-laenge-null" | "les-laenge-abweichend" | "les-zu-lang" | "les-pack-inkonsistent"
-  | "dachreiter-masse-fehlen" | "dachreiter-lage-ungueltig";
+  | "dachreiter-masse-fehlen" | "dachreiter-lage-ungueltig" | "zone-ausserhalb" | "zonen-ueberlappen";
 
 export interface SlopeHinweis {
   readonly code: SlopeHinweisCode;
