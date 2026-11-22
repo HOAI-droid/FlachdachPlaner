@@ -18,7 +18,7 @@ Lokale Web-App (später Tauri) zur Gefälleplanung von Flachdächern: Unterlage 
 ## 3. Tech-Stack
 - **TypeScript strict + Vite**: Web zuerst, später in Tauri einbettbar. **Vitest** + **fast-check** (Eigenschaftstests).
 - **Kern ohne DOM** (`src/core`, eigene tsconfig `lib: ES2022`, ESLint verbietet Importe aus `src/ui`, `three`, DOM).
-- **clipper2-js** (Polygon-Boolesche Operationen), **polylabel** (Labels), **Ajv** (JSON-Schema, sprachneutral für Packs).
+- **clipper2-ts** (statt clipper2-js: dort defekter PolyTree, Angular-Abhängigkeiten, 2 High-Audit-Funde) (Polygon-Boolesche Operationen), **polylabel** (Labels), **Ajv** (JSON-Schema, sprachneutral für Packs).
 - **Preact + @preact/signals** (Panels), eigenes **Canvas 2D** (Zeichenfläche), **three.js** (3D).
 - **pdfjs-dist** (PDF-Unterlage), **dxf-parser** (Import), eigener DXF-Writer, **pdf-lib** (Vektor-PDF, eingebettete Plex-Schrift).
 - **proj4** nur für WGS84 ↔ KOSTRA-Raster-CRS. Playwright für wenige Smoke-/Screenshot-Tests.
@@ -52,7 +52,7 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 1. **[X] ✅ Setup**: Vite+TS strict, ESLint, Vitest, Skripte `lint typecheck test build`. *Abnahme:* `check.sh` grün; ESLint schlägt fehl, wenn `src/core` DOM oder `src/ui` importiert.
 
 ### M1 Kern-Bibliothek (UI-unabhängig)
-2. **[E] Geometrie**: Polygon, Fläche, Punkt-in-Polygon, Abstände, Schnitt, Clipper-Adapter. *Abnahme:* 20×10 = 200 m²; Referenz-L-Dach exakt; fast-check: Fläche invariant unter Verschiebung/Drehung.
+2. **[E] ✅ Geometrie**: Polygon, Fläche, Punkt-in-Polygon, Abstände, Schnitt, Clipper-Adapter. *Abnahme:* 20×10 = 200 m²; Referenz-L-Dach exakt; fast-check: Fläche invariant unter Verschiebung/Drehung.
 3. **[E] Datenmodell + Projekt-JSON** inkl. Versionsfeld/Migration. *Abnahme:* Round-Trip identisch; ungültiges Projekt → strukturierte Fehlerliste.
 4. **[E] Rule-Pack-Schemas + Loader** (Regeln, Grenzwerte, Abläufe, LES, Dachreiter (korrekte Herstellermaße), Abflussbeiwerte, Regenspenden, Dämmplatten, Orte). *Abnahme:* Beispiel-Packs validieren; Pack ohne `quelle` abgelehnt; Grenzwerte 300/350 m² nur aus Pack (Test mit 250/280 ändert Ergebnis).
 5. **[E] Höhenfeld (Punktabläufe)**: Facetten, Koten, HP/TP, Grate/Kehlen, Pfeile. *Abnahme:* 20×10, Gully Mitte z=0, 2 %: Ecken +0,200 m, 4 Facetten, 4 Kehlen; 2 Gullys (5|5),(15|5): Grat x=10, HP +0,100 m.
@@ -113,8 +113,8 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 - Offen: Anschlusshöhen/Notabdichtung; Abflussbeiwert Gründach; Erfolgskriterium V1 (Vorschlag: Bürodach inkl. Dämmplan in < 30 min, Ergebnis vom Planer bestätigt).
 
 ## Übergabe
-- Nächster Schritt: **2 Geometrie-Grundlagen** [E] via `engineer`. Schritt 1 erledigt (check.sh grün, Lint-Grenze per Test belegt).
+- Nächster Schritt: **3 Datenmodell + Projekt-JSON** [E] via `engineer`. Schritte 1–2 erledigt (check.sh grün, 36 Tests). Geometrie: `src/core/geometry` (Vec2, Polygon{outer,holes}, EPS, Fläche, Punkt-in-Polygon, Segmente, Clipper-Adapter mit 0,1-mm-Raster; Offset >0 = nach außen).
 - Stand: DESIGN.md (inkl. §11 Dämmplan, Einzugsflächen ohne Schraffur), Intent, Referenzbilder vorhanden; Setup-Code vorhanden (Vite, TS strict, ESLint, Vitest; `tsconfig.core.json` ohne DOM).
 - Entscheidungen: Daten bleiben ausschließlich lokal (Datei auf Festplatte); kein öffentliches Hosting (siehe Schritt 22/32); Kern rein in `src/core`; Regeln, Herstellerdaten, KOSTRA, PLZ nur in `rulepacks/`; V1 = M1–M5 inkl. Gefälledämmplan; Standort offline, Geocoding optional per Opt-in.
 - Vom Nutzer anfordern: Plattenkatalog (R6), Loro-Tabelle, LES-Klärung, KOSTRA-Lizenzprüfung, Original-Regelwerk.
-- Stolperfallen: keine Grenzwerte im Code; Regenspende immer Pack-Wert und Nutzerwert speichern; Einzugsflächen nie schraffieren; Attikafläche zählt zur Ablauffläche, steht aber nie im Gefälle-/Dämmplan; Koten 3 Nachkommastellen nur in der UI formatieren.
+- Stolperfallen: Attika-Fläche (Schritt 7) als Summe Segmentlänge × b rechnen, nicht als Offset-Differenz (Offset außen 18,36 m² statt 18,00 m²; Nicht-Rechtecke und b je Segment noch klären); keine Grenzwerte im Code; Regenspende immer Pack-Wert und Nutzerwert speichern; Einzugsflächen nie schraffieren; Attikafläche zählt zur Ablauffläche, steht aber nie im Gefälle-/Dämmplan; Koten 3 Nachkommastellen nur in der UI formatieren.
