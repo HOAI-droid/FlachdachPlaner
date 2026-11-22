@@ -63,6 +63,13 @@ function labelPunkt(f: Einzugsflaeche): Vec2 {
   return groesste.outer[0]!;
 }
 
+function flaechenLabel(e: Ergebnis, f: Ergebnis["catchments"]["flaechen"][number]): string {
+  const id = e.eids.get(f.id) ?? "E?";
+  return f.attikaFlaeche > 0.005
+    ? `${id} · Dach ${zahl(f.dachFlaeche, 0)} m² + Attika ${zahl(f.attikaFlaeche, 0)} m² = ${zahl(f.gesamtFlaeche, 0)} m²`
+    : `${id} · ${zahl(f.gesamtFlaeche, 0)} m²`;
+}
+
 export function zeichneEinzugsflaechen(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, e: Ergebnis): void {
   const px = 1 / vp.scale;
   const belegung = new Belegung(vp);
@@ -92,10 +99,7 @@ export function zeichneEinzugsflaechen(ctx: CanvasRenderingContext2D, vp: Viewpo
   // Labels (nach den Flächen, damit nichts überdeckt wird)
   for (const f of e.catchments.flaechen) {
     const [, rand] = farbe(f.farbe);
-    const id = e.eids.get(f.id) ?? "E?";
-    const s = f.attikaFlaeche > 0.005
-      ? `${id} · Dach ${zahl(f.dachFlaeche, 0)} m² + Attika ${zahl(f.attikaFlaeche, 0)} m² = ${zahl(f.gesamtFlaeche, 0)} m²`
-      : `${id} · ${zahl(f.gesamtFlaeche, 0)} m²`;
+    const s = flaechenLabel(e, f);
     const st = f.bewertung?.stufe;
     const symbol = st === "fehler" ? "achteck" : st === "hinweis" ? "dreieck" : null;
     const w = textBreite(ctx, s, 12, true) + 12 + (symbol ? 14 : 0), h = 19;
@@ -130,26 +134,47 @@ export function zeichneFaltlinien(ctx: CanvasRenderingContext2D, vp: Viewport, e
 /** Pfeillänge und Mindestabstand zum Ablaufsymbol in px. */
 const PFEIL_PX = 44, PFEIL_ABLAUF_PX = 14;
 
-/** Ein Gefällepfeil je Facette (mittig, ganz in der Facette, wenn sie groß genug ist), auch in Zonen. */
+/** Ein Gefällepfeil je Facette (mittig, ganz in der Facette, wenn sie groß genug ist), auch in Zonen; weicht Flächen-Badges aus. */
 export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
   const px = 1 / vp.scale, belegung = new Belegung(vp);
+  // Badge-Rechtecke (Welt, Mitte = labelPunkt) – Pfeile dürfen sie nicht kreuzen.
+  const badges = e.catchments.flaechen.map((f) => {
+    const p = labelPunkt(f), w = (textBreite(ctx, flaechenLabel(e, f), 12, true) + 26) * px, h = 27 * px;
+    return { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - h / 2, y1: p.y + h / 2 };
+  });
+  const trifft = (a: Vec2, b: Vec2) => badges.some((r) => {
+    for (let i = 0; i <= 12; i++) {
+      const x = a.x + (b.x - a.x) * i / 12, y = a.y + (b.y - a.y) * i / 12;
+      if (x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1) return true;
+    }
+    return false;
+  });
   ctx.save(); ctx.setLineDash([]); ctx.strokeStyle = css("--text-muted", "#555"); ctx.lineWidth = px; ctx.lineCap = "round";
   for (const d of e.slope.dachflaechen) {
     const abl = d.koten.filter((k) => k.art === "ablauf").map((k) => k.position);
     for (const a of d.pfeile) {
       const f = d.facetten.find((x) => x.id === a.facetteId);
       if (!f) continue;
-      const lage = pfeilLage(a.start, a.richtung, f.polygon, PFEIL_PX * px, abl, PFEIL_ABLAUF_PX * px);
+      const rx = a.richtung.x, ry = a.richtung.y;
+      let lage: { von: Vec2; bis: Vec2 } | null = null;
+      for (const q of [0, 24, -24, 48, -48]) for (const l of [0, 30, -30, 60, -60]) {
+        const m = { x: a.start.x + (rx * q - ry * l) * px, y: a.start.y + (ry * q + rx * l) * px };
+        const c = pfeilLage(m, a.richtung, f.polygon, PFEIL_PX * px, abl, PFEIL_ABLAUF_PX * px);
+        if (c && !trifft(c.von, c.bis)) { lage = c; break; }
+      }
       if (!lage) continue;
-      const { x, y } = lage.von, rx = a.richtung.x, ry = a.richtung.y, len = Math.hypot(lage.bis.x - x, lage.bis.y - y);
+      const { x, y } = lage.von, len = Math.hypot(lage.bis.x - x, lage.bis.y - y);
       const ex = lage.bis.x, ey = lage.bis.y, k = 8 * px;
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey);
       ctx.moveTo(ex - (rx * Math.cos(0.45) - ry * Math.sin(0.45)) * k, ey - (ry * Math.cos(0.45) + rx * Math.sin(0.45)) * k); ctx.lineTo(ex, ey);
       ctx.lineTo(ex - (rx * Math.cos(-0.45) - ry * Math.sin(-0.45)) * k, ey - (ry * Math.cos(-0.45) + rx * Math.sin(-0.45)) * k);
       ctx.stroke();
       const s = prozent(a.gefaelle * 100, 1);
-      const mx = x + rx * len / 2 - ry * 7 * px, my = y + ry * len / 2 + rx * 7 * px;
-      if (belegung.belege({ x: mx, y: my }, -16, -6, 32, 12)) text(ctx, vp, s, mx, my, { px: 11, mono: true, ankerMitte: true, winkel: Math.atan2(-ry, rx) });
+      // Text immer lesbar (nie kopfstehend) und über der Linie, nicht auf ihr.
+      let w = Math.atan2(-ry, rx);
+      if (w > Math.PI / 2) w -= Math.PI; else if (w < -Math.PI / 2) w += Math.PI;
+      const mx = x + rx * len / 2 + Math.sin(w) * 9 * px, my = y + ry * len / 2 + Math.cos(w) * 9 * px;
+      if (belegung.belege({ x: mx, y: my }, -16, -6, 32, 12)) text(ctx, vp, s, mx, my, { px: 11, mono: true, ankerMitte: true, winkel: w });
     }
   }
   ctx.restore();
@@ -170,12 +195,16 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
     text(ctx, vp, s, p.x + 10 * px, p.y + dy * px, { px: 12, mono: true, farbe: fett ? css("--accent", "#1F4FA3") : tx });
   };
   const alle = kotenMarken(e.slope.dachflaechen);
+  // Der Ablauf trägt seine eigene Kote (Beschriftung); Koten in unmittelbarer Nähe (< 40 px) würden nur überlagern.
+  const ablaeufe = alle.filter((k) => k.art === "ablauf").map((k) => k.position);
+  const amAblauf = (k: KotenMarke) => k.art !== "hochpunkt" && k.art !== "tiefpunkt" &&
+    ablaeufe.some((q) => Math.hypot(q.x - k.position.x, q.y - k.position.y) * vp.scale < 40);
   // HP/TP zuerst (je Art bis zu 2 Orte als „HP …“, weitere als einfache Kote), dann übrige; Abläufe sind eigens beschriftet.
   const zaehl = { hochpunkt: 0, tiefpunkt: 0 };
   const hpTp = (k: KotenMarke) => k.art === "hochpunkt" || k.art === "tiefpunkt";
   const rest: KotenMarke[] = [];
   for (const k of alle) {
-    if (k.art === "ablauf") continue;
+    if (k.art === "ablauf" || amAblauf(k)) continue;
     if ((k.art === "hochpunkt" || k.art === "tiefpunkt") && zaehl[k.art]++ < 2) marke(k.position, `${k.art === "hochpunkt" ? "HP" : "TP"} ${kote(k.kote)}`, true);
     else rest.push(k);
   }
