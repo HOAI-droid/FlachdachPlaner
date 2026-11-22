@@ -19,7 +19,7 @@ export function kantenLage(d: Dachflaeche, kanteId: string, abstand: number): { 
 }
 
 export function zeichneEntwaesserung(
-  ctx: CanvasRenderingContext2D, vp: Viewport, d: Dachflaeche, e: Entwaesserung, belegung: Belegung, id?: string,
+  ctx: CanvasRenderingContext2D, vp: Viewport, d: Dachflaeche, e: Entwaesserung, belegung: Belegung, id?: string, beschriftung = true,
 ): void {
   const px = 1 / vp.scale;
   const linie = css("--text", "#222"), grund = css("--surface", "#fff");
@@ -68,6 +68,6 @@ export function zeichneEntwaesserung(
   const zt = `z ${kote(e.z).replace("+", "")}`;
   const s = id ? `${id} · ${zt}` : zt;
   const w = s.length * 7.2;
-  if (belegung.belege(anker, 10, 6, w, 14)) text(ctx, vp, s, anker.x + 10 * px, anker.y + 6 * px, { px: 12, mono: true, farbe: linie });
+  if (beschriftung && belegung.belege(anker, 10, 6, w, 14)) text(ctx, vp, s, anker.x + 10 * px, anker.y + 6 * px, { px: 12, mono: true, farbe: linie });
   ctx.restore();
 }

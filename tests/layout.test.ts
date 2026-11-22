@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
-  computeSlope, createProject, hoeheDachflaeche, layoutInsulation, loadRulePack, polygonArea, pruefeVerlegeplan,
+  computeSlope, createProject, hoeheDachflaeche, layoutInsulation, plattenDaemmdicke, loadRulePack, polygonArea, pruefeVerlegeplan,
   validateRulePack,
   type Dachflaeche, type DachGefaelle, type DaemmplattenPack, type Entwaesserung, type Facette, type InsulationLayout,
   type Kontur, type ProjectModel, type SlopeResult, type Vec2,
@@ -249,5 +249,14 @@ describe("Schritt 25: Maß- und Lückenprüfung", () => {
       bezeichnungen: Object.fromEntries(Object.entries(zaehler).sort(([x], [y]) => x.localeCompare(y, "de"))),
       ids: d.platten.slice(0, 5).map((p) => p.id),
     }).toMatchSnapshot();
+  });
+});
+
+describe("Schritt 26: Ø Gefälledämmung aus dem Plattenlayout", () => {
+  it("Referenz-L-Dach: Ø laut Plattenlayout weicht höchstens 2 mm vom Höhenfeld-Wert ab", () => {
+    const { s, l } = plan(L_DACH);
+    const k = plattenDaemmdicke(l.dachflaechen[0]!)!;
+    expect(k).not.toBeNull();
+    expect(Math.abs(k.mittel - s.dachflaechen[0]!.daemmung!.mittel)).toBeLessThanOrEqual(2);
   });
 });

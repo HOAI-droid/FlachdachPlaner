@@ -2,7 +2,7 @@ import { type Viewport, createViewport, fitBounds, panBy, screenToWorld, scaleDe
 
 /** Zeichnungsreihenfolge laut DESIGN.md §6 (aufsteigend = weiter oben). */
 export const LAYER_ORDER = [
-  "unterlage", "einzugsflaechen", "kontur", "pfeile", "symbole", "koten", "auswahl", "fang",
+  "unterlage", "einzugsflaechen", "daemmplan", "kontur", "pfeile", "symbole", "koten", "auswahl", "fang",
 ] as const;
 export type LayerId = (typeof LAYER_ORDER)[number];
 

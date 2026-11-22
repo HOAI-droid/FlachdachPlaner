@@ -81,6 +81,8 @@ export interface Shell {
   stage: HTMLElement;
   status: { cursor: HTMLElement; scale: HTMLElement; snap: HTMLElement; unterlage: HTMLElement };
   onTool(cb: (id: string) => void): void;
+  /** Planansicht: "gefaelle" (Gefälleplan) oder "daemmplan" (Gefälledämmplan). */
+  onAnsicht(cb: (a: "gefaelle" | "daemmplan") => void): void;
   /** Markiert das aktive Werkzeug (z. B. nach Esc oder Tastenkürzel). */
   setTool(id: string): void;
   /** Panel-Abschnitte (Inhalt wird von der UI-Steuerung befüllt). */
@@ -97,6 +99,10 @@ export function mountShell(root: HTMLElement): Shell {
   const head = el("header", "head");
   head.append(el("h1", "", "Flachdachplaner"));
   head.append(segment([["2d", "2D"], ["3d", "3D"]], () => {}, "2d"));
+  let ansichtCb: (a: "gefaelle" | "daemmplan") => void = () => {};
+  const ansicht = segment([["gefaelle", "Gefälle"], ["daemmplan", "Dämmplan"]], (v) => ansichtCb(v as "gefaelle" | "daemmplan"), "gefaelle");
+  ansicht.setAttribute("aria-label", "Planansicht");
+  head.append(ansicht);
   const undo = el("button", "btn icon");
   const redo = el("button", "btn icon");
   for (const [b, id, name] of [[undo, "undo", "Rückgängig  Strg+Z"], [redo, "redo", "Wiederholen  Strg+Y"]] as const) {
@@ -176,7 +182,7 @@ export function mountShell(root: HTMLElement): Shell {
   hint.style.cssText = "position:fixed;inset:0 0 auto 0;z-index:10";
 
   return {
-    stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; },
+    stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; }, onAnsicht: (cb) => { ansichtCb = cb; },
     setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, projekt: proj, update }, undo, redo,
   };
 }

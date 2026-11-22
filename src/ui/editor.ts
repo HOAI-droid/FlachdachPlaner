@@ -5,11 +5,12 @@ import {
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, serializeProject, snap, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
-  type Abweichung, type Auswahl, type Befehl, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
+  type Abweichung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
 import type { Viewport } from "./canvas/viewport";
+import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
 import { berechne, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
 import { meter, quadratmeter, zahl } from "./format";
 import { standardTyp, typOptionen } from "./packs";
@@ -473,6 +474,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const b = el("div", "pad"); b.append(button("Löschen", loescheAuswahl)); p.append(b);
   }
 
+  let ansicht: "gefaelle" | "daemmplan" = "gefaelle";
+  let plan: InsulationLayout | null = null, planFuer: Ergebnis | null = null;
+  shell.onAnsicht((a) => { ansicht = a; stage.invalidate(); });
   const api: Editor = { beiAenderung: null } as unknown as Editor;
   function refresh() {
     queueMicrotask(() => api.beiAenderung?.());
@@ -552,7 +556,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const px = 1 / vp.scale;
     const belegung = new Belegung(vp);
     for (const d of modell().dachflaechen) {
-      for (const e of d.entwaesserung) zeichneEntwaesserung(ctx, vp, d, e, belegung, ergebnis?.eids.get(`${d.id}/${e.id}`));
+      for (const e of d.entwaesserung) zeichneEntwaesserung(ctx, vp, d, e, belegung, ergebnis?.eids.get(`${d.id}/${e.id}`), ansicht === "gefaelle");
       for (const t of d.tuerschwellen) {
         const i = d.kontur.findIndex((q) => q.id === t.lage.kante);
         if (i < 0) continue;
@@ -649,9 +653,14 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
 
   stage.setLayer("kontur", zeichneKontur);
-  stage.setLayer("einzugsflaechen", (ctx, vp) => { if (ergebnis) zeichneEinzugsflaechen(ctx, vp, modell(), ergebnis); });
-  stage.setLayer("pfeile", (ctx, vp) => { if (ergebnis) { zeichnePfeile(ctx, vp, ergebnis); zeichneNotbereich(ctx, vp, modell(), ergebnis); } });
-  stage.setLayer("koten", (ctx, vp) => { if (ergebnis) zeichneKoten(ctx, vp, ergebnis); });
+  stage.setLayer("einzugsflaechen", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") zeichneEinzugsflaechen(ctx, vp, modell(), ergebnis); });
+  stage.setLayer("daemmplan", (ctx, vp) => {
+    if (!ergebnis || ansicht !== "daemmplan") return;
+    if (planFuer !== ergebnis) { planFuer = ergebnis; try { plan = berechnePlan(modell(), ergebnis.slope); } catch { plan = null; } }
+    zeichneDaemmplan(ctx, vp, modell(), ergebnis.slope, plan);
+  });
+  stage.setLayer("pfeile", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") { zeichnePfeile(ctx, vp, ergebnis); zeichneNotbereich(ctx, vp, modell(), ergebnis); } });
+  stage.setLayer("koten", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") zeichneKoten(ctx, vp, ergebnis); });
   stage.setLayer("symbole", zeichneSymbole);
   stage.setLayer("auswahl", zeichneAuswahl);
   stage.setLayer("fang", zeichneFang);
