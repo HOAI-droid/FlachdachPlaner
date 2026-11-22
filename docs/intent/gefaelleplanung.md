@@ -47,3 +47,11 @@ Flachdachrichtlinie (ZVDH) Ausgabe Januar 2026 + DIN 18531: Planungsziel i. d. R
 - Gefälle Abdichtung zur Hauptentwässerung bei Kies/Splitt und Stelzlagern **soll/sollte ≥ 1 %**; Kies: Drainagematte ≥ 1,5 cm, Stichkanäle ≥ 20 cm² im Abstand ≤ 2,1 m; Stelzlager ≥ 2 cm. Beläge ≥ 1 % Gefälle zu Gullys/Speiern.
 - Ab Schneelastzone 3: Rinnen/Abläufe/Speier beheizt.
 - **Anzahl Notabläufe (Schätzung)**: Q = r · C · A / 10 000 (l/s) je Einzugsfläche; n_not = aufrunden(Q_Notfall · 2 / Q_Ablauf bei 35 mm Anstau), mindestens 1. Eingaben: Regenspende (Standort, Jahrhundertregen), Abflussbeiwert (Gründach), Abflussleistungstabelle des Ablaufs (Herstellerdaten, z. B. Loro). Ausgabe als Schätzung mit Bereich/Position, keine Bemessung.
+
+## Bestätigt (Nutzer)
+- Umfang V1 inkl. Dachreiter und LES; 300/350 m² je Ablauf; Intent-Entwurf freigegeben.
+- **Regenspende aus KOSTRA (DWD)** holen (Standort -> Wert, Jahrhundertregen). Art der Anbindung (offline Tabelle/Import vs. Online-Abfrage) vom architect prüfen lassen; Fallback: manuelle Eingabe.
+- Ablauf-/Herstellerdaten (Loro-Abflussleistungstabelle) liegen noch nicht vor -> später als Datei nachliefern.
+
+## Kernanforderung: Regelwerk updatefähig (Rule-Packs)
+Richtlinien, Grenzwerte, Sicherheitsbeiwerte, Mindestmaße, Herstellerdaten (Abläufe, LES-Sets, Dachreiter) und Regenspendendaten liegen als **versionierte Datenpakete** (z. B. JSON, mit Quelle, Ausgabestand, Gültig-ab) außerhalb des Codes. Neue Richtlinienausgabe = neues Paket laden/ändern, ohne Neuprogrammierung. Projekte merken sich das verwendete Regelwerk (Version). Prüfungen im Plan nennen Regel + Quelle.
