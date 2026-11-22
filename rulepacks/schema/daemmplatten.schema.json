@@ -67,7 +67,11 @@
               "typ": { "$ref": "basis.schema.json#/$defs/eintragId", "description": "zugehöriger Plattentyp" },
               "seite": { "enum": ["L", "R"] },
               "laenge": { "$ref": "basis.schema.json#/$defs/laenge" },
-              "breite": { "$ref": "basis.schema.json#/$defs/laenge" }
+              "breite": { "$ref": "basis.schema.json#/$defs/laenge" },
+              "winkel": {
+                "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 90,
+                "description": "Winkel zwischen Kehle und Reihenrichtung in Grad (Standard 45)"
+              }
             },
             "additionalProperties": false
           }

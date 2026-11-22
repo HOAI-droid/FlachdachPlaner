@@ -84,7 +84,7 @@ export interface Shell {
   /** Markiert das aktive Werkzeug (z. B. nach Esc oder Tastenkürzel). */
   setTool(id: string): void;
   /** Panel-Abschnitte (Inhalt wird von der UI-Steuerung befüllt). */
-  panels: { unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement; standort: HTMLElement; ergebnis: HTMLElement };
+  panels: { unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement; standort: HTMLElement; ergebnis: HTMLElement; projekt: HTMLElement };
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
 }
@@ -177,6 +177,6 @@ export function mountShell(root: HTMLElement): Shell {
 
   return {
     stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; },
-    setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis }, undo, redo,
+    setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, projekt: proj }, undo, redo,
   };
 }

@@ -10,8 +10,10 @@ import { mountStage } from "./canvas/stage";
 import { scaleDenominator } from "./canvas/viewport";
 import { demoUnderlay } from "./demo";
 import { zahl } from "./format";
-import { mountEditor, SPEICHER_KEY } from "./editor";
-import { parseProject } from "../core/index";
+import { mountEditor } from "./editor";
+import { autosaveLesen, leseProjekt } from "./speicher";
+import { ladeInstallierte } from "./packs";
+import { mountUpdate } from "./update";
 
 const root = document.getElementById("app");
 if (root) {
@@ -27,12 +29,13 @@ if (root) {
     stage.setLayer("unterlage", d.draw);
     stage.fit(...d.bounds);
   }
-  let gespeichert: string | null = null;
-  try { gespeichert = localStorage.getItem(SPEICHER_KEY); } catch { /* ohne Speicher weiter */ }
-  const editor = mountEditor(shell, stage);
-  try {
-    if (gespeichert) { const r = parseProject(gespeichert); if (r.ok) editor.lade(r.projekt); }
-  } catch { /* ohne Speicher weiter */ }
-  (window as unknown as { __stage: typeof stage; __editor: typeof editor }).__stage = stage;
-  (window as unknown as { __editor: typeof editor }).__editor = editor;
+  void (async () => {
+    const gespeichert = await autosaveLesen(); // vor mountEditor lesen, sonst überschreibt der erste Autosave den Stand
+    await ladeInstallierte();
+    const editor = mountEditor(shell, stage);
+    mountUpdate(shell.panels.projekt, editor);
+    if (gespeichert) { const r = leseProjekt(gespeichert); if (r.ok) editor.lade(r.projekt); }
+    (window as unknown as { __editor: typeof editor }).__editor = editor;
+  })();
+  (window as unknown as { __stage: typeof stage }).__stage = stage;
 }

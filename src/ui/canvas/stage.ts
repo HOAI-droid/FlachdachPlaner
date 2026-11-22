@@ -20,6 +20,8 @@ export interface Stage {
   setLayer(id: LayerId, draw: LayerDraw | null): void;
   invalidate(): void;
   fit(minX: number, minY: number, maxX: number, maxY: number): void;
+  /** Verschiebt die Ansicht, sodass der Weltpunkt in der Mitte liegt (Maßstab bleibt). */
+  centerOn(x: number, y: number): void;
   readonly viewport: Viewport;
   onChange(cb: (vp: Viewport, cursor: [number, number] | null) => void): void;
   /** Zeigerereignisse in Weltkoordinaten (m). Klicks mit Space/Mitteltaste (Pan) werden nicht gemeldet. */
@@ -140,6 +142,7 @@ export function mountStage(host: HTMLElement): Stage {
     setLayer(id, draw) { if (draw) layers.set(id, draw); else layers.delete(id); invalidate(); },
     invalidate,
     fit(a, b, c, d) { vp = fitBounds(vp, a, b, c, d); changed(); },
+    centerOn(x, y) { vp = { ...vp, cx: x, cy: y }; changed(); },
     get viewport() { return vp; },
     onChange(f) { cb = f; },
     onPointer(h) { ph = h; },

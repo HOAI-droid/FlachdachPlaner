@@ -115,3 +115,12 @@ button, input, select { font: inherit; color: inherit; }
 .field-row { grid-template-columns: 1fr 1fr; }
 .field-row .field { grid-template-columns: 1fr; gap: var(--sp-1); padding: 0; }
 .regen .field { grid-template-columns: 1fr 96px; }
+
+.pruef-zaehler { padding: var(--sp-3) var(--sp-4) 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.befund.klick { cursor: pointer; }
+.befund.klick:hover { outline: 1px solid var(--line-strong); }
+.befund.klick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.num-klein { width: 72px; font-family: var(--font-mono); }
+.abweichungen details { margin-bottom: var(--sp-3); }

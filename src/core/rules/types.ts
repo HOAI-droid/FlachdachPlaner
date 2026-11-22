@@ -95,6 +95,8 @@ export interface Sonderplatte {
 }
 export interface Kehlkeil {
   readonly id: string; readonly typ: string; readonly seite: "L" | "R"; readonly laenge: number; readonly breite: number;
+  /** Winkel zwischen Kehle und Reihenrichtung in Grad (fehlt = 45). */
+  readonly winkel?: number;
 }
 
 export interface OrtEintrag { readonly plz: string; readonly ort: string; readonly lat: number; readonly lon: number }

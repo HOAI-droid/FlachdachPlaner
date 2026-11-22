@@ -2,10 +2,11 @@
 import {
   computeCatchments, computeSlope, estimateEmergency, pointInPolygon, polygonCentroid, runChecks,
   type Befund, type CatchmentResult, type Dachflaeche, type EmergencyEstimate, type Einzugsflaeche, type ProjectModel,
-  type SlopeResult, type Vec2,
+  type Auswahl, type SlopeResult, type Vec2,
 } from "../core/index";
 import type { Viewport } from "./canvas/viewport";
 import { kote, millimeter, prozent, quadratmeter, zahl } from "./format";
+import { kantenLage } from "./symbole";
 import { daemmStandard, packs } from "./packs";
 import { Belegung, badge, bahn, css, dunkel, text, textBreite } from "./zeichnen";
 
@@ -231,16 +232,71 @@ export function fuelleErgebnis(p: HTMLElement, m: ProjectModel, e: Ergebnis): vo
 }
 
 const STUFE: Record<string, string> = { fehler: "Fehler", warnung: "Warnung", hinweis: "Hinweis" };
-export function fuellePruefliste(p: HTMLElement, m: ProjectModel, e: Ergebnis | null): void {
+function entPunkt(d: Dachflaeche, e: Dachflaeche["entwaesserung"][number]): Vec2 | null {
+  if (e.art === "gully" || e.art === "notablauf") return e.position;
+  if (e.art === "les") return { x: (e.von.x + e.bis.x) / 2, y: (e.von.y + e.bis.y) / 2 };
+  return kantenLage(d, e.lage.kante, e.lage.abstand)?.p ?? null;
+}
+
+export interface BefundZiel { readonly auswahl: Auswahl | null; readonly mitte: Vec2 | null }
+
+/** Findet zu einem Befund das betroffene Objekt (Auswahl) und einen Punkt zum Zentrieren. */
+export function befundZiel(m: ProjectModel, b: Befund): BefundZiel {
+  const dachIds = b.dachflaecheId ? [b.dachflaecheId] : m.dachflaechen.map((d) => d.id);
+  const mittel = (k: readonly Vec2[]): Vec2 | null => (k.length ? polygonCentroid({ outer: [...k], holes: [] }) : null);
+  for (const did of dachIds) {
+    const d = dachVon(m, did);
+    if (!d) continue;
+    if (b.objektId === null || b.objektId === d.id) {
+      if (b.objektId === d.id) return { auswahl: { art: "dach", id: d.id, dachId: d.id }, mitte: b.ort ?? mittel(d.kontur) };
+      continue;
+    }
+    const id = b.objektId;
+    const ent = d.entwaesserung.find((x) => x.id === id);
+    if (ent) { const p0 = entPunkt(d, ent); return { auswahl: { art: "entwaesserung", id, dachId: d.id }, mitte: b.ort ?? p0 ?? mittel(d.kontur) }; }
+    const au = d.aufbauten.find((x) => x.id === id);
+    if (au) return { auswahl: { art: "aufbau", id, dachId: d.id }, mitte: b.ort ?? mittel(au.kontur) };
+    const zo = d.zonen.find((x) => x.id === id);
+    if (zo) return { auswahl: { art: "zone", id, dachId: d.id }, mitte: b.ort ?? mittel(zo.kontur) };
+    const at = d.attika.find((x) => x.id === id);
+    if (at) {
+      const i = d.kontur.findIndex((q) => q.id === at.kante), a = d.kontur[i], c = d.kontur[(i + 1) % d.kontur.length];
+      return { auswahl: { art: "attika", id, dachId: d.id }, mitte: b.ort ?? (a && c ? { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 } : mittel(d.kontur)) };
+    }
+    const ts = d.tuerschwellen.find((x) => x.id === id);
+    if (ts) return { auswahl: { art: "tuerschwelle", id, dachId: d.id }, mitte: b.ort ?? kantenLage(d, ts.lage.kante, ts.lage.abstand)?.p ?? mittel(d.kontur) };
+  }
+  // Einzugsfläche/Ablauf-ID aus Flächenbefunden: Ablauf suchen
+  return { auswahl: null, mitte: b.ort ?? null };
+}
+
+const ZAEHLER: Record<string, [string, string]> = { fehler: ["Fehler", "Fehler"], warnung: ["Warnung", "Warnungen"], hinweis: ["Hinweis", "Hinweise"] };
+
+export function fuellePruefliste(p: HTMLElement, m: ProjectModel, e: Ergebnis | null, bei?: (ziel: BefundZiel) => void): void {
   p.replaceChildren();
   if (m.dachflaechen.length === 0 || !e) { p.append(el("div", "empty", "Noch keine Dachfläche gezeichnet.")); return; }
-  const liste = el("ul", "befunde");
   const rang = { fehler: 0, warnung: 1, hinweis: 2 } as const;
-  for (const b of [...e.befunde].sort((x, y) => rang[x.stufe] - rang[y.stufe])) {
+  const sortiert = [...e.befunde].sort((x, y) => rang[x.stufe] - rang[y.stufe] || x.code.localeCompare(y.code) || x.meldung.localeCompare(y.meldung));
+  const anzahl = { fehler: 0, warnung: 0, hinweis: e.hinweise.length };
+  for (const b of sortiert) anzahl[b.stufe]++;
+  const kopf = el("div", "pruef-zaehler");
+  kopf.dataset.k = "zaehler";
+  kopf.textContent = (["fehler", "warnung", "hinweis"] as const).map((k) => `${anzahl[k]} ${ZAEHLER[k]![anzahl[k] === 1 ? 0 : 1]}`).join(" · ");
+  p.append(kopf);
+  const liste = el("ul", "befunde");
+  for (const b of sortiert) {
     const li = el("li", `befund ${b.stufe}`);
     li.dataset.code = b.code;
+    if (b.objektId) li.dataset.objekt = b.objektId;
     li.append(el("span", "stufe", STUFE[b.stufe]!), el("span", "", b.meldung));
     li.title = b.quelle;
+    const ziel = bei ? befundZiel(m, b) : null;
+    if (ziel && (ziel.auswahl || ziel.mitte)) {
+      li.tabIndex = 0; li.setAttribute("role", "button"); li.classList.add("klick");
+      const los = () => bei!(ziel);
+      li.addEventListener("click", los);
+      li.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); los(); } });
+    }
     liste.append(li);
   }
   for (const h of e.hinweise) { const li = el("li", "befund hinweis"); li.dataset.code = "berechnung"; li.append(el("span", "stufe", "Hinweis"), el("span", "", h)); liste.append(li); }

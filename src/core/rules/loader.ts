@@ -148,6 +148,13 @@ function bezugsFehler(pack: RulePack): ValidationError[] {
           });
         }
       });
+      const erste = d.typen[0], letzte = d.typen[d.typen.length - 1];
+      if (d.zusatzlage && erste && letzte && Math.abs(d.zusatzlage.dicke - (letzte.dickeEnde - erste.dickeAnfang)) > EPS) {
+        f.push({
+          pfad: "/daten/zusatzlage/dicke",
+          meldung: `Lücke: Zusatzlage (${d.zusatzlage.dicke} m) ≠ Enddicke Typ ${letzte.typ} − Anfangsdicke Typ ${erste.typ}`,
+        });
+      }
       const typen = new Set(d.typen.map((t) => t.typ));
       d.kehlkeile?.forEach((k, i) => {
         if (!typen.has(k.typ)) f.push({ pfad: `/daten/kehlkeile/${i}/typ`, meldung: `Plattentyp "${k.typ}" nicht in typen` });

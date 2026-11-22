@@ -1,5 +1,5 @@
 /** Unterlagen in der UI (PLAN Schritte 15/16): DXF (Vektor, fangbar) und PDF (Bitmap, kalibrierbar). */
-import { ausNenner, anwenden, type Aehnlichkeit, type SnapSegment, type Unterlage } from "../core/index";
+import { ausNenner, anwenden, zuPasspunkten, type Aehnlichkeit, type SnapSegment, type Unterlage } from "../core/index";
 import { flatten, parseDxf, type DxfDokument } from "../io/dxf";
 import type { LayerDraw } from "./canvas/stage";
 
@@ -19,6 +19,8 @@ export interface UnterlageUI {
   /** minX, minY, maxX, maxY in Welt-Metern; null, wenn leer. */
   bounds(): [number, number, number, number] | null;
   /** Nur PDF: Abbildung Seite (pt, y nach oben) → Welt (m). */
+  /** Nur DXF: Ausrichtung der Zeichnung (Zwei-Punkt-Zuordnung, Schritt 22a). */
+  readonly ausrichtung?: { get(): Aehnlichkeit; set(t: Aehnlichkeit): void };
   readonly kalibrierung?: {
     get(): Aehnlichkeit;
     set(t: Aehnlichkeit): void;
@@ -42,23 +44,26 @@ export async function ladeDxf(file: File): Promise<UnterlageUI> {
   const doc: DxfDokument = parseDxf(new TextDecoder("utf-8").decode(buf));
   const sichtbar = new Set(doc.layer);
   let cache: { segmente: readonly SnapSegment[]; pfad: Path2D; bounds: [number, number, number, number] | null } | null = null;
+  let tr: Aehnlichkeit = { a: 1, b: 0, tx: 0, ty: 0 };
   const bauen = () => {
     const r = flatten(doc, { layerSichtbar: sichtbar });
     const pfad = new Path2D();
     let b: [number, number, number, number] | null = null;
-    for (const s of r.segmente) {
+    const segmente = r.segmente.map((s0) => ({ a: anwenden(tr, s0.a), b: anwenden(tr, s0.b) }));
+    for (const s of segmente) {
       pfad.moveTo(s.a.x, s.a.y); pfad.lineTo(s.b.x, s.b.y);
       for (const p of [s.a, s.b]) {
         b = b ? [Math.min(b[0], p.x), Math.min(b[1], p.y), Math.max(b[2], p.x), Math.max(b[3], p.y)] : [p.x, p.y, p.x, p.y];
       }
     }
-    return { segmente: r.segmente, pfad, bounds: b, einheitBekannt: r.einheitBekannt };
+    return { segmente, pfad, bounds: b, einheitBekannt: r.einheitBekannt };
   };
   const erst = bauen();
   cache = erst;
   return {
     art: "dxf", name: file.name, pruefsumme: await sha256(buf), layer: doc.layer, sichtbar,
     einheitUnbekannt: !erst.einheitBekannt,
+    ausrichtung: { get: () => tr, set(t) { tr = t; cache = null; } },
     setLayer(name, an) { if (an) sichtbar.add(name); else sichtbar.delete(name); cache = null; },
     segmente() { cache ??= bauen(); return cache.segmente; },
     bounds() { cache ??= bauen(); return cache.bounds; },
@@ -76,7 +81,7 @@ export async function ladeDxf(file: File): Promise<UnterlageUI> {
 export function dxfModell(u: UnterlageUI): Unterlage {
   return {
     dateiname: u.name, art: "dxf", pruefsumme: { algorithmus: "sha-256", wert: u.pruefsumme },
-    passpunkte: [{ unterlage: { x: 0, y: 0 }, welt: { x: 0, y: 0 } }, { unterlage: { x: 1, y: 0 }, welt: { x: 1, y: 0 } }],
+    passpunkte: zuPasspunkten(u.ausrichtung?.get() ?? { a: 1, b: 0, tx: 0, ty: 0 }),
   };
 }
 

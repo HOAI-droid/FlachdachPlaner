@@ -1,11 +1,11 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, serializeProject, snap, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
-  type Auswahl, type Befehl, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
+  type Abweichung, type Auswahl, type Befehl, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
@@ -19,6 +19,7 @@ import { kantenLage, zeichneEntwaesserung } from "./symbole";
 import { Belegung } from "./zeichnen";
 import type { Shell } from "./shell";
 import { dxfModell, ladeDxf, ladePdf, pdfModell, type UnterlageUI } from "./underlay";
+import { autosaveSchreiben, base64ZuBytes, bytesZuBase64, leseProjekt, speichereDatei, waehleDatei } from "./speicher";
 
 const FANG_PX = 10;
 const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", g: "gully", n: "notablauf", r: "dachreiter", l: "les", m: "measure" };
@@ -74,9 +75,10 @@ export interface Editor {
   lade(m: ProjectModel): void;
   /** Befehl ausführen (Undo-fähig), z. B. aus dem Standort-Panel. */
   ausfuehre(b: Befehl): void;
+  /** Wird nach jeder Aktualisierung aufgerufen (z. B. Update-Panel). */
+  beiAenderung: (() => void) | null;
 }
 
-export const SPEICHER_KEY = "flachdachplaner-projekt";
 
 export function mountEditor(shell: Shell, stage: Stage): Editor {
   let verlauf: Verlauf = neuerVerlauf(createProject("Neues Projekt", new Date().toISOString()));
@@ -88,6 +90,15 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let kante: ReturnType<typeof kantenTreffer> = null;
   let kal: { p1?: Vec2; p2?: Vec2 } = {};
   let meldung: string | null = null;
+  /** Originalbytes der geladenen Unterlage (nur im Speicher; für optionales Einbetten). */
+  let unterlageBytes: ArrayBuffer | null = null;
+  let einbetten = false;
+  /** Verweis aus geöffnetem Projekt, dessen Datei noch erneut gewählt werden muss. */
+  let offeneUnterlage: ProjectModel["unterlage"] = null;
+  let projektMeldung: string | null = null;
+  /** Unterlagenwechsel (22a): alte Fangstrecken, Toleranz, bewusst belassene Punkte. */
+  let tausch: { alt: SnapSegment[]; belassen: Set<string>; toleranz: number; pass: number[] } | null = null;
+  let abweichungen: Abweichung[] = [];
   let index: SnapIndex | null = null;
   let indexKey: [ProjectModel, readonly unknown[]] | null = null;
   let ergebnis: Ergebnis | null = null;
@@ -97,9 +108,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let standortPanel: ReturnType<typeof mountStandort> | null = null;
   const leeresErgebnis = { slope: { dachflaechen: [], hinweise: [] }, catchments: { flaechen: [], nachbarn: [], hinweise: [] }, notfall: [], befunde: [], hinweise: [], eids: new Map() } as unknown as Ergebnis;
   /** Autosave ins lokale Speichern (ohne Netz); Fehler (z. B. privater Modus) werden ignoriert. */
-  function speichere() {
-    try { localStorage.setItem(SPEICHER_KEY, serializeProject(modell())); } catch { /* ohne Speicher weiter */ }
-  }
+  function speichere() { void autosaveSchreiben(serializeProject(modell())); }
 
   const modell = () => verlauf.aktuell;
   const tol = () => FANG_PX / stage.viewport.scale;
@@ -179,8 +188,15 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   async function ladeDatei(f: File) {
     try {
       meldung = null;
+      const bytes = await f.arrayBuffer();
       const u = /\.pdf$/i.test(f.name) ? await ladePdf(f) : await ladeDxf(f);
-      unterlage = u;
+      unterlage = u; unterlageBytes = bytes;
+      const ref = offeneUnterlage; offeneUnterlage = null;
+      if (ref && ref.pruefsumme.wert === u.pruefsumme) {
+        const t = ausPasspunkten(ref.passpunkte);
+        if (t && u.kalibrierung) u.kalibrierung.set(t);
+        else if (t && u.ausrichtung) u.ausrichtung.set(t);
+      } else if (ref) meldung = `Die Datei „${u.name}“ weicht von der gespeicherten Unterlage ab (Prüfsumme). Bitte Maßstab/Ausrichtung prüfen.`;
       unterlageInsModell();
       stage.setLayer("unterlage", u.draw);
       const b = u.bounds();
@@ -191,7 +207,72 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
     refresh();
   }
-  function entferneUnterlage() { unterlage = null; unterlageInsModell(); stage.setLayer("unterlage", null); kal = {}; refresh(); }
+  async function tauscheUnterlage(f: File) {
+    try {
+      const alt = unterlage?.art === "dxf" ? unterlage.segmente().map((s) => ({ a: s.a, b: s.b })) : null;
+      const bytes = await f.arrayBuffer();
+      const u = /\.pdf$/i.test(f.name) ? await ladePdf(f) : await ladeDxf(f);
+      unterlage = u; unterlageBytes = bytes; offeneUnterlage = null; meldung = null; kal = {};
+      unterlageInsModell(); stage.setLayer("unterlage", u.draw);
+      tausch = alt && u.art === "dxf" ? { alt, belassen: new Set(), toleranz: TOLERANZ_STANDARD, pass: [0, 0, 0, 0, 0, 0, 0, 0] } : null;
+      if (!tausch) meldung = "Unterlage ersetzt. Abweichungsprüfung nur zwischen zwei DXF-Dateien möglich.";
+    } catch (e) { meldung = `Datei konnte nicht gelesen werden: ${e instanceof Error ? e.message : String(e)}`; }
+    refresh();
+  }
+  function berechneAbweichungen() {
+    abweichungen = tausch && unterlage?.art === "dxf"
+      ? findeAbweichungen(modell(), tausch.alt, unterlage.segmente(), tausch.toleranz).filter((a) => !tausch!.belassen.has(a.id)) : [];
+  }
+  function richteAus() {
+    if (!tausch || !unterlage?.ausrichtung) return;
+    const q = tausch.pass;
+    const t = ausPasspunkten([
+      { unterlage: { x: q[0]!, y: q[1]! }, welt: { x: q[2]!, y: q[3]! } },
+      { unterlage: { x: q[4]!, y: q[5]! }, welt: { x: q[6]!, y: q[7]! } },
+    ]);
+    if (!t) { meldung = "Passpunkte ungültig (Punkte fallen zusammen)."; refresh(); return; }
+    unterlage.ausrichtung.set(t); unterlageInsModell(); stage.invalidate(); meldung = null; refresh();
+  }
+  function panelAbweichungen(p: HTMLElement) {
+    if (!tausch) return;
+    const t = tausch;
+    const box = el("div", "pad abweichungen");
+    box.append(el("div", "panel-sub", "Unterlage ausgetauscht: Abweichungen"));
+    const al = el("details", "ausrichtung"); al.append(el("summary", "", "Ausrichtung (zwei Passpunkte)"));
+    const namen = ["Neu 1 x", "Neu 1 y", "Alt 1 x", "Alt 1 y", "Neu 2 x", "Neu 2 y", "Alt 2 x", "Alt 2 y"];
+    namen.forEach((n, i) => al.append(feld(n, zahl(t.pass[i]!, 3), `pass${i}`, (v) => { t.pass[i] = v; }, "m")));
+    al.append(button("Ausrichten", richteAus));
+    box.append(al, feld("Toleranz", zahl(t.toleranz * 100, 1), "toleranz", (v) => { if (v >= 0) { t.toleranz = v / 100; refresh(); } }, "cm"));
+    if (!abweichungen.length) box.append(el("div", "ok", "Keine offenen Abweichungen."));
+    else {
+      const ul = el("ul", "befunde");
+      for (const a of abweichungen) {
+        const li = el("li", "befund warnung"); li.dataset.abw = a.id;
+        const txt = a.vorschlag ? `${zahl(a.alt.x, 3)} | ${zahl(a.alt.y, 3)} → ${zahl(a.vorschlag.x, 3)} | ${zahl(a.vorschlag.y, 3)} (${zahl((a.abstand ?? 0) * 100, 1)} cm)` : `${zahl(a.alt.x, 3)} | ${zahl(a.alt.y, 3)} → kein neuer Fangpunkt`;
+        li.append(el("span", "stufe", "Abweichung"), el("span", "", txt));
+        const z = el("div", "btn-row");
+        if (a.vorschlag) z.append(button("Übernehmen", () => ausfuehreBefehl(uebernehmeVorschlaege([a]))));
+        const pos = { x: (a.vorschlag ?? a.alt).x, y: (a.vorschlag ?? a.alt).y };
+        const fx = el("input", "num-klein"), fy = el("input", "num-klein");
+        fx.value = zahl(pos.x, 3); fy.value = zahl(pos.y, 3); fx.setAttribute("aria-label", "x neu"); fy.setAttribute("aria-label", "y neu");
+        fx.inputMode = fy.inputMode = "decimal";
+        z.append(fx, fy, button("Setzen", () => {
+          const x = num(fx.value), y = num(fy.value);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          t.belassen.add(a.id); ausfuehreBefehl(verschiebePunkte([{ ref: a.ref, pos: { x, y } }], "Punkt händisch verschieben"));
+        }));
+        z.append(button("Belassen", () => { t.belassen.add(a.id); refresh(); }));
+        li.append(z); ul.append(li);
+      }
+      box.append(ul);
+      const alle = el("div", "btn-row");
+      alle.append(button("Alle übernehmen", () => ausfuehreBefehl(uebernehmeVorschlaege(abweichungen))), button("Alle belassen", () => { abweichungen.forEach((a) => t.belassen.add(a.id)); refresh(); }));
+      box.append(alle);
+    }
+    box.append(button("Schließen", () => { tausch = null; refresh(); }));
+    p.append(box);
+  }
+  function entferneUnterlage() { unterlage = null; unterlageBytes = null; offeneUnterlage = null; unterlageInsModell(); stage.setLayer("unterlage", null); kal = {}; refresh(); }
   function setzeMassstab(n: number) {
     const k = unterlage?.kalibrierung;
     if (!k || !(n > 0)) return;
@@ -207,6 +288,56 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     k.set(t); kal = {}; meldung = null; unterlageInsModell(); stage.invalidate(); refresh();
   }
 
+  // ---------- Projektdatei (PLAN Schritt 22) ----------
+  function modellFuerDatei(): ProjectModel {
+    const m = modell();
+    if (einbetten && m.unterlage && unterlageBytes) return { ...m, unterlage: { ...m.unterlage, eingebettet: { base64: bytesZuBase64(unterlageBytes) } } };
+    return m;
+  }
+  async function speichereProjekt() {
+    const ok = await speichereDatei(serializeProject(modellFuerDatei()), modell().meta.name || "Projekt");
+    projektMeldung = ok ? "Projekt gespeichert." : null;
+    refresh();
+  }
+  async function oeffneText(text: string) {
+    const r = leseProjekt(text);
+    if (!r.ok) { projektMeldung = r.meldung; refresh(); return; }
+    const u = r.projekt.unterlage;
+    let m = r.projekt;
+    if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
+    verlauf = neuerVerlauf(m); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
+    projektMeldung = r.hinweise.length ? r.hinweise.join(" ") : "Projekt geöffnet.";
+    if (u?.eingebettet) {
+      const bytes = base64ZuBytes(u.eingebettet.base64);
+      offeneUnterlage = u;
+      await ladeDatei(new File([bytes], u.dateiname));
+      einbetten = true;
+    } else if (u) { offeneUnterlage = u; projektMeldung += ` Unterlage „${u.dateiname}“ ist nur verknüpft: bitte Datei erneut wählen.`; }
+    refresh();
+  }
+  async function oeffneProjekt() {
+    const f = await waehleDatei();
+    if (f) await oeffneText(await f.text());
+  }
+  function panelProjekt() {
+    const p = shell.panels.projekt;
+    p.querySelector(".projekt-datei")?.remove();
+    const box = el("div", "pad projekt-datei");
+    const wahl = el("input");
+    wahl.type = "file"; wahl.accept = ".fdp,application/json"; wahl.id = "f-projekt"; wahl.setAttribute("aria-label", "Projektdatei öffnen");
+    wahl.className = "visually-hidden"; wahl.tabIndex = -1;
+    wahl.addEventListener("change", () => { const f = wahl.files?.[0]; wahl.value = ""; if (f) void f.text().then(oeffneText); });
+    const zeile = el("div", "btn-row");
+    zeile.append(button("Projekt speichern", () => void speichereProjekt()), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
+    const lab = el("label", "check-row");
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten"; cb.disabled = !unterlage;
+    cb.addEventListener("change", () => { einbetten = cb.checked; });
+    lab.append(cb, el("span", "", "Unterlage in Projektdatei einbetten"));
+    box.append(zeile, lab, wahl);
+    if (projektMeldung) { const n = el("div", "note", projektMeldung); n.dataset.k = "projekt-meldung"; n.setAttribute("role", "status"); box.append(n); }
+    p.append(box);
+  }
+
   // ---------- Panels ----------
   function panelUnterlage() {
     const p = shell.panels.unterlage;
@@ -219,7 +350,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     btn.addEventListener("click", () => wahl.click());
     const w = el("div", "pad"); w.append(btn, wahl);
     p.append(w);
-    if (!unterlage) { p.append(el("div", "empty", "Keine Unterlage geladen.")); } else {
+    if (!unterlage) { p.append(el("div", "empty", offeneUnterlage ? `Unterlage „${offeneUnterlage.dateiname}“ ist nur verknüpft: bitte Datei erneut wählen.` : "Keine Unterlage geladen.")); } else {
       const u = unterlage;
       p.append(row("Datei", u.name, "u-name"));
       if (u.einheitUnbekannt) p.append(el("div", "note", "Einheit in der DXF-Datei unbekannt: 1 Einheit = 1 m angenommen."));
@@ -236,7 +367,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       } else if (u.kalibrierung) {
         p.append(feld("Maßstab 1 :", String(Math.round(nennerAusFaktor(faktor(u.kalibrierung.get())))), "massstab", setzeMassstab, "n"));
       }
-      const b = el("div", "pad"); b.append(button("Unterlage entfernen", entferneUnterlage)); p.append(b);
+      const tw = el("input"); tw.type = "file"; tw.accept = ".dxf,.pdf,application/pdf"; tw.id = "f-tausch"; tw.className = "visually-hidden"; tw.tabIndex = -1;
+      tw.addEventListener("change", () => { const f = tw.files?.[0]; tw.value = ""; if (f) void tauscheUnterlage(f); });
+      const b = el("div", "pad btn-row"); b.append(button("Unterlage austauschen …", () => tw.click()), button("Unterlage entfernen", entferneUnterlage), tw); p.append(b);
+      panelAbweichungen(p);
     }
     if (meldung) { const m = el("div", "note error", meldung); m.setAttribute("role", "alert"); p.append(m); }
     const s = shell.status.unterlage;
@@ -339,7 +473,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const b = el("div", "pad"); b.append(button("Löschen", loescheAuswahl)); p.append(b);
   }
 
+  const api: Editor = { beiAenderung: null } as unknown as Editor;
   function refresh() {
+    queueMicrotask(() => api.beiAenderung?.());
     shell.undo.disabled = !kannRueckgaengig(verlauf);
     shell.redo.disabled = !kannWiederholen(verlauf);
     if (ergebnisFuer !== modell()) {
@@ -348,10 +484,11 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
       speichere();
     }
-    panelUnterlage(); panelWerkzeug(); panelAuswahl();
+    berechneAbweichungen();
+    panelUnterlage(); panelWerkzeug(); panelAuswahl(); panelProjekt();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
     if (ergebnisFehler) { shell.panels.pruefliste.replaceChildren(el("div", "note error", `Berechnung fehlgeschlagen: ${ergebnisFehler}`)); shell.panels.ergebnis.replaceChildren(); }
-    else { fuellePruefliste(shell.panels.pruefliste, modell(), ergebnis); fuelleErgebnis(shell.panels.ergebnis, modell(), ergebnis ?? leeresErgebnis); }
+    else { fuellePruefliste(shell.panels.pruefliste, modell(), ergebnis, (z) => { if (z.auswahl) { auswahl = z.auswahl; } if (z.mitte) stage.centerOn(z.mitte.x, z.mitte.y); refresh(); }); fuelleErgebnis(shell.panels.ergebnis, modell(), ergebnis ?? leeresErgebnis); }
     shell.status.snap.textContent = treffer ? `Fang: ${FANG_NAME[treffer.art]}` : zeichnetMitFang() ? "Fang: bereit" : "Fang: aus";
     stage.invalidate();
   }
@@ -570,9 +707,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   standortPanel = mountStandort(shell.panels.standort, { modell, ausfuehre: ausfuehreBefehl });
   setzeWerkzeug("select");
   refresh();
-  return {
-    ausfuehre: ausfuehreBefehl,
-    get modell() { return modell(); },
-    lade(m) { verlauf = neuerVerlauf(m); auswahl = null; refresh(); },
-  };
+  Object.defineProperties(api, {
+    ausfuehre: { value: ausfuehreBefehl },
+    modell: { get: () => modell() },
+    lade: { value: (m: ProjectModel) => { verlauf = neuerVerlauf(m); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
+  });
+  return api;
 }
