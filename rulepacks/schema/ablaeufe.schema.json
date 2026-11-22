@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ablaeufe.schema.json",
+  "title": "Rule-Pack: Abläufe (Gullys, Notabläufe)",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "ablaeufe" },
+    "daten": {
+      "type": "object",
+      "required": ["eintraege"],
+      "properties": {
+        "eintraege": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "hersteller", "produkt", "art", "abflussleistung"],
+            "properties": {
+              "id": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "hersteller": { "$ref": "basis.schema.json#/$defs/text" },
+              "produkt": { "$ref": "basis.schema.json#/$defs/text" },
+              "art": { "enum": ["gully", "notablauf"] },
+              "nennweite": { "type": "integer", "exclusiveMinimum": 0, "description": "DN" },
+              "wehrhoehe": { "$ref": "basis.schema.json#/$defs/dicke", "description": "Notablauf: Höhe Wehrkante in m" },
+              "abflussleistung": { "$ref": "basis.schema.json#/$defs/abflussleistung" },
+              "fundstelle": { "$ref": "basis.schema.json#/$defs/fundstelle" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

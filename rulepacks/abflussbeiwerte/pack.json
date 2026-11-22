@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/abflussbeiwerte.schema.json",
+  "id": "abflussbeiwerte",
+  "typ": "abflussbeiwerte",
+  "version": "0.0.0",
+  "titel": "Abflussbeiwerte C – Platzhalter",
+  "quelle": "Platzhalter ohne Daten; Werte nach DIN 1986-100 sind noch zu übernehmen und zu prüfen",
+  "ausgabe": "Platzhalter",
+  "gueltigAb": "2026-11-22",
+  "geprueft": false,
+  "daten": { "eintraege": [] }
+}

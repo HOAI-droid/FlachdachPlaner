@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "regeln.schema.json",
+  "title": "Rule-Pack: Regeln und Grenzwerte",
+  "description": "Planungsregeln als benannte Zahlenparameter. Bekannte Regel-IDs liest der Kern über regelParameter(); z. B. 'flaeche-je-ablauf' mit hinweisAb (Hinweis ab ≥) und fehlerUeber (Fehler bei >).",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "regeln" },
+    "daten": {
+      "type": "object",
+      "required": ["regeln"],
+      "properties": {
+        "regeln": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "titel", "parameter"],
+            "properties": {
+              "id": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "titel": { "$ref": "basis.schema.json#/$defs/text" },
+              "fundstelle": { "$ref": "basis.schema.json#/$defs/fundstelle" },
+              "parameter": {
+                "type": "object",
+                "minProperties": 1,
+                "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9]*$" },
+                "additionalProperties": {
+                  "type": "object",
+                  "required": ["wert", "einheit"],
+                  "properties": {
+                    "wert": { "type": "number" },
+                    "einheit": { "enum": ["m2", "m", "m/m", "1", "l/s", "l/(s·ha)"] }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

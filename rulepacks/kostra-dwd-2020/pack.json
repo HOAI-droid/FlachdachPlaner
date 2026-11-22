@@ -1,0 +1,16 @@
+{
+  "$schema": "../schema/regenspenden.schema.json",
+  "id": "kostra-dwd-2020",
+  "typ": "regenspenden",
+  "version": "0.0.0",
+  "titel": "KOSTRA-DWD-2020 r(5,5) / r(5,100) – Platzhalter",
+  "quelle": "Platzhalter ohne Daten; echtes Raster erzeugt tools/kostra-build.ts aus OpenKOSTRA (PLAN Schritt 11)",
+  "ausgabe": "Platzhalter",
+  "gueltigAb": "2026-11-22",
+  "geprueft": false,
+  "hinweis": "Enthält keine Regenspenden (eine leere Zelle). KBS und Raster werden in Schritt 11 gesetzt.",
+  "daten": {
+    "raster": { "crs": "offen (Schritt 11)", "x0": 0, "y0": 0, "zellgroesse": 1, "spalten": 1, "zeilen": 1 },
+    "werte": { "r5_5": [null], "r5_100": [null] }
+  }
+}

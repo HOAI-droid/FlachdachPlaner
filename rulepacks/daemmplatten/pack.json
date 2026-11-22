@@ -1,0 +1,28 @@
+{
+  "$schema": "../schema/daemmplatten.schema.json",
+  "id": "daemmplatten",
+  "typ": "daemmplatten",
+  "version": "0.1.0",
+  "titel": "Gefälledämmplatten 1,00 × 1,00 m (Standardwerte, kein Herstellerkatalog)",
+  "quelle": "Fiktive Standardwerte nach Nutzerentscheid (PLAN R6): Format 1,00 × 1,00 m, kein Herstellerkatalog",
+  "ausgabe": "Platzhalter",
+  "gueltigAb": "2026-11-22",
+  "geprueft": false,
+  "hinweis": "Dickenstufen fiktiv (2 % auf 1,00 m, Typ 1 ab 20 mm). Sonderplatten (8A) und Kehlkeile folgen mit echtem Katalog.",
+  "daten": {
+    "format": { "laenge": 1.0, "breite": 1.0 },
+    "gefaelle": 0.02,
+    "typen": [
+      { "typ": "1", "dickeAnfang": 0.02, "dickeEnde": 0.04 },
+      { "typ": "2", "dickeAnfang": 0.04, "dickeEnde": 0.06 },
+      { "typ": "3", "dickeAnfang": 0.06, "dickeEnde": 0.08 },
+      { "typ": "4", "dickeAnfang": 0.08, "dickeEnde": 0.10 },
+      { "typ": "5", "dickeAnfang": 0.10, "dickeEnde": 0.12 },
+      { "typ": "6", "dickeAnfang": 0.12, "dickeEnde": 0.14 },
+      { "typ": "7", "dickeAnfang": 0.14, "dickeEnde": 0.16 },
+      { "typ": "8", "dickeAnfang": 0.16, "dickeEnde": 0.18 }
+    ],
+    "sonderplatten": [],
+    "kehlkeile": []
+  }
+}

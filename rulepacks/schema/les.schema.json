@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "les.schema.json",
+  "title": "Rule-Pack: Linienentwässerung (LES)",
+  "description": "Gefälle der LES-Keildämmung und Keilmaße. LES liegt AUF der Gefälledämmung (additiv). Keine Set-/Stücklistenlogik.",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "les" },
+    "daten": {
+      "type": "object",
+      "required": ["eintraege"],
+      "properties": {
+        "eintraege": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "hersteller", "produkt", "gefaelle", "keil"],
+            "properties": {
+              "id": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "hersteller": { "$ref": "basis.schema.json#/$defs/text" },
+              "produkt": { "$ref": "basis.schema.json#/$defs/text" },
+              "gefaelle": {
+                "type": "object",
+                "required": ["laengs", "quer", "diagonal"],
+                "description": "Gegebene Parameter, nicht voneinander hergeleitet",
+                "properties": {
+                  "laengs": { "$ref": "basis.schema.json#/$defs/gefaelle" },
+                  "quer": { "$ref": "basis.schema.json#/$defs/gefaelle" },
+                  "diagonal": { "$ref": "basis.schema.json#/$defs/gefaelle" }
+                },
+                "additionalProperties": false
+              },
+              "keil": {
+                "type": "object",
+                "required": ["laenge", "breiteJeSeite", "dickeMin", "dickeMax"],
+                "properties": {
+                  "laenge": { "$ref": "basis.schema.json#/$defs/laenge" },
+                  "breiteJeSeite": { "$ref": "basis.schema.json#/$defs/laenge" },
+                  "dickeMin": { "$ref": "basis.schema.json#/$defs/dicke" },
+                  "dickeMax": { "$ref": "basis.schema.json#/$defs/dicke" }
+                },
+                "additionalProperties": false
+              },
+              "plattenformat": {
+                "type": "object",
+                "required": ["laenge", "breite"],
+                "description": "Maße der Keilplatten (Länge in Keilrichtung)",
+                "properties": {
+                  "laenge": { "$ref": "basis.schema.json#/$defs/laenge" },
+                  "breite": { "$ref": "basis.schema.json#/$defs/laenge" }
+                },
+                "additionalProperties": false
+              },
+              "maxLaenge": { "$ref": "basis.schema.json#/$defs/laenge", "description": "Systemlänge ohne objektspezifische Fertigung" },
+              "fundstelle": { "$ref": "basis.schema.json#/$defs/fundstelle" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

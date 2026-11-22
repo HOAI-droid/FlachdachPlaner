@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orte.schema.json",
+  "title": "Rule-Pack: Orte/PLZ (offline)",
+  "description": "PLZ/Ort mit Schwerpunkt-Koordinate in WGS84 (Grad).",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "orte" },
+    "daten": {
+      "type": "object",
+      "required": ["eintraege"],
+      "properties": {
+        "eintraege": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["plz", "ort", "lat", "lon"],
+            "properties": {
+              "plz": { "type": "string", "pattern": "^\\d{5}$" },
+              "ort": { "$ref": "basis.schema.json#/$defs/text" },
+              "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+              "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

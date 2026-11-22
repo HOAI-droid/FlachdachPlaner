@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daemmplatten.schema.json",
+  "title": "Rule-Pack: Gefälledämmplatten",
+  "description": "Plattenformat (Länge in Fallrichtung), Gefälle der Platten, Dickenstufen je Typ (Enddicke Typ n = Anfangsdicke Typ n+1), Zusatzlage, Sonderplatten, Kehlkeile.",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "daemmplatten" },
+    "daten": {
+      "type": "object",
+      "required": ["format", "gefaelle", "typen"],
+      "properties": {
+        "format": {
+          "type": "object",
+          "required": ["laenge", "breite"],
+          "properties": {
+            "laenge": { "$ref": "basis.schema.json#/$defs/laenge" },
+            "breite": { "$ref": "basis.schema.json#/$defs/laenge" }
+          },
+          "additionalProperties": false
+        },
+        "gefaelle": { "$ref": "basis.schema.json#/$defs/gefaelle" },
+        "typen": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["typ", "dickeAnfang", "dickeEnde"],
+            "properties": {
+              "typ": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "dickeAnfang": { "$ref": "basis.schema.json#/$defs/dicke" },
+              "dickeEnde": { "$ref": "basis.schema.json#/$defs/dicke" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "zusatzlage": {
+          "type": "object",
+          "required": ["dicke"],
+          "properties": { "dicke": { "$ref": "basis.schema.json#/$defs/laenge" } },
+          "additionalProperties": false
+        },
+        "sonderplatten": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "bezeichnung"],
+            "properties": {
+              "id": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "bezeichnung": { "$ref": "basis.schema.json#/$defs/text" },
+              "laenge": { "$ref": "basis.schema.json#/$defs/laenge" },
+              "breite": { "$ref": "basis.schema.json#/$defs/laenge" },
+              "dickeAnfang": { "$ref": "basis.schema.json#/$defs/dicke" },
+              "dickeEnde": { "$ref": "basis.schema.json#/$defs/dicke" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "kehlkeile": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "typ", "seite", "laenge", "breite"],
+            "properties": {
+              "id": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "typ": { "$ref": "basis.schema.json#/$defs/eintragId", "description": "zugehöriger Plattentyp" },
+              "seite": { "enum": ["L", "R"] },
+              "laenge": { "$ref": "basis.schema.json#/$defs/laenge" },
+              "breite": { "$ref": "basis.schema.json#/$defs/laenge" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

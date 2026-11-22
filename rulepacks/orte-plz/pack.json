@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/orte.schema.json",
+  "id": "orte-plz",
+  "typ": "orte",
+  "version": "0.0.0",
+  "titel": "PLZ/Orte – Platzhalter",
+  "quelle": "Platzhalter ohne Daten; echte Liste erzeugt tools/plz-build.ts (PLAN Schritt 11)",
+  "ausgabe": "Platzhalter",
+  "gueltigAb": "2026-11-22",
+  "geprueft": false,
+  "daten": { "eintraege": [] }
+}
