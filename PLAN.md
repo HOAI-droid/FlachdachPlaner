@@ -5,7 +5,7 @@ Grundlage: `docs/intent/gefaelleplanung.md`, `DESIGN.md` (inkl. §11 Gefälledä
 ## 1. Ziel und Umfang
 Lokale Web-App (später Tauri) zur Gefälleplanung von Flachdächern: Unterlage (PDF/DXF) laden und kalibrieren, Dachflächen mit Punktfang zeichnen, Entwässerung (Gully, Dachreiter, LES) setzen (Modus B), Höhenkoten/Gefälle und farbige Einzugsflächen berechnen, gegen versionierte Rule-Packs prüfen, Regenspende aus KOSTRA zum Projektstandort ziehen, Notentwässerung schätzen, **Gefälledämmplan (Verlegeplan) mit Plattentypen, Kehlkeilen und Stückliste** erzeugen, 2D/3D ansehen, PDF/DXF exportieren.
 **V1 = M1–M5 (Modus B + Gefälledämmplan).** M6 (Modus C, Vorschlag) folgt direkt als V1.1.
-**Bewusst NICHT:** DWG (später, Konverter), Tauri-Paket (M7), hydraulische Bemessung (nur Schätzung), Preise/Bestellung, Statik, Server/Login, Mobil-Layout, Online-Kartenkacheln, Adress-Geocoding als Pflichtfunktion.
+**Bewusst NICHT:** DWG (entfällt), Stückliste und LES-Sets (Nutzerentscheid), Tauri-Paket (M7), hydraulische Bemessung (nur Schätzung), Preise/Bestellung, Statik, Server/Login, Mobil-Layout, Online-Kartenkacheln, Adress-Geocoding als Pflichtfunktion.
 
 ## 2. Annahmen
 - A1 Einheiten im Kern: m, m², m³, l/s, l/(s·ha); Koordinaten projektlokal, y nach oben. Zahlenformatierung nur in der UI.
@@ -41,7 +41,6 @@ computeCatchments(m, s: SlopeResult): Catchment[]       // Polygon, m², drainId
 resolveRain(loc: Location, kostra: RulePack): RainData  // r(5,5), r(5,100), Zelle, Quelle; null wenn außerhalb
 estimateEmergency(m, c: Catchment[], rain: RainData): EmergencyEstimate[]
 layoutInsulation(m, s: SlopeResult, cat: PlateCatalog): InsulationLayout // Platten, Keile, Zusatzlagen, N0, Pfeile
-billOfMaterials(l: InsulationLayout, m): BomRow[]       // Typ, Anzahl, Maße, m², m³, LES-Sets/Dachreiter
 runChecks(m, r: Results, packs: RulePack[]): Finding[]  // {stufe, meldung, objektId, regelId, quelle}
 ```
 Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
@@ -55,9 +54,9 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 ### M1 Kern-Bibliothek (UI-unabhängig)
 2. **[E] Geometrie**: Polygon, Fläche, Punkt-in-Polygon, Abstände, Schnitt, Clipper-Adapter. *Abnahme:* 20×10 = 200 m²; Referenz-L-Dach exakt; fast-check: Fläche invariant unter Verschiebung/Drehung.
 3. **[E] Datenmodell + Projekt-JSON** inkl. Versionsfeld/Migration. *Abnahme:* Round-Trip identisch; ungültiges Projekt → strukturierte Fehlerliste.
-4. **[E] Rule-Pack-Schemas + Loader** (Regeln, Grenzwerte, Abläufe, LES-Sets, Dachreiter, Abflussbeiwerte, Regenspenden, Dämmplatten, Orte). *Abnahme:* Beispiel-Packs validieren; Pack ohne `quelle` abgelehnt; Grenzwerte 300/350 m² nur aus Pack (Test mit 250/280 ändert Ergebnis).
+4. **[E] Rule-Pack-Schemas + Loader** (Regeln, Grenzwerte, Abläufe, LES, Dachreiter (korrekte Herstellermaße), Abflussbeiwerte, Regenspenden, Dämmplatten, Orte). *Abnahme:* Beispiel-Packs validieren; Pack ohne `quelle` abgelehnt; Grenzwerte 300/350 m² nur aus Pack (Test mit 250/280 ändert Ergebnis).
 5. **[E] Höhenfeld (Punktabläufe)**: Facetten, Koten, HP/TP, Grate/Kehlen, Pfeile. *Abnahme:* 20×10, Gully Mitte z=0, 2 %: Ecken +0,200 m, 4 Facetten, 4 Kehlen; 2 Gullys (5|5),(15|5): Grat x=10, HP +0,100 m.
-6. **[E] LES und Dachreiter**: Segment-Distanz, Set-Zuordnung aus Pack. *Abnahme:* Facetten senkrecht zur LES; LES 1–10 laut Pack-Tabelle; > 10 m → Hinweis "objektspezifisch".
+6. **[E] LES und Dachreiter**: Segment-Distanz; Dachreiter mit exakten Maßen aus Pack (Nutzerwunsch). **Keine LES-Sets** (Nutzerentscheid). *Abnahme:* Facetten senkrecht zur LES; Dachreiter-Maße aus Pack, ungeprüfte Packs erzeugen Hinweis.
 7. **[E] Einzugsflächen**: Zellen, Schnitt, Abzug Aufbauten, m², Greedy-Färbung (12 Farben, ohne Schraffur). *Abnahme:* Summe = Dachfläche − Aufbauten ± 0,01 m²; 2 Gullys = 2×100 m²; Nachbarn nie gleiche Farbe (Eigenschaftstest). **Attika-Fläche (Nutzeranforderung):** Attika = umlaufender Streifen (Breite b je Segment, zum Dach geneigt) entlang der Kontur, NICHT Teil von Gefälle-/Dämmplan, aber Fläche (Länge × b, Horizontalprojektion) wird dem Ablauf der angrenzenden Dachzelle zugeschlagen und zählt für 300/350 m². Je Ablauf werden Dachfläche, Attikafläche und Gesamtfläche getrennt ausgewiesen. *Abnahme Attika:* Rechteck 20×10 m, Attika b=0,30 m umlaufend, ein Gully: Dach 200 m², Attika 18,0 m² (Fläche Streifen), Gesamt 218,0 m²; Test mit Pack-Grenze 215 löst Hinweis nur durch Attikaanteil aus; Attika erscheint nicht in `layoutInsulation`.
 8. **[E] Zonen/Stufen + Vorgaben** (max. HP, min. TP, 0 %-Zonen mit Begründung). *Abnahme:* Terrassenzone −0,10 m getrennt berechnet; Überschreitung max. HP → Befund mit Differenz.
 9. **[E] Regelprüfung**: Mindestgefälle, Pfützen (Raster 0,1 m), 300/350 m², Anschlusshöhen Attika/Türschwelle, barrierefreie Schwelle (≤ 10,0 m, Überflutungskante ≥ 5 cm), Pack ungeprüft, Regenspende manuell überschrieben. *Abnahme:* je Regel ein positiver und ein negativer Test; jeder Befund mit `regelId` + `quelle`.
@@ -80,20 +79,20 @@ Alle Funktionen rein und deterministisch; Toleranz `EPS = 1e-9 m` zentral.
 22. **[X] Speichern/Laden + Autosave**. *Abnahme:* Reload stellt Zustand inkl. Pack-Versionen her; fremde Version → Hinweis.
 
 ### M4 Gefälledämmplan (Kern + 2D)
-23. **[E] Plattenkatalog-Pack**: Hersteller, Produkt, Format (L×B), Gefälle, Dickenstufen je Typ, Sonderplatten (8A), Zusatzlagen, Kehlkeile Kn L/R mit Maßen, LES-Keil-Sets und Dachreiter-Zubehör. *Abnahme:* Beispielpack (fiktiv, `geprueft:false`) validiert; Loader meldet Lücke, wenn Enddicke Typ n ≠ Anfangsdicke Typ n+1.
+23. **[E] Plattenkatalog-Pack**: Hersteller, Produkt, Format (L×B), Gefälle, Dickenstufen je Typ, Sonderplatten (8A), Zusatzlagen, Kehlkeile Kn L/R mit Maßen. Nur **korrekte Plattenmaße** zählen; keine LES-Sets. *Abnahme:* Beispielpack (fiktiv, `geprueft:false`) validiert; Loader meldet Lücke, wenn Enddicke Typ n ≠ Anfangsdicke Typ n+1.
 24. **[E] Plattenaufteilung `layoutInsulation`**: je Facette Reihen quer zur Fallrichtung ab Tiefpunkt, Typ aus Höhe, Zuschnitt an Facettengrenzen und Kontur, Kehlkeile an Kehlen, Spiegelung an Graten, Zusatzlage + Neustart über höchstem Typ, N0 und Verlegestart. *Abnahme:* 10×5 m mit LES an Längsseite, Plattenbreite 1 m → 5 Reihen Typ 1–5; Gully mittig → Kehlkeile L/R symmetrisch gleich viele; Dämmdicke an jeder Plattenecke = Höhenfeld ± 1 mm; Gefällelänge über Typ 8 → Bezeichnung "1+1"; Referenz-L-Dach ergibt keine Lücken/Überlappungen (Flächensumme = Dachfläche ± 0,01 m²); Kehle ≠ 45° (ungleiche Gefälle) → Befund "Kehlkeil nicht im Katalog".
-25. **[E] Stückliste `billOfMaterials`**: Anzahl je Typ, Keile, Zusatzlagen, Zuschnitte, m², m³, Verschnitt, LES-Sets, Dachreiter. *Abnahme:* Volumen = Integral Höhenfeld ± 2 %; Ergebnis deterministisch (Snapshot); LES 6 m → Sets 1+2+3.
-26. **[X] 2D-Ansicht Dämmplan**: Plattenraster, Typ-Nummern, Kn L/R, Verlegepfeile, Kehl-/Gratlinien, N0/Verlegestart, Bemaßung außen, Stückliste-Tabelle (DESIGN §11). *Abnahme:* Referenz-L-Dach visuell wie `gefaelledaemmplan-2d.jpg` (visual-qa); Labels überlappen nicht.
+25. **[E] Maß- und Lückenprüfung Verlegeplan**: Plattenmaße exakt aus Katalog, Zuschnitte/Kehlkeile mit Maßen. **Keine Stückliste** (Nutzerentscheid, nicht in V1). *Abnahme:* Fläche der Platten = Dachfläche ± 0,01 m²; keine Lücken/Überlappungen; Ergebnis deterministisch (Snapshot).
+26. **[X] 2D-Ansicht Dämmplan**: Plattenraster, Typ-Nummern, Kn L/R, Verlegepfeile, Kehl-/Gratlinien, N0/Verlegestart, Bemaßung außen (DESIGN §11, ohne Stückliste). *Abnahme:* Referenz-L-Dach visuell wie `gefaelledaemmplan-2d.jpg` (visual-qa); Labels überlappen nicht.
 
 ### M5 3D und Export (Abschluss V1)
 27. **[X] 3D-Ansicht**: Dachfläche aus Höhenfeld, Überhöhung 1/5/10×; Modus Dämmplan mit Plattenblöcken, Typ-Labels, Zusatzlage gelb. *Abnahme:* Mesh-Unit-Test (Eckhöhen = Koten, Blockhöhen = Plattendicken); DESIGN §7 und §11.
-28. **[X] PDF-Export** (Gefälleplan + Dämmplan mit Stückliste; Schriftfeld, Legende, Nordpfeil, Maßstabsbalken). *Abnahme:* 10 m bei 1:100 = 100 mm ± 0,2 mm; DESIGN §10 Punkt 13.
-29. **[X] DXF-Export + Stückliste CSV** (Layer je Objektart, Plattenraster, Texte). *Abnahme:* Re-Import ± 1 mm; CSV-Summen = Stückliste.
+28. **[X] PDF-Export** (Gefälleplan + Dämmplan; Schriftfeld, Legende, Nordpfeil, Maßstabsbalken). *Abnahme:* 10 m bei 1:100 = 100 mm ± 0,2 mm; DESIGN §10 Punkt 13.
+29. **[X] DXF-Export** (Layer je Objektart, Plattenraster, Texte). *Abnahme:* Re-Import ± 1 mm; 
 30. **Review V1** (`reviewer`), Fixes, Feldtest mit 2 Bürodächern (inkl. Abgleich mit einem Hersteller-Verlegeplan).
 
 ### M6 Modus C (V1.1), M7 Desktop
 31. **[E] Vorschlag Abläufe**: Anzahl/Position so, dass alle Flächen ≤ Grenzwert und HP ≤ max. *Abnahme:* 40×20 → ≥ 3 Abläufe, alle < 300 m²; deterministisch.
-32. **[X] Tauri-Wrapper**, danach DWG über externen Konverter.
+32. **[X] Tauri-Wrapper** (DWG entfällt, Nutzerentscheid).
 
 ## 7. Teststrategie
 - Kern: Vitest-Unit-Tests, fast-check-Eigenschaften (Flächensumme, Invarianz, Färbung, Lückenfreiheit der Platten), Golden-Fixtures mit erwarteten Koten, Flächen, Plattenlisten. Ziel ≥ 90 % Zeilenabdeckung in `src/core`.

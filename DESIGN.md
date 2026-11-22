@@ -154,4 +154,4 @@ Immer hell, Papierweiß `#FFFFFF`, Linien Schwarz `#000000`; Strichstärken ISO 
 Eigene Planansicht und eigener Export (2D und 3D), Nutzerwunsch: Aufbau wie die Referenzbilder.
 - 2D: Dachkontur stark (0,70 mm), Bemaßung außen, Verlegestart-Markierung + N0-Ursprung, Plattenraster als dünne Linien, je Platte Typ-Beschriftung (1…8, 8A, Kehlkeile K1…Kn), Verlegerichtungspfeil je Plattenreihe, Kehl- und Gratlinien diagonal. Nur Linien und Schrift, keine Schraffur, Flächen weiß; Hervorhebung nur durch Tint (z. B. Doppelplatten gelb).
 - 3D: Dämmkörper als Block mit Plattengrenzen, Plattentyp-Beschriftung (rot), Keil-Detail als Aufzieh-Callout; Farbe nur zur Unterscheidung von Lagen (gelb = zusätzliche Platte).
-- Stückliste (Typ, Anzahl, Maße, Gesamtvolumen) im Plan rechts oder unter dem Plan.
+- Keine Stückliste (Nutzerentscheid).

@@ -55,3 +55,9 @@ Flachdachrichtlinie (ZVDH) Ausgabe Januar 2026 + DIN 18531: Planungsziel i. d. R
 
 ## Kernanforderung: Regelwerk updatefähig (Rule-Packs)
 Richtlinien, Grenzwerte, Sicherheitsbeiwerte, Mindestmaße, Herstellerdaten (Abläufe, LES-Sets, Dachreiter) und Regenspendendaten liegen als **versionierte Datenpakete** (z. B. JSON, mit Quelle, Ausgabestand, Gültig-ab) außerhalb des Codes. Neue Richtlinienausgabe = neues Paket laden/ändern, ohne Neuprogrammierung. Projekte merken sich das verwendete Regelwerk (Version). Prüfungen im Plan nennen Regel + Quelle.
+
+## Entscheidungen (Nutzer, spätere Runde)
+- **Kein DWG**: nur PDF und DXF.
+- **Keine LES-/Keil-Sets, keine Stücklisten** – aber **korrekte Dachreiter-Maße** und **korrekte Plattenmaße** (Herstellerdaten als Pack).
+- Loro-Abflusstabelle folgt später.
+- Attika: Tool mit Breite; Attikafläche zählt zur Ablauffläche (300/350 m²), nicht im Gefälle-/Dämmplan, gleiche Farbe wie zugehörige Dachfläche, Anzeige Attika/Dach/Gesamt.
