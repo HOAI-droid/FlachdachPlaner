@@ -109,7 +109,13 @@ export class Ansicht3D {
       ctx.beginPath();
       for (const ring of [pts, ...f.holes.map((r) => r.map(bild))]) { ring.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y))); ctx.closePath(); }
       ctx.fillStyle = rgb(basis, f.art === "seite" ? licht * 0.85 : licht); ctx.fill("evenodd");
-      ctx.strokeStyle = linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : 0.4; ctx.lineWidth = f.art === "platte" ? 0.6 : 1; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : 0.4; ctx.lineWidth = f.art === "platte" ? 0.6 : 1;
+      if (f.stumm) {
+        ctx.beginPath();
+        pts.forEach((q, i) => { const r = pts[(i + 1) % pts.length]!; if (!f.stumm![i]) { ctx.moveTo(q.x, q.y); ctx.lineTo(r.x, r.y); } });
+        ctx.stroke();
+      } else ctx.stroke();
+      ctx.globalAlpha = 1;
     }
     // Typ-Labels auf den Oberseiten (nur wenn Platz)
     if (this.modus === "daemmplan") {

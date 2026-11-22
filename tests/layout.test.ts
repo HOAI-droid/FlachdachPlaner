@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { ebeneFacetten } from "../src/core/slope/index";
+import { pointInPolygon } from "../src/core/geometry/index";
 import {
   computeSlope, createProject, daemmBasis, meshDach, meshDaemmung, hoeheDachflaeche, layoutInsulation, plattenDaemmdicke, loadRulePack, polygonArea, pruefeVerlegeplan,
   validateRulePack,
@@ -147,6 +148,14 @@ describe("Schritt 24: layoutInsulation", () => {
     expect(l.dachflaechen[0]!.platten.some((p) => p.gratschnitt)).toBe(true);
     expect(l.dachflaechen[0]!.n0!.kote).toBe(0);
     expect(l.dachflaechen[0]!.verlegestarts).toHaveLength(ebeneFacetten(s.dachflaechen[0]!.facetten).length);
+  });
+
+  it("Referenz-L-Dach: Gleichstandsbereich teilt an der Mittelsenkrechten x = 5,3 (rechts g2, links g1)", () => {
+    const { s } = plan(L_DACH);
+    const von = (x: number, y: number) => s.dachflaechen[0]!.facetten.find((f) => pointInPolygon({ x, y }, f.polygon) === "inside")!.ablaufId;
+    expect(von(8, 7)).toBe("g2");
+    expect(von(6, 7.4)).toBe("g2");
+    expect(von(4, 7)).toBe("g1");
   });
 
   it("Referenz-L-Dach: keine Naht und kein Kehlkeil im Gleichstandsbereich (5,3|5,3)–(7,65|7,65)", () => {

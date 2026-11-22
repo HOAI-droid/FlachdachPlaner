@@ -211,8 +211,13 @@ function berechneFacetten(dach: readonly Polygon[], box: Vec2[], f: Hoehenfeld, 
           const dlt = differenz(L, ebeneVon(f, j, k2));
           if (parallel(dlt)) {
             // Parallele Ebenen: konstanter Abstand dlt.c. Koplanar → Gleichstand an den kleineren Index.
-            const verliert = dlt.c > EPS || (Math.abs(dlt.c) <= EPS && j < i);
-            if (!verliert) { c = []; break; }
+            if (dlt.c > EPS) continue;
+            if (dlt.c < -EPS) { c = []; break; }
+            // Gleichstand koplanarer Seiten: j nimmt, was ihm (Luftlinie) näher liegt; bei gleicher Lage entscheidet der Index.
+            const pi = quelle.position, pj = f.quellen[j]!.position;
+            const bis = { a: 2 * (pj.x - pi.x), b: 2 * (pj.y - pi.y), c: pi.x * pi.x + pi.y * pi.y - pj.x * pj.x - pj.y * pj.y };
+            if (parallel(bis)) { if (j < i) continue; c = []; break; }
+            c = halbebene(c, bis);
           } else c = halbebene(c, dlt);
           if (c.length < 3) break;
         }

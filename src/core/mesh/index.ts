@@ -2,9 +2,9 @@
  * 3D-Netz (PLAN Schritt 27): Dachfläche aus den Facetten des Höhenfelds und Dämmplatten als Blöcke.
  * Rein geometrisch, Einheiten m; z nach oben, Überhöhung nur auf z (Basis = Tiefpunkt-Kote der Dachfläche).
  */
-import type { Polygon, Vec2 } from "../geometry/index";
+import { pointInPolygon, type Polygon, type Vec2 } from "../geometry/index";
 import type { InsulationLayout } from "../layout/index";
-import { ebeneFacetten, hoeheDachflaeche, type DachGefaelle, type SlopeResult } from "../slope/index";
+import { hoeheDachflaeche, type DachGefaelle, type SlopeResult } from "../slope/index";
 
 export interface Vec3 { readonly x: number; readonly y: number; readonly z: number }
 export type FlaechenArt = "dach" | "platte" | "seite";
@@ -18,6 +18,8 @@ export interface Flaeche3 {
   /** Nur Platten: Bezeichnung und Zusatzlagen. */
   readonly bezeichnung?: string;
   readonly zusatzlagen?: number;
+  /** Nur Dach: je Kante des Außenrings true, wenn dahinter eine Facette derselben Ebene liegt (kein Knick, keine Linie). */
+  readonly stumm?: readonly boolean[];
 }
 
 const hoch = (v: Vec2, z: number, ue: number, z0: number): Vec3 => ({ x: v.x, y: v.y, z: z0 + (z - z0) * ue });
@@ -32,9 +34,15 @@ export function meshDach(slope: SlopeResult, ueberhoehung = 1): Flaeche3[] {
   for (const g of slope.dachflaechen) {
     const z0 = g.tiefpunkt?.kote ?? 0;
     const ids = [...new Set(g.facetten.map((f) => f.ablaufId))];
-    for (const f of ebeneFacetten(g.facetten)) {
+    for (const f of g.facetten) {
       const e = f.ebene;
-      out.push({ art: "dach", ...ringe(f.polygon, (v) => e.a * v.x + e.b * v.y + e.c, ueberhoehung, z0), gruppe: ids.indexOf(f.ablaufId), dachflaecheId: g.dachflaecheId });
+      const gleich = g.facetten.filter((o) => o !== f && o.zoneId === f.zoneId && Math.abs(o.ebene.a - e.a) <= 1e-9 && Math.abs(o.ebene.b - e.b) <= 1e-9 && Math.abs(o.ebene.c - e.c) <= 1e-9);
+      const stumm = f.polygon.outer.map((a, i) => {
+        const b = f.polygon.outer[(i + 1) % f.polygon.outer.length]!;
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        return gleich.some((o) => pointInPolygon(m, o.polygon) === "boundary");
+      });
+      out.push({ art: "dach", stumm, ...ringe(f.polygon, (v) => e.a * v.x + e.b * v.y + e.c, ueberhoehung, z0), gruppe: ids.indexOf(f.ablaufId), dachflaecheId: g.dachflaecheId });
     }
   }
   return out;
