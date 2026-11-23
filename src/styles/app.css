@@ -161,7 +161,7 @@ button, input, select { font: inherit; color: inherit; }
 .angaben-gruppe { border: 0; border-top: 1px solid var(--line); margin: 0; padding: var(--sp-3) 0 0; min-width: 0; display: grid; gap: var(--sp-2); }
 .angaben-gruppe legend { padding: 0 var(--sp-2) 0 0; color: var(--text-muted); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
 .angaben .feld-zeile { display: grid; grid-template-columns: 1fr auto; gap: var(--sp-2); align-items: center; }
-.dialog-bg .dialog-knoepfe { position: sticky; bottom: calc(-1 * var(--sp-5)); background: var(--surface); padding: var(--sp-3) 0; margin-bottom: calc(-1 * var(--sp-3)); }
+.dialog-bg .dialog-knoepfe { border-top: 1px solid var(--line); position: sticky; bottom: calc(-1 * var(--sp-5)); background: var(--surface); padding: var(--sp-3) 0; margin-bottom: calc(-1 * var(--sp-3)); }
 .dialog input[type=checkbox] { accent-color: var(--accent); }
 .varianten-liste .btn.variante.aktiv { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
 .btn.gefahr { color: var(--error); border-color: var(--error); }
