@@ -68,6 +68,11 @@ export function zeichneEntwaesserung(
   const zt = `z ${kote(e.z).replace("+", "")}`;
   const s = id ? `${id} · ${zt}` : zt;
   const w = s.length * 7.2;
-  if (beschriftung && belegung.belege(anker, 10, 6, w, 14)) text(ctx, vp, s, anker.x + 10 * px, anker.y + 6 * px, { px: 12, mono: true, farbe: linie });
+  if (beschriftung) {
+    // Kandidaten: rechts oben, links oben, rechts unten, links unten (Bildschirm-px, dy nach oben)
+    const kand: [number, number][] = [[10, 8], [-w - 10, 8], [10, -22], [-w - 10, -22]];
+    const k = kand.find(([dx, dy]) => belegung.belege(anker, dx, dy, w, 14));
+    if (k) text(ctx, vp, s, anker.x + k[0] * px, anker.y + k[1] * px, { px: 12, mono: true, farbe: linie });
+  }
   ctx.restore();
 }

@@ -46,6 +46,7 @@ export class Belegung {
   belege(p: Vec2, dx: number, dy: number, w: number, h: number): boolean {
     const [sx, sy] = worldToScreen(this.vp, p.x, p.y);
     const a: [number, number, number, number] = [sx + dx, sy - dy - h, sx + dx + w, sy - dy];
+    if (a[0] < 0 || a[1] < 0 || a[2] > this.vp.w || a[3] > this.vp.h) return false; // ragt aus der Zeichenfläche
     if (this.r.some((b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1])) return false;
     this.r.push(a);
     return true;
