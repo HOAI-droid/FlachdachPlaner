@@ -241,7 +241,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   /** Undo/Redo stellt auch die damals aktive Variante her (Ansicht springt dorthin, wo der Schritt geschah). */
   const springe = (neu: Verlauf<Projekt>) => {
     const vorher = verlauf.aktuell.aktiveVariante;
-    verlauf = neu; pruefeAuswahl();
+    verlauf = neu; unterlageInsModell(); pruefeAuswahl(); // Unterlage ist kein Undo-Schritt: der Editorstand gilt weiter
     if (verlauf.aktuell.aktiveVariante !== vorher) { tausch = null; kal = {}; z = neuerZustand(); vergissErfasste(); projektMeldung = `Variante „${variantenListe(verlauf.aktuell).find((v) => v.aktiv)?.name ?? ""}“ aktiv.`; }
     refresh();
   };
