@@ -17,7 +17,7 @@ import { dateiname } from "../io/dateiname";
 import { baueProjektDxf } from "../io/dxf/export";
 import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneFaltlinien, zeichneFlaechenLabels, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
 import { meter, quadratmeter, zahl } from "./format";
-import { packs, standardTyp, typOptionen } from "./packs";
+import { aktiveVersionen, daemmStandard, packs, standardTyp, typOptionen } from "./packs";
 import { mountStandort } from "./standort";
 
 import { kantenLage, zeichneEntwaesserung } from "./symbole";
@@ -137,12 +137,27 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let indexKey: [ProjectModel, readonly unknown[]] | null = null;
   let ergebnis: Ergebnis | null = null;
   let ergebnisFuer: ProjectModel | null = null;
+  /** Ergebnis je Rechengrundlage (Dachflächen-Referenz + Standort + Standardgefälle): Variantenwechsel rechnet nicht neu. */
+  const rechenCache = new WeakMap<object, { standort: unknown; gefaelle: unknown; regeln: string; erg: Ergebnis }>();
+  const berechneGemerkt = (m: ProjectModel): Ergebnis => {
+    const c = rechenCache.get(m.dachflaechen);
+    const regeln = `${Object.entries(aktiveVersionen()).join("|")}#${daemmStandard() ?? ""}`;
+    if (c && c.standort === m.standort && c.gefaelle === m.gefaelleStandard && c.regeln === regeln) return c.erg;
+    const erg = berechne(m);
+    rechenCache.set(m.dachflaechen, { standort: m.standort, gefaelle: m.gefaelleStandard, regeln, erg });
+    return erg;
+  };
   let ergebnisFehler: string | null = null;
   let standortFuer: ProjectModel["standort"] | null = null;
   let standortPanel: ReturnType<typeof mountStandort> | null = null;
   const leeresErgebnis = { slope: { dachflaechen: [], hinweise: [] }, catchments: { flaechen: [], nachbarn: [], hinweise: [] }, notfall: [], befunde: [], hinweise: [], eids: new Map() } as unknown as Ergebnis;
   /** Autosave ins lokale Speichern (ohne Netz); Fehler (z. B. privater Modus) werden ignoriert. */
-  function speichere() { void autosaveSchreiben(serializeProjekt(aktuellesProjekt())); }
+  let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+  const autosaveJetzt = () => { if (autosaveTimer !== null) { clearTimeout(autosaveTimer); autosaveTimer = null; } void autosaveSchreiben(serializeProjekt(aktuellesProjekt())); };
+  /** Entprellt (400 ms): beim Ziehen wird nicht bei jedem Schritt das ganze Projekt serialisiert; beim Verlassen der Seite sofort. */
+  function speichere() { if (autosaveTimer === null) autosaveTimer = setTimeout(autosaveJetzt, 400); }
+  window.addEventListener("pagehide", () => { if (autosaveTimer !== null) autosaveJetzt(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && autosaveTimer !== null) autosaveJetzt(); });
 
   const modell = () => verlauf.aktuell;
   const tol = () => FANG_PX / stage.viewport.scale;
@@ -750,7 +765,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     shell.redo.disabled = !kannWiederholen(verlauf);
     if (ergebnisFuer !== modell()) {
       ergebnisFuer = modell();
-      try { ergebnis = modell().dachflaechen.length ? berechne(modell()) : null; ergebnisFehler = null; }
+      try { ergebnis = modell().dachflaechen.length ? berechneGemerkt(modell()) : null; ergebnisFehler = null; }
       catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
       speichere();
     }
