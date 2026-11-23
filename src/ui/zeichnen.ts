@@ -52,6 +52,15 @@ export class Belegung {
   }
 }
 
+let geteilt: Belegung | null = null;
+/** Neuer Zeichendurchgang: die gemeinsame Belegung aller Ebenen wird verworfen (vom ersten Layer aufzurufen). */
+export const neuerDurchgang = (): void => { geteilt = null; };
+/** Eine Belegung für alle Beschriftungs-Ebenen eines Durchgangs, damit Labels verschiedener Ebenen einander nicht überdecken. */
+export function geteilteBelegung(vp: Viewport): Belegung {
+  if (!geteilt) geteilt = new Belegung(vp);
+  return geteilt;
+}
+
 /** Abgerundetes Badge (Pill) um einen Text, Mitte am Weltpunkt; liefert die Breite in px. */
 export function badge(
   ctx: CanvasRenderingContext2D, vp: Viewport, zeilen: string[], mitte: Vec2,

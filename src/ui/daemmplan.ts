@@ -6,7 +6,7 @@ import {
 import type { Viewport } from "./canvas/viewport";
 import { meter, millimeter, zahl } from "./format";
 import { daemmStandard, packs } from "./packs";
-import { Belegung, css, dunkel, text, textBreite } from "./zeichnen";
+import { css, dunkel, geteilteBelegung, text, textBreite } from "./zeichnen";
 
 export function berechnePlan(m: ProjectModel, slope: SlopeResult): InsulationLayout | null {
   const kat = packs.find((x): x is DaemmplattenPack => x.typ === "daemmplatten");
@@ -62,7 +62,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
   if (!plan || plan.dachflaechen.length === 0) return;
   const px = 1 / vp.scale, linie = css("--text", "#222"), fein = css("--text-muted", "#777");
   const gelb = dunkel() ? "rgba(214,176,40,0.30)" : "rgba(244,208,63,0.45)";
-  const belegung = new Belegung(vp);
+  const belegung = geteilteBelegung(vp);
   ctx.save(); ctx.setLineDash([]); ctx.lineJoin = "round";
   for (const d of plan.dachflaechen) {
     // 1) Platten: Tint für Zusatzlagen, dünnes Raster

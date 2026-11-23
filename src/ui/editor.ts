@@ -21,7 +21,7 @@ import { packs, standardTyp, typOptionen } from "./packs";
 import { mountStandort } from "./standort";
 
 import { kantenLage, zeichneEntwaesserung } from "./symbole";
-import { Belegung } from "./zeichnen";
+import { geteilteBelegung, neuerDurchgang } from "./zeichnen";
 import type { Shell } from "./shell";
 import { dxfModell, ladeDxf, ladePdf, pdfModell, type UnterlageUI } from "./underlay";
 import { frageSpeichern } from "./dialog";
@@ -683,7 +683,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
 
   function zeichneSymbole(ctx: CanvasRenderingContext2D, vp: Viewport) {
     const px = 1 / vp.scale;
-    const belegung = new Belegung(vp);
+    const belegung = geteilteBelegung(vp);
     for (const d of modell().dachflaechen) {
       for (const e of d.entwaesserung) zeichneEntwaesserung(ctx, vp, d, e, belegung, ergebnis?.eids.get(`${d.id}/${e.id}`), ansicht === "gefaelle");
       for (const t of d.tuerschwellen) {
@@ -850,7 +850,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
   }
 
-  stage.setLayer("kontur", zeichneKontur);
+  stage.setLayer("kontur", (ctx, vp) => { neuerDurchgang(); zeichneKontur(ctx, vp); });
   stage.setLayer("einzugsflaechen", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") zeichneEinzugsflaechen(ctx, vp, modell(), ergebnis); });
   stage.setLayer("daemmplan", (ctx, vp) => {
     if (!ergebnis || ansicht !== "daemmplan") return;

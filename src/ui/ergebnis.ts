@@ -8,7 +8,7 @@ import type { Viewport } from "./canvas/viewport";
 import { kote, millimeter, prozent, quadratmeter, zahl } from "./format";
 import { kantenLage } from "./symbole";
 import { daemmStandard, packs } from "./packs";
-import { Belegung, badge, bahn, css, dunkel, text, textBreite } from "./zeichnen";
+import { badge, bahn, css, dunkel, geteilteBelegung, text, textBreite } from "./zeichnen";
 
 export interface Ergebnis {
   readonly slope: SlopeResult;
@@ -72,7 +72,7 @@ function flaechenLabel(e: Ergebnis, f: Ergebnis["catchments"]["flaechen"][number
 
 export function zeichneEinzugsflaechen(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, e: Ergebnis): void {
   const px = 1 / vp.scale;
-  const belegung = new Belegung(vp);
+  const belegung = geteilteBelegung(vp);
   const dk = dunkel();
   ctx.save(); ctx.setLineDash([]); ctx.lineJoin = "round";
   for (const f of e.catchments.flaechen) {
@@ -136,7 +136,7 @@ const PFEIL_PX = 44, PFEIL_ABLAUF_PX = 14;
 
 /** Ein Gefällepfeil je Facette (mittig, ganz in der Facette, wenn sie groß genug ist), auch in Zonen; weicht Flächen-Badges aus. */
 export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
-  const px = 1 / vp.scale, belegung = new Belegung(vp);
+  const px = 1 / vp.scale, belegung = geteilteBelegung(vp);
   // Badge-Rechtecke (Welt, Mitte = labelPunkt) – Pfeile dürfen sie nicht kreuzen.
   const badges = e.catchments.flaechen.map((f) => {
     const p = labelPunkt(f), w = (textBreite(ctx, flaechenLabel(e, f), 12, true) + 26) * px, h = 27 * px;
@@ -182,7 +182,7 @@ export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Er
 
 /** Koten aller Dachflächen (inkl. Zonen), gebündelt: nahezu gleiche Stelle und Höhe → eine Marke (kotenMarken). */
 export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
-  const px = 1 / vp.scale, belegung = new Belegung(vp), tx = css("--text", "#222");
+  const px = 1 / vp.scale, belegung = geteilteBelegung(vp), tx = css("--text", "#222");
   ctx.save(); ctx.setLineDash([]);
   const marke = (p: Vec2, s: string, fett: boolean) => {
     const w = s.length * 7.4;
