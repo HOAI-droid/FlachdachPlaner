@@ -43,6 +43,11 @@ export class Belegung {
   private readonly r: [number, number, number, number][] = [];
   constructor(private readonly vp: Viewport) {}
   /** Reserviert ein Rechteck um den Weltpunkt (Bildschirm-px: dx, dy Versatz nach rechts/oben, Breite, Höhe); false bei Kollision. */
+  /** Wie `belege`, aber ohne Viewport-Prüfung und ohne Kollisionsprüfung: sperrt eine Fläche (z. B. Maßlinienband) für spätere Labels. */
+  sperre(p: Vec2, dx: number, dy: number, w: number, h: number): void {
+    const [sx, sy] = worldToScreen(this.vp, p.x, p.y);
+    this.r.push([sx + dx, sy - dy - h, sx + dx + w, sy - dy]);
+  }
   belege(p: Vec2, dx: number, dy: number, w: number, h: number): boolean {
     const [sx, sy] = worldToScreen(this.vp, p.x, p.y);
     const a: [number, number, number, number] = [sx + dx, sy - dy - h, sx + dx + w, sy - dy];

@@ -36,11 +36,14 @@ function polygonPfad(ctx: CanvasRenderingContext2D, p: VerlegtePlatte["polygon"]
 const ausdehnung = (p: VerlegtePlatte, s: number) => Math.min(p.laenge, p.breite) * s;
 
 /** Jede Dachfläche wird für sich bemaßt (Gesamtmaß + Teilketten bei Knicken) – keine Gesamtbemaßung über leere Bereiche. */
-function bemasse(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel): void {
+function bemasse(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, belegung: ReturnType<typeof geteilteBelegung>): void {
   const px = 1 / vp.scale, linie = css("--text", "#222");
   const eindeutig = (w: number[]) => [...new Set(w.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
   ctx.save(); ctx.strokeStyle = linie; ctx.lineWidth = px; ctx.setLineDash([]);
   const maß = (a: Vec2, b: Vec2, s: string, hilfA: Vec2, hilfB: Vec2, h: boolean) => {
+    // Band um die Maßlinie reservieren, damit Dämmdicken/Verlegestart/Labels nicht darauf landen
+    const l = Math.hypot(b.x - a.x, b.y - a.y) * vp.scale, mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    if (h) belegung.sperre(mid, -l / 2, -14, l, 28); else belegung.sperre(mid, -14, -l / 2, 28, l);
     ctx.beginPath(); ctx.moveTo(hilfA.x, hilfA.y); ctx.lineTo(a.x, a.y); ctx.moveTo(hilfB.x, hilfB.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     pfeil(ctx, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, a, 7 * px); pfeil(ctx, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, b, 7 * px);
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
@@ -65,6 +68,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
   const px = 1 / vp.scale, linie = css("--text", "#222"), fein = css("--text-muted", "#777");
   const gelb = dunkel() ? "rgba(214,176,40,0.30)" : "rgba(244,208,63,0.45)";
   const belegung = geteilteBelegung(vp);
+  bemasse(ctx, vp, m, belegung); // zuerst: reserviert die Bänder der Maßlinien
   ctx.save(); ctx.setLineDash([]); ctx.lineJoin = "round";
   for (const d of plan.dachflaechen) {
     // 1) Platten: Tint für Zusatzlagen, dünnes Raster
@@ -148,7 +152,6 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     }
   }
   ctx.restore();
-  bemasse(ctx, vp, m);
 }
 
 function schwerpunkt(p: VerlegtePlatte): Vec2 {
