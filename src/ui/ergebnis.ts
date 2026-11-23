@@ -195,12 +195,16 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
   const marke = (p: Vec2, s: string, fett: boolean) => {
     const w = s.length * 7.4;
     let dy = 0, ok = false;
-    for (const v of [6, 24, 42]) if (belegung.belege(p, 8, v, w, 14)) { dy = v; ok = true; break; }
+    let links = false;
+    for (const v of [6, 24, 42, 60]) {
+      if (belegung.belege(p, 8, v - 2, w + 4, 18)) { dy = v; ok = true; break; }
+      if (belegung.belege(p, -(w + 12), v - 2, w + 4, 18)) { dy = v; ok = true; links = true; break; }
+    }
     if (!ok) return;
     ctx.fillStyle = tx; ctx.beginPath();
     ctx.moveTo(p.x - 4 * px, p.y + 8 * px); ctx.lineTo(p.x + 4 * px, p.y + 8 * px); ctx.lineTo(p.x, p.y); ctx.closePath(); ctx.fill();
-    if (dy > 6) { ctx.strokeStyle = tx; ctx.lineWidth = px; bahn(ctx, [p, { x: p.x + 8 * px, y: p.y + dy * px }], false); ctx.stroke(); }
-    text(ctx, vp, s, p.x + 10 * px, p.y + dy * px, { px: 12, mono: true, farbe: fett ? css("--accent", "#1F4FA3") : tx });
+    if (dy > 6) { ctx.strokeStyle = tx; ctx.lineWidth = px; bahn(ctx, [p, { x: p.x + (links ? -8 : 8) * px, y: p.y + dy * px }], false); ctx.stroke(); }
+    text(ctx, vp, s, p.x + (links ? -(w + 10) : 10) * px, p.y + dy * px, { px: 12, mono: true, farbe: fett ? css("--accent", "#1F4FA3") : tx });
   };
   const alle = kotenMarken(e.slope.dachflaechen);
   // Der Ablauf trägt seine eigene Kote (Beschriftung); Koten in unmittelbarer Nähe (< 40 px) würden nur überlagern.

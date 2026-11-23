@@ -84,7 +84,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       ctx.beginPath(); ctx.arc(v.punkt.x, v.punkt.y, 4 * px, 0, Math.PI * 2); ctx.fill();
       const rechts = v.punkt.x <= (bx0 + bx1) / 2, unten = v.punkt.y <= (by0 + by1) / 2;
       const dx = rechts ? -86 : 8, dy = unten ? -22 : 8;
-      if (belegung.belege(v.punkt, dx, dy, 78, 14)) text(ctx, vp, "Verlegestart", v.punkt.x + dx * px, v.punkt.y + dy * px, { px: 12, farbe: linie });
+      if (belegung.belege(v.punkt, dx - 2, dy - 2, 82, 18)) text(ctx, vp, "Verlegestart", v.punkt.x + dx * px, v.punkt.y + dy * px, { px: 12, farbe: linie });
     }
     if (d.n0) {
       const { x, y } = d.n0.position;
@@ -111,7 +111,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       for (const [fx, fy] of [[ox, oy], [ox, -oy], [-ox, oy], [-ox, -oy]] as const) {
         kand.push([fx < 0 ? -(w + 5) : 5, fy < 0 ? -19 : 5]);
       }
-      const z = kand.find(([dx, dy]) => belegung.belege(q, dx, dy, w, 14));
+      const z = kand.find(([dx, dy]) => belegung.belege(q, dx - 2, dy - 2, w + 4, 18));
       ctx.fillStyle = linie; ctx.beginPath(); ctx.arc(q.x, q.y, 2.2 * px, 0, Math.PI * 2); ctx.fill();
       if (z) text(ctx, vp, t, q.x + z[0] * px, q.y + z[1] * px, { px: 12, mono: true, farbe: css("--accent", "#1F4FA3") });
     }
@@ -122,7 +122,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       const c = schwerpunkt(p);
       const s = p.bezeichnung, w = textBreite(ctx, s, 13, false);
       const frei = ausdehnung(p, vp.scale) >= 13 && Math.max(p.laenge, p.breite) * vp.scale >= w + 4;
-      const ok = frei && belegung.belege(c, 4, -6, w, 13);
+      const ok = frei && belegung.belege(c, 2, -8, w + 4, 17);
       platz.set(p.id, ok);
       if (ok) text(ctx, vp, s, c.x + 4 * px, c.y - 6 * px, { px: 13, farbe: linie });
     }
@@ -139,9 +139,10 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     const k = plattenDaemmdicke(d);
     const dach = m.dachflaechen.find((x) => x.id === d.dachflaecheId);
     if (k && dach) {
-      const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)}) · blau: Dämmdicke in mm, auf 5 mm aufgerundet`;
-      const ys = dach.kontur.map((q) => q.y), xs = dach.kontur.map((q) => q.x);
-      text(ctx, vp, `${dach.name || dach.id}: ${zeilen}`, Math.min(...xs), Math.max(...ys) + 52 * px, { px: 12, mono: true, farbe: linie, halo: false });
+      const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)})`;
+      const ys = dach.kontur.map((q) => q.y), xs = dach.kontur.map((q) => q.x), x0 = Math.min(...xs), yo = Math.max(...ys);
+      text(ctx, vp, `${dach.name || dach.id}: ${zeilen}`, x0, yo + 72 * px, { px: 12, mono: true, farbe: linie, halo: false });
+      if (d === plan.dachflaechen[0]) text(ctx, vp, "blau: Dämmdicke in mm, auf 5 mm aufgerundet", x0, yo + 54 * px, { px: 12, mono: true, farbe: linie, halo: false });
     }
   }
   ctx.restore();
