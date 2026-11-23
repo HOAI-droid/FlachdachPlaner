@@ -242,7 +242,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   const springe = (neu: Verlauf<Projekt>) => {
     const vorher = verlauf.aktuell.aktiveVariante;
     verlauf = neu; pruefeAuswahl();
-    if (verlauf.aktuell.aktiveVariante !== vorher) { tausch = null; kal = {}; vergissErfasste(); projektMeldung = `Variante „${variantenListe(verlauf.aktuell).find((v) => v.aktiv)?.name ?? ""}“ aktiv.`; }
+    if (verlauf.aktuell.aktiveVariante !== vorher) { tausch = null; kal = {}; z = neuerZustand(); vergissErfasste(); projektMeldung = `Variante „${variantenListe(verlauf.aktuell).find((v) => v.aktiv)?.name ?? ""}“ aktiv.`; }
     refresh();
   };
   const undo = () => springe(rueckgaengig(verlauf));
@@ -396,12 +396,12 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     return m;
   }
   async function speichereProjekt(): Promise<boolean> {
-    const stand = schluessel(), standP = verlauf.aktuell;
+    const stand = schluessel(), standP = verlauf.aktuell, standE = einbetten;
     let ok = false;
     try { ok = await speichereDatei(serializeProjekt(mitModell(verlauf.aktuell, modellFuerDatei())), dateiname(modell().meta.name)); }
     catch (e) { projektMeldung = `Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); return false; }
     projektMeldung = ok ? "Projekt gespeichert." : null;
-    if (ok) { gespeichertSchluessel = stand; gespeichertStand = standP; }
+    if (ok) { gespeichertSchluessel = stand; gespeichertStand = standP; gespeichertEinbetten = standE; }
     refresh();
     return ok;
   }
@@ -409,6 +409,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const r = leseProjekt(text);
     if (!r.ok) { projektMeldung = r.meldung; refresh(); return; }
     const u = r.projekt.unterlage;
+    einbetten = false;
     let m = r.projekt;
     if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
     verlauf = neuerVerlauf(m); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
@@ -416,6 +417,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (u?.eingebettet) {
       const bytes = base64ZuBytes(u.eingebettet.base64);
       offeneUnterlage = u;
+      unterlageBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer; // Rückfall: Daten bleiben erhalten, falls das Laden scheitert
       await ladeDatei(new File([bytes], u.dateiname), true);
       einbetten = true;
       markiereGespeichert();
@@ -1095,8 +1097,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   Object.defineProperties(api, {
     ausfuehre: { value: ausfuehreBefehl },
     modell: { get: () => modell() },
-    lade: { value: (m: ProjectModel) => { verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
-    ladeProjekt: { value: (pr: Projekt) => { verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
+    lade: { value: (m: ProjectModel) => { einbetten = false; verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
+    ladeProjekt: { value: (pr: Projekt) => { einbetten = false; verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
     projekt: { get: () => aktuellesProjekt() },
   });
   return api;

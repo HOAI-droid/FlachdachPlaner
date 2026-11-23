@@ -141,3 +141,11 @@ modellFuerVariante(p: Projekt, id?: Id): ProjectModel   // heutiges Format → c
 - **Offen aus Review M8:** (7) weitere E2E/DOM-Tests (Export-Dialog, Angaben-Maske, Migration v1/v2→v3); (13) `einbetten` in Dirty-Schlüssel; (14) PDF-Erzeugung selbst bleibt synchron (Fortschritt „Variante x/n“ beim Aufbau der Eingaben, Pfeile per `pfeilLage` erledigt).
 - **Dämmplan-Labels:** Belegungs-Reset-Bug behoben (Dach B bekam keine Labels), Titel-Block, Kleinmaßstab, Legende gelb erledigt (visual-qa: kleine Restmängel). **Offen (Layout):** Eckzahlen bei mittlerem Zoom teils außerhalb des Dachs (Dicke nur innerhalb der Kontur setzen); „1+1“ in schmalen Zusatzlagen-Platten abgeschnitten; Verlegepfeile berühren teils Plattenlabels; N0-Kasten nah an Dickenzahl/Plattenlabel (≥4 px Abstand); Dachtitel B bei mittlerem Zoom weit über dem Dach (links am Dachrand verankern); Attika-Tint, Fehler-Icon; PDF: Maßtext „10,00 m“ rechts kollidiert mit Kote „+0,280“, Einzugsflächen-Label E1/E2 überdeckt Gully-Label (nur im Zwei-Dächer-Testszenario gesehen).
 - **Desktop:** Actions-Läufe 29/30 (Menü-Rust-Code, nicht lokal kompilierbar) prüfen; Menü/Speichern/Öffnen unter macOS/Windows manuell testen. Mac: `xattr -cr /Applications/Flachdachplaner.app`. Intel-Mac, Signierung, Auto-Update zurückgestellt.
+
+### Review-Rest (Meilenstein Varianten/Undo/PDF) – offen
+- `unterlageInsModell` (editor.ts) schreibt ohne Undo-Schritt in den Verlauf: Undo kann alte Kalibrierung zurückbringen (Unterlage aus Undo-Ständen heraushalten).
+- PDF-Export/Speichern ohne Doppelstart-Sperre; Fortschritt: `requestAnimationFrame` vor `setTimeout(0)`.
+- `schluessel()` (JSON.stringify) bei jedem refresh bei geändertem Stand: entprellen oder nur in `darfVerwerfen`.
+- Tauri-CSP: `unsafe-eval` und `connect-src https:` prüfen/einengen.
+- Tests: Undo nach Kalibrieren, Undo mit Variantenwechsel bei offenem Entwurf, fehlgeschlagenes Laden einer eingebetteten Unterlage, Pfeil je Facette im PDF.
+- `/impeccable` ist nicht installiert (siehe INSTALL.md).
