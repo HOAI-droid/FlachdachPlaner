@@ -1,7 +1,7 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aktiviereVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, istProjektGeaendert, wechsleVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
@@ -96,22 +96,24 @@ export interface Editor {
 
 
 export function mountEditor(shell: Shell, stage: Stage): Editor {
-  /** Projekt mit allen Varianten; `verlauf` hält die Ansicht der aktiven Variante (Undo gilt je Variante, Wechsel leert es). */
-  let projekt: Projekt = createProjekt("Neues Projekt", new Date().toISOString());
-  let verlauf: Verlauf = neuerVerlauf(modellFuerVariante(projekt));
-  /** Gesamtstand: Projekt mit der Ansicht der aktiven Variante zurückgeschrieben. */
-  const aktuellesProjekt = (): Projekt => mitModell(projekt, verlauf.aktuell);
+  /**
+   * Ein Verlauf über das ganze Projekt (A9): Werkzeugbefehle wirken über `aufVariante` auf die aktive
+   * Variante, Variantenaktionen sind eigene Schritte, Umschalten (`wechsleVariante`) ist keiner und leert nichts.
+   */
+  let verlauf: Verlauf<Projekt> = neuerVerlauf(createProjekt("Neues Projekt", new Date().toISOString()));
+  const aktuellesProjekt = (): Projekt => verlauf.aktuell;
   /** Inhaltsschlüssel (ohne aktive Variante) → Umschalten der Variante gilt nicht als Änderung. */
-  let schluesselMemo: { m: ProjectModel; p: Projekt; k: string } | null = null;
+  let schluesselMemo: { p: Projekt; k: string } | null = null;
   const schluessel = (): string => {
-    if (!schluesselMemo || schluesselMemo.m !== verlauf.aktuell || schluesselMemo.p !== projekt) {
-      schluesselMemo = { m: verlauf.aktuell, p: projekt, k: JSON.stringify({ ...aktuellesProjekt(), aktiveVariante: "" }) };
-    }
+    const p = verlauf.aktuell;
+    if (schluesselMemo?.p !== p) schluesselMemo = { p, k: JSON.stringify({ ...p, aktiveVariante: "" }) };
     return schluesselMemo.k;
   };
   let gespeichertSchluessel = schluessel();
-  const markiereGespeichert = () => { gespeichertSchluessel = schluessel(); };
-  const geaendert = () => schluessel() !== gespeichertSchluessel;
+  /** Gespeicherter Stand als Referenz: schneller Vergleich ohne Serialisieren (null = nur Schlüssel zählt). */
+  let gespeichertStand: Projekt | null = verlauf.aktuell;
+  const markiereGespeichert = () => { gespeichertSchluessel = schluessel(); gespeichertStand = verlauf.aktuell; };
+  const geaendert = () => (gespeichertStand !== null && !istProjektGeaendert(verlauf, gespeichertStand) ? false : schluessel() !== gespeichertSchluessel);
   let z: WerkzeugZustand = neuerZustand();
   let auswahl: Auswahl | null = null;
   let unterlage: UnterlageUI | null = null;
@@ -159,7 +161,15 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   window.addEventListener("pagehide", () => { if (autosaveTimer !== null) autosaveJetzt(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && autosaveTimer !== null) autosaveJetzt(); });
 
-  const modell = () => verlauf.aktuell;
+  /** Ansicht der aktiven Variante, je Projektstand gemerkt (Referenzvergleiche für Ergebnis, Fang, Plan bleiben gültig). */
+  let modellMemo: { p: Projekt; m: ProjectModel } | null = null;
+  const modell = (): ProjectModel => {
+    const p = verlauf.aktuell;
+    if (modellMemo?.p !== p) modellMemo = { p, m: modellFuerVariante(p) };
+    return modellMemo.m;
+  };
+  /** Werkzeug-/Panelbefehl auf der aktiven Variante als Projektschritt ausführen. */
+  const fuehreAus = (b: Befehl) => { verlauf = ausfuehren(verlauf, aufVariante(b)); };
   const tol = () => FANG_PX / stage.viewport.scale;
 
   // ---------- Fang ----------
@@ -212,7 +222,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (warEntwurf && z.entwurf.length === 0) vergissErfasste();
     if (r.befehl) {
       const alt = verlauf;
-      verlauf = ausfuehren(verlauf, r.befehl);
+      fuehreAus(r.befehl);
       if (verlauf === alt) z = { ...z, hinweis: z.hinweis };
     }
     if (r.auswahl !== undefined) auswahl = r.auswahl;
@@ -226,8 +236,15 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     refresh();
   }
   function setzeAuswahl(a: Auswahl | null) { auswahl = a; refresh(); }
-  const undo = () => { verlauf = rueckgaengig(verlauf); pruefeAuswahl(); refresh(); };
-  const redo = () => { verlauf = wiederholen(verlauf); pruefeAuswahl(); refresh(); };
+  /** Undo/Redo stellt auch die damals aktive Variante her (Ansicht springt dorthin, wo der Schritt geschah). */
+  const springe = (neu: Verlauf<Projekt>) => {
+    const vorher = verlauf.aktuell.aktiveVariante;
+    verlauf = neu; pruefeAuswahl();
+    if (verlauf.aktuell.aktiveVariante !== vorher) { tausch = null; kal = {}; vergissErfasste(); projektMeldung = `Variante „${variantenListe(verlauf.aktuell).find((v) => v.aktiv)?.name ?? ""}“ aktiv.`; }
+    refresh();
+  };
+  const undo = () => springe(rueckgaengig(verlauf));
+  const redo = () => springe(wiederholen(verlauf));
   function pruefeAuswahl() {
     if (!auswahl) return;
     const d = modell().dachflaechen.find((x) => x.id === auswahl!.dachId);
@@ -239,7 +256,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       (auswahl.art === "entwaesserung" && d.entwaesserung.some((x) => x.id === auswahl!.id)));
     if (!ok) auswahl = null;
   }
-  function loescheAuswahl() { if (auswahl) { verlauf = ausfuehren(verlauf, loesche(auswahl)); auswahl = null; refresh(); } }
+  function loescheAuswahl() { if (auswahl) { fuehreAus(loesche(auswahl)); auswahl = null; refresh(); } }
   function aktuellesDach(): Dachflaeche | null {
     const ds = modell().dachflaechen;
     return ds.find((d) => d.id === auswahl?.dachId) ?? (ds.length === 1 ? ds[0]! : null);
@@ -377,12 +394,12 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     return m;
   }
   async function speichereProjekt(): Promise<boolean> {
-    const stand = schluessel();
+    const stand = schluessel(), standP = verlauf.aktuell;
     let ok = false;
-    try { ok = await speichereDatei(serializeProjekt(mitModell(projekt, modellFuerDatei())), dateiname(modell().meta.name)); }
+    try { ok = await speichereDatei(serializeProjekt(mitModell(verlauf.aktuell, modellFuerDatei())), dateiname(modell().meta.name)); }
     catch (e) { projektMeldung = `Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); return false; }
     projektMeldung = ok ? "Projekt gespeichert." : null;
-    if (ok) gespeichertSchluessel = stand;
+    if (ok) { gespeichertSchluessel = stand; gespeichertStand = standP; }
     refresh();
     return ok;
   }
@@ -392,7 +409,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const u = r.projekt.unterlage;
     let m = r.projekt;
     if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
-    projekt = m; verlauf = neuerVerlauf(modellFuerVariante(m)); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
+    verlauf = neuerVerlauf(m); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
     projektMeldung = r.hinweise.length ? r.hinweise.join(" ") : "Projekt geöffnet.";
     if (u?.eingebettet) {
       const bytes = base64ZuBytes(u.eingebettet.base64);
@@ -419,8 +436,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   async function neuesProjekt() {
     if (!(await darfVerwerfen("dem Anlegen eines neuen Projekts"))) return;
-    projekt = createProjekt("Neues Projekt", new Date().toISOString());
-    verlauf = neuerVerlauf(modellFuerVariante(projekt)); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
+    verlauf = neuerVerlauf(createProjekt("Neues Projekt", new Date().toISOString())); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
     einbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
@@ -434,9 +450,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   /** Fragt bei mehreren Varianten, welche exportiert werden (Standard: die aktive); null = abgebrochen. */
   async function waehleExportVarianten(): Promise<string[] | null> {
-    const liste = variantenListe(projekt);
-    if (liste.length < 2) return [projekt.aktiveVariante];
-    const gewaehlt = new Set<string>([projekt.aktiveVariante]);
+    const pr = aktuellesProjekt();
+    const liste = variantenListe(pr);
+    if (liste.length < 2) return [pr.aktiveVariante];
+    const gewaehlt = new Set<string>([pr.aktiveVariante]);
     const box = el("div", "pad");
     const hinweis = el("div", "note warn", "Wählen Sie mindestens eine Variante.");
     hinweis.hidden = true;
@@ -500,43 +517,45 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
 
   // ---------- Varianten und Projektangaben ----------
-  /** Wechselt zum Projektstand `neu` (andere aktive Variante / Struktur): Ansicht und Auswahl neu aufbauen, Unterlage bleibt. */
-  function uebernimmProjekt(neu: Projekt, meldungText: string) {
-    projekt = neu; verlauf = neuerVerlauf(modellFuerVariante(neu));
+  /** Neuer Projektstand nach einer Variantenaktion (Verlauf bleibt): Ansicht und Auswahl neu aufbauen, Unterlage bleibt. */
+  function uebernimmProjekt(neu: Verlauf<Projekt>, meldungText: string) {
+    verlauf = neu;
     auswahl = null; tausch = null; kal = {}; z = neuerZustand(); vergissErfasste();
-    projektMeldung = meldungText; speichere(); refresh();
+    projektMeldung = meldungText; refresh();
   }
   function wechsleZuVariante(id: string) {
-    const r = aktiviereVariante(aktuellesProjekt(), id);
-    if (r.ok && r.projekt !== aktuellesProjekt()) uebernimmProjekt(r.projekt, `Variante „${variantenListe(r.projekt).find((v) => v.aktiv)?.name}“ aktiv.`);
+    const neu = wechsleVariante(verlauf, id);
+    if (neu !== verlauf) uebernimmProjekt(neu, `Variante „${variantenListe(neu.aktuell).find((v) => v.aktiv)?.name}“ aktiv.`);
   }
   function neueVariante(kopieVon?: string) {
     const pr = aktuellesProjekt();
-    const r = legeVarianteAn(pr, vorschlagVariantenName(pr, kopieVon), kopieVon);
-    if (r.ok) uebernimmProjekt(r.projekt, kopieVon ? "Variante dupliziert." : "Leere Variante angelegt."); else { projektMeldung = r.fehler.meldung; refresh(); }
+    const name = vorschlagVariantenName(pr, kopieVon);
+    const r = legeVarianteAn(pr, name, kopieVon);
+    if (r.ok) uebernimmProjekt(ausfuehren(verlauf, befehlVarianteAnlegen(name, kopieVon)), kopieVon ? "Variante dupliziert." : "Leere Variante angelegt.");
+    else { projektMeldung = r.fehler.meldung; refresh(); }
   }
   async function loescheVarianteFrage(id: string) {
     const pr = aktuellesProjekt();
     const name = variantenListe(pr).find((v) => v.id === id)?.name ?? id;
     const d = oeffneDialog({
-      titel: "Variante löschen?", text: `Die Variante „${name}“ mit allen Dachflächen wird gelöscht. Das kann nicht rückgängig gemacht werden.`,
+      titel: "Variante löschen?", text: `Die Variante „${name}“ mit allen Dachflächen wird gelöscht. Rückgängig mit Strg+Z.`,
       knoepfe: [{ id: "abbrechen", label: "Abbrechen", primaer: true }, { id: "loeschen", label: "Löschen" }], abbruchId: "abbrechen",
     });
     if ((await d.ergebnis) !== "loeschen") return;
-    const r = loescheVariante(pr, id);
-    if (r.ok) uebernimmProjekt(r.projekt, `Variante „${name}“ gelöscht.`); else { projektMeldung = r.fehler.meldung; refresh(); }
+    const r = loescheVariante(aktuellesProjekt(), id);
+    if (r.ok) uebernimmProjekt(ausfuehren(verlauf, befehlVarianteLoeschen(id)), `Variante „${name}“ gelöscht.`); else { projektMeldung = r.fehler.meldung; refresh(); }
   }
   function benenneAktive(name: string): string | null {
     const pr = aktuellesProjekt();
     const r = benenneVarianteUm(pr, pr.aktiveVariante, name);
     if (!r.ok) return r.fehler.meldung;
-    if (r.projekt !== pr) { projekt = r.projekt; verlauf = { ...verlauf, aktuell: modellFuerVariante(r.projekt, r.id) }; speichere(); refresh(); }
+    if (r.projekt !== pr) { verlauf = ausfuehren(verlauf, befehlVarianteUmbenennen(pr.aktiveVariante, name)); refresh(); }
     return null;
   }
   function setzeAngaben(teil: ProjektangabenTeil): string | null {
     const r = setzeProjektangaben(modell(), teil);
     if (!r.ok) return r.fehler.map((f) => f.meldung).join(" ");
-    if (r.modell !== modell()) { verlauf = ausfuehren(verlauf, { label: "Projektangaben", anwenden: (m) => { const x = setzeProjektangaben(m, teil); return x.ok ? x.modell : m; } }); refresh(); }
+    if (r.modell !== modell()) { fuehreAus({ label: "Projektangaben", anwenden: (m) => { const x = setzeProjektangaben(m, teil); return x.ok ? x.modell : m; } }); refresh(); }
     return null;
   }
   function blockVarianten(): HTMLElement {
@@ -702,14 +721,14 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       case "attika": {
         const x = d.attika.find((q) => q.id === a.id)!;
         p.append(row("Art", "Attika", "art"), row("Länge", meter(attikaLaenge(d, x), 2), "laenge"),
-          feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { verlauf = ausfuehren(verlauf, setAttikaBreite(d.id, x.id, v)); refresh(); } }),
+          feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { fuehreAus(setAttikaBreite(d.id, x.id, v)); refresh(); } }),
           row("Fläche", quadratmeter(attikaSegmentFlaeche(d, x), 2), "flaeche"));
         break;
       }
       case "tuerschwelle": {
         const x = d.tuerschwellen.find((q) => q.id === a.id)!;
         p.append(row("Art", "Türschwelle", "art"),
-          feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { verlauf = ausfuehren(verlauf, setTuerschwelleBreite(d.id, x.id, v)); refresh(); } }),
+          feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { fuehreAus(setTuerschwelleBreite(d.id, x.id, v)); refresh(); } }),
           row("Abstand", meter(x.lage.abstand, 2), "abstand"));
         break;
       }
@@ -718,7 +737,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         const art = { gully: "Gully", notablauf: "Notablauf", dachreiter: "Dachreiter", les: "Linienentwässerung" }[x.art];
         const eid = ergebnis?.eids.get(`${d.id}/${x.id}`);
         p.append(row("Art", eid ? `${art} (${eid})` : art, "art"),
-          feld("Tiefenlage z", zahl(x.z, 3), "z", (v) => { verlauf = ausfuehren(verlauf, setEntwaesserungZ(d.id, x.id, v)); refresh(); }));
+          feld("Tiefenlage z", zahl(x.z, 3), "z", (v) => { fuehreAus(setEntwaesserungZ(d.id, x.id, v)); refresh(); }));
         const opt = typOptionen(x.art);
         if (opt.length) {
           const f = el("div", "field"), l = el("label", "", "Produkt"), sel = el("select");
@@ -726,7 +745,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
           const leer = el("option", "", "– nicht gewählt –"); leer.value = ""; sel.append(leer);
           for (const o of opt) { const op = el("option", "", o.titel); op.value = o.wahl.eintragId; sel.append(op); }
           sel.value = x.typ?.eintragId ?? "";
-          sel.addEventListener("change", () => { verlauf = ausfuehren(verlauf, setEntwaesserungTyp(d.id, x.id, opt.find((o) => o.wahl.eintragId === sel.value)?.wahl ?? null)); refresh(); });
+          sel.addEventListener("change", () => { fuehreAus(setEntwaesserungTyp(d.id, x.id, opt.find((o) => o.wahl.eintragId === sel.value)?.wahl ?? null)); refresh(); });
           f.append(l, sel); p.append(f);
         } else p.append(el("div", "note", "Kein Produkt im Pack verfügbar."));
         if (x.art === "gully") {
@@ -738,7 +757,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
             const op = el("option", "", o.name || o.id); op.value = o.id; sel.append(op);
           }
           sel.value = x.verbundenMit ?? "";
-          sel.addEventListener("change", () => { verlauf = ausfuehren(verlauf, setGullyVerbindung(d.id, x.id, sel.value || null)); refresh(); });
+          sel.addEventListener("change", () => { fuehreAus(setGullyVerbindung(d.id, x.id, sel.value || null)); refresh(); });
           f.append(l, sel); p.append(f);
         }
         break;
@@ -769,7 +788,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
       speichere();
     }
-    shell.status.projekt.textContent = [variantenListe(projekt).length > 1 ? `Variante: ${variantenListe(projekt).find((x) => x.aktiv)?.name ?? ""}` : "", geaendert() ? "ungespeichert" : ""].filter(Boolean).join(" · ");
+    shell.status.projekt.textContent = [variantenListe(aktuellesProjekt()).length > 1 ? `Variante: ${variantenListe(aktuellesProjekt()).find((x) => x.aktiv)?.name ?? ""}` : "", geaendert() ? "ungespeichert" : ""].filter(Boolean).join(" · ");
     berechneAbweichungen();
     panelUnterlage(); panelWerkzeug(); panelAuswahl(); panelProjekt();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
@@ -1063,7 +1082,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     else if (TASTEN[k]) setzeWerkzeug(TASTEN[k]!);
   });
 
-  const ausfuehreBefehl = (b: Befehl) => { verlauf = ausfuehren(verlauf, b); refresh(); };
+  const ausfuehreBefehl = (b: Befehl) => { fuehreAus(b); refresh(); };
   standortPanel = mountStandort(shell.panels.standort, { modell, ausfuehre: ausfuehreBefehl });
   setzeWerkzeug("select");
   refresh();
@@ -1072,8 +1091,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   Object.defineProperties(api, {
     ausfuehre: { value: ausfuehreBefehl },
     modell: { get: () => modell() },
-    lade: { value: (m: ProjectModel) => { projekt = projektAusModell(m); verlauf = neuerVerlauf(modellFuerVariante(projekt)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
-    ladeProjekt: { value: (pr: Projekt) => { projekt = pr; verlauf = neuerVerlauf(modellFuerVariante(pr)); gespeichertSchluessel = modellFuerVariante(pr).dachflaechen.length ? "\u0000" : schluessel(); auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
+    lade: { value: (m: ProjectModel) => { verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
+    ladeProjekt: { value: (pr: Projekt) => { verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
     projekt: { get: () => aktuellesProjekt() },
   });
   return api;

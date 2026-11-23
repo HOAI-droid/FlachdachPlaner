@@ -4,7 +4,7 @@ import {
   addDachflaeche, aktiviereVariante, ausfuehren, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen,
   benenneVarianteUm, computeCatchments, computeSlope, createProject, createProjekt, findeAbweichungenProjekt, idsDerDachflaechen,
   istProjektGeaendert, legeVarianteAn, loesche, loescheVariante, mitModell, modellFuerVariante, neuerVerlauf, neueIds, parseProject,
-  parseProjekt, projektAusModell, pruefeVariantenName, rueckgaengig, serializeProject, serializeProjekt, setGullyVerbindung,
+  parseProjekt, projektAusModell, pruefeVariantenName, rueckgaengig, wiederholen, serializeProject, serializeProjekt, setGullyVerbindung,
   uebernehmeVorschlaegeProjekt, validateProjekt, setzeProjektangaben, istIsoDatum, PROJEKTANGABEN_FELDER, variantenListe, vorschlagVariantenName, wechsleVariante,
   type Dachflaeche, type Entwaesserung, type Kontur, type ProjectModel, type Projekt,
 } from "../src/core/index";
@@ -175,6 +175,66 @@ describe("Varianten-Befehle", () => {
     v = rueckgaengig(rueckgaengig(rueckgaengig(v)));
     expect(v.aktuell).toBe(p0);
     expect(istProjektGeaendert(v, p0)).toBe(false);
+  });
+  it("Review M8 (3): Undo/Redo-Roundtrip für Anlegen, Duplizieren, Umbenennen, Löschen", () => {
+    const p0 = basis();
+    const schritte = [befehlVarianteAnlegen("Leer"), befehlVarianteAnlegen("Kopie", "v1"), befehlVarianteUmbenennen("v2", "L"), befehlVarianteLoeschen("v1")];
+    let v = neuerVerlauf<Projekt>(p0);
+    const staende: Projekt[] = [p0];
+    for (const b of schritte) { v = ausfuehren(v, b); staende.push(v.aktuell); }
+    expect(variantenListe(v.aktuell).map((x) => x.name)).toEqual(["L", "Kopie"]);
+    expect(v.zurueck.map((s) => s.label)).toEqual(["Variante anlegen", "Variante duplizieren", "Variante umbenennen", "Variante löschen"]);
+    for (let i = staende.length - 2; i >= 0; i--) { v = rueckgaengig(v); expect(v.aktuell).toBe(staende[i]); }
+    expect(istProjektGeaendert(v, p0)).toBe(false);
+    for (let i = 1; i < staende.length; i++) { v = wiederholen(v); expect(v.aktuell).toBe(staende[i]); }
+    expect(istProjektGeaendert(v, staende[staende.length - 1]!)).toBe(false);
+    expect(istProjektGeaendert(v, p0)).toBe(true);
+    expect(serializeProjekt(lies(serializeProjekt(v.aktuell)))).toBe(serializeProjekt(v.aktuell));
+  });
+  it("Review M8 (3): Umschalten behält den Verlauf; Undo stellt Inhalt und die damals aktive Variante her", () => {
+    const quadrat = (x: number) => [{ x, y: 0 }, { x: x + 5, y: 0 }, { x: x + 5, y: 5 }, { x, y: 5 }];
+    const p0 = basis();
+    const n = modellFuerVariante(p0).dachflaechen.length;
+    let v = ausfuehren(neuerVerlauf<Projekt>(p0), befehlVarianteAnlegen("B", "v1")); // aktiv: v2
+    const nachAnlegen = v.aktuell;
+    v = ausfuehren(v, aufVariante(addDachflaeche(quadrat(30)))); // Änderung in v2
+    const inB = v.aktuell;
+    v = wechsleVariante(v, "v1");
+    expect(v.zurueck).toHaveLength(2);
+    v = ausfuehren(v, aufVariante(addDachflaeche(quadrat(40)))); // Änderung in v1
+    expect(v.aktuell.varianten[1]).toBe(inB.varianten[1]);
+    expect(modellFuerVariante(v.aktuell).dachflaechen).toHaveLength(n + 1);
+    // Undo 1: Änderung in v1 zurück, v1 bleibt aktiv (Stand direkt nach dem Umschalten)
+    v = rueckgaengig(v);
+    expect(v.aktuell.aktiveVariante).toBe("v1");
+    expect(v.aktuell.varianten).toBe(inB.varianten);
+    // Undo 2: Änderung in v2 zurück, Ansicht springt in die Variante, in der sie geschah
+    v = rueckgaengig(v);
+    expect(v.aktuell).toBe(nachAnlegen);
+    expect(v.aktuell.aktiveVariante).toBe("v2");
+    // Umschalten während Redo-Liste offen: Redo bleibt erhalten
+    v = wechsleVariante(v, "v1");
+    expect(v.vor).toHaveLength(2);
+    v = wiederholen(wiederholen(v));
+    expect(modellFuerVariante(v.aktuell, "v1").dachflaechen).toHaveLength(n + 1);
+    expect(modellFuerVariante(v.aktuell, "v2").dachflaechen).toHaveLength(n + 1);
+    v = rueckgaengig(rueckgaengig(rueckgaengig(v)));
+    expect(v.aktuell).toBe(p0);
+  });
+  it("Review M8 (3): Dirty-Status: Umschalten und Undo bis zum gespeicherten Stand gelten als unverändert", () => {
+    const gespeichert = ok(legeVarianteAn(basis(), "B")).projekt;
+    let v = neuerVerlauf<Projekt>(gespeichert);
+    v = wechsleVariante(v, "v1");
+    expect(istProjektGeaendert(v, gespeichert)).toBe(false);
+    expect(wechsleVariante(v, "v9")).toBe(v);
+    expect(wechsleVariante(v, "v1")).toBe(v);
+    v = ausfuehren(v, befehlVarianteUmbenennen("v2", "C"));
+    expect(istProjektGeaendert(v, gespeichert)).toBe(true);
+    v = wechsleVariante(rueckgaengig(v), "v2");
+    expect(istProjektGeaendert(v, gespeichert)).toBe(false);
+    v = ausfuehren(v, aufVariante({ label: "Angaben", anwenden: (m) => { const r = setzeProjektangaben(m, { bauherr: "X" }); return r.ok ? r.modell : m; } }));
+    expect(v.aktuell.varianten).toBe(gespeichert.varianten); // projektweites Feld, Varianten unberührt
+    expect(istProjektGeaendert(v, gespeichert)).toBe(true);
   });
   it("aufVariante: wirkt nur auf die aktive Variante; neue IDs projektweit eindeutig", () => {
     let p = ok(legeVarianteAn(basis(), "Leer")).projekt;
