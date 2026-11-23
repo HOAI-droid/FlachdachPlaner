@@ -24,6 +24,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-fs": "^2.7.1",
     "ajv": "^8.20.0",
     "clipper2-ts": "^2.0.1",
     "pdfjs-dist": "^5.4.149"

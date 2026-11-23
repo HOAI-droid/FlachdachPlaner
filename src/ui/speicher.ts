@@ -42,6 +42,9 @@ export async function autosaveLesen(): Promise<string | null> {
   try { return localStorage.getItem(LS_KEY); } catch { return null; }
 }
 
+import { gibDateiAus } from "./datei-ausgabe";
+import { istTauri } from "./schliessen";
+
 export const DATEIENDUNG = ".fdp";
 
 type FsWindow = Window & {
@@ -53,6 +56,7 @@ const FDP_TYPEN = [{ description: "Flachdachplaner-Projekt", accept: { "applicat
 /** Speichert als .fdp (File System Access API, sonst Download). Liefert false bei Abbruch. */
 export async function speichereDatei(text: string, name: string): Promise<boolean> {
   const dateiname = name.endsWith(DATEIENDUNG) ? name : name + DATEIENDUNG;
+  if (istTauri()) return gibDateiAus(text, { name: dateiname, mime: "application/json", endung: "fdp", beschreibung: "Flachdachplaner-Projekt" });
   const w = window as FsWindow;
   if (w.showSaveFilePicker) {
     try {
