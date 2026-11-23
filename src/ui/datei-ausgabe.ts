@@ -10,7 +10,8 @@ export async function gibDateiAus(daten: string | Uint8Array, o: AusgabeOpt): Pr
     const { writeFile } = await import("@tauri-apps/plugin-fs");
     const ziel = await save({ defaultPath: o.name, filters: [{ name: o.beschreibung, extensions: [o.endung] }] });
     if (!ziel) return false;
-    await writeFile(ziel, typeof daten === "string" ? new TextEncoder().encode(daten) : daten);
+    const pfad = /\.[A-Za-z0-9]+$/.test(ziel) ? ziel : `${ziel}.${o.endung}`;
+    await writeFile(pfad, typeof daten === "string" ? new TextEncoder().encode(daten) : daten);
     return true;
   }
   const url = URL.createObjectURL(new Blob([daten as BlobPart], { type: o.mime }));

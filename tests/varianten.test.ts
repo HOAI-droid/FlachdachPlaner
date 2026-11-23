@@ -151,6 +151,9 @@ describe("Varianten-Befehle", () => {
     let p = basis();
     expect(vorschlagVariantenName(p)).toBe("Variante 2");
     expect(vorschlagVariantenName(p, "v1")).toBe("Variante 1 (Kopie)");
+    // Review M8: sehr lange Namen dürfen die Namenssuche nicht endlos laufen lassen
+    const lang = legeVarianteAn(p, "x".repeat(200));
+    if (lang.ok) { const n = vorschlagVariantenName(lang.projekt, lang.projekt.aktiveVariante); expect(n.length).toBeLessThanOrEqual(200); expect(pruefeVariantenName(lang.projekt, n)).toBeNull(); }
     p = ok(legeVarianteAn(p, "Variante 1 (Kopie)", "v1")).projekt;
     expect(vorschlagVariantenName(p, "v1")).toBe("Variante 1 (Kopie 2)");
   });

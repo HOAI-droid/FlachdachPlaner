@@ -366,7 +366,7 @@ export function validateProjekt(raw: unknown, schemaVersion: number = SCHEMA_VER
     if (typeof x["id"] === "string") ids.add(x["id"]);
     const name = x["name"];
     if (c.str(sub(q, "name"), name, { nichtLeer: true }) && name.trim() !== "") {
-      if (name.length > VARIANTEN_NAME_MAX) c.err(sub(q, "name"), `Höchstens ${VARIANTEN_NAME_MAX} Zeichen`);
+      if (name.trim().length > VARIANTEN_NAME_MAX) c.err(sub(q, "name"), `Höchstens ${VARIANTEN_NAME_MAX} Zeichen`);
       const frueher = namen.get(variantenNameSchluessel(name));
       if (frueher !== undefined) c.err(sub(q, "name"), `Variantenname „${name.trim()}“ ist bereits vergeben (${frueher})`);
       else namen.set(variantenNameSchluessel(name), sub(q, "name"));

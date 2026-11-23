@@ -130,7 +130,7 @@ function schriftfeld(s: PdfSeite, e: PlanEingabe, inhalt: string, massstab: numb
   feld("BAUVORHABEN", m.bauvorhaben || "–", x0, y0 + 25);
   feld("PROJEKT-NR.", m.projektnummer || "–", spalte, y0 + 25, T.normal, false, 36);
   feld("PLAN-NR.", m.planNummer || "–", mitte, y0 + 25, T.normal, false, 36);
-  feld("PLANINHALT", e.variante ? `${inhalt} · ${e.variante}` : inhalt, x0, y0 + 12.5, T.normal, true);
+  feld("PLANINHALT", [m.planinhalt, e.variante ? `${inhalt} · ${e.variante}` : inhalt].filter(Boolean).join(" – "), x0, y0 + 12.5, T.normal, true);
   feld("MASSSTAB", `1 : ${massstab}`, spalte, y0 + 12.5, T.normal, true, 36);
   feld("DATUM", plandatum, mitte, y0 + 12.5, T.normal, false, 36);
   feld("BÜRO · BEARBEITER", [m.bueroName, bearb].filter((x) => x && x !== "–").join(" · ") || "–", x0, y0, T.klein);

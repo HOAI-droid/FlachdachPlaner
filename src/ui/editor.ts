@@ -1,7 +1,7 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aktiviereVariante, vorschlagVariantenName, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aktiviereVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
@@ -362,9 +362,12 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     return m;
   }
   async function speichereProjekt(): Promise<boolean> {
-    const ok = await speichereDatei(serializeProjekt(mitModell(projekt, modellFuerDatei())), dateiname(modell().meta.name));
+    const stand = schluessel();
+    let ok = false;
+    try { ok = await speichereDatei(serializeProjekt(mitModell(projekt, modellFuerDatei())), dateiname(modell().meta.name)); }
+    catch (e) { projektMeldung = `Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); return false; }
     projektMeldung = ok ? "Projekt gespeichert." : null;
-    if (ok) markiereGespeichert();
+    if (ok) gespeichertSchluessel = stand;
     refresh();
     return ok;
   }
@@ -475,8 +478,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       let p = null;
       try { p = berechnePlan(modell(), ergebnis.slope); } catch { /* ohne Dämmplan */ }
       const text = baueProjektDxf({ modell: modell(), slope: ergebnis.slope, plan: p });
-      void gibDateiAus(text, { name: `${dateiname(modell().meta.name)}-Plan.dxf`, mime: "application/dxf", endung: "dxf", beschreibung: "DXF" }).then((ok) => { if (!ok) { projektMeldung = "DXF-Export abgebrochen."; refresh(); } }, (e) => { projektMeldung = `DXF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); });
-      projektMeldung = "DXF erstellt (Meter, Layer FDP_*).";
+      void gibDateiAus(text, { name: `${dateiname(modell().meta.name)}-Plan.dxf`, mime: "application/dxf", endung: "dxf", beschreibung: "DXF" }).then((ok) => { projektMeldung = ok ? "DXF erstellt (Meter, Layer FDP_*)." : "DXF-Export abgebrochen."; refresh(); }, (e) => { projektMeldung = `DXF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); });
+      projektMeldung = "DXF wird erstellt …";
     } catch (e) { projektMeldung = `DXF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; }
     refresh();
   }
@@ -538,6 +541,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const l = el("label", "", "Name"); const i = el("input"); i.id = "f-variante-name"; l.htmlFor = i.id; i.dataset.k = "variante-name";
     i.value = variantenListe(pr).find((v) => v.aktiv)?.name ?? "";
     const fehler = el("div", "note error"); fehler.hidden = true; fehler.setAttribute("role", "alert");
+    i.maxLength = VARIANTEN_NAME_MAX;
     i.addEventListener("change", () => { const m = benenneAktive(i.value); if (m) { fehler.textContent = m; fehler.hidden = false; } });
     i.addEventListener("keydown", (e) => { if (e.key === "Enter") i.blur(); });
     f.append(l, i);
@@ -1054,7 +1058,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     ausfuehre: { value: ausfuehreBefehl },
     modell: { get: () => modell() },
     lade: { value: (m: ProjectModel) => { projekt = projektAusModell(m); verlauf = neuerVerlauf(modellFuerVariante(projekt)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
-    ladeProjekt: { value: (pr: Projekt) => { projekt = pr; verlauf = neuerVerlauf(modellFuerVariante(pr)); markiereGespeichert(); auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
+    ladeProjekt: { value: (pr: Projekt) => { projekt = pr; verlauf = neuerVerlauf(modellFuerVariante(pr)); gespeichertSchluessel = modellFuerVariante(pr).dachflaechen.length ? "\u0000" : schluessel(); auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
     projekt: { get: () => aktuellesProjekt() },
   });
   return api;

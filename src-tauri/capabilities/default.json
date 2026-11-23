@@ -11,7 +11,6 @@
     "core:window:allow-close",
     "dialog:allow-save",
     "fs:allow-write-file",
-    "fs:allow-write-text-file",
     "dialog:allow-open",
     "fs:allow-read-text-file",
     "core:event:default"

@@ -36,9 +36,8 @@ export function vorschlagVariantenName(p: Projekt, kopieVon?: Id): string {
   const frei = (n: string) => pruefeVariantenName(p, n) === null;
   const quelle = kopieVon === undefined ? undefined : p.varianten.find((v) => v.id === kopieVon);
   if (quelle) {
-    const basis = `${quelle.name.trim()} (Kopie)`.slice(0, VARIANTEN_NAME_MAX);
-    if (frei(basis)) return basis;
-    for (let i = 2; ; i++) { const n = `${quelle.name.trim()} (Kopie ${i})`; if (frei(n)) return n; }
+    const mitSuffix = (s: string) => quelle.name.trim().slice(0, VARIANTEN_NAME_MAX - s.length) + s;
+    for (let i = 1; i <= 1000; i++) { const n = mitSuffix(i === 1 ? " (Kopie)" : ` (Kopie ${i})`); if (frei(n)) return n; }
   }
   for (let i = p.varianten.length + 1; ; i++) { const n = `Variante ${i}`; if (frei(n)) return n; }
 }
