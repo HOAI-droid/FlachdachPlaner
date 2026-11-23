@@ -127,9 +127,12 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       const c = schwerpunkt(p);
       const s = p.bezeichnung, w = textBreite(ctx, s, 13, false);
       const frei = ausdehnung(p, vp.scale) >= 13 && Math.max(p.laenge, p.breite) * vp.scale >= w + 4;
-      const ok = frei && belegung.belege(c, 2, -8, w + 4, 17);
+      // links vom Schwerpunkt beginnend, aber nie über den rechten Plattenrand hinaus (schmale „1+1“ bleiben innen)
+      const xr = Math.max(...p.polygon.outer.map((q) => q.x));
+      const dx = Math.min(4, (xr - c.x) * vp.scale - w - 3);
+      const ok = frei && belegung.belege(c, dx - 2, -8, w + 4, 17);
       platz.set(p.id, ok);
-      if (ok) text(ctx, vp, s, c.x + 4 * px, c.y - 6 * px, { px: 13, farbe: linie });
+      if (ok) text(ctx, vp, s, c.x + dx * px, c.y - 6 * px, { px: 13, farbe: linie });
     }
     // 4) Verlegepfeile je Reihe, nur wenn das zugehörige Label Platz hat
     ctx.strokeStyle = linie; ctx.lineWidth = px;
