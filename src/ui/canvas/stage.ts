@@ -24,6 +24,8 @@ export interface Stage {
   centerOn(x: number, y: number): void;
   readonly viewport: Viewport;
   onChange(cb: (vp: Viewport, cursor: [number, number] | null) => void): void;
+  /** Wird zu Beginn jedes Zeichendurchgangs vor allen Ebenen aufgerufen. */
+  onFrame(cb: (vp: Viewport) => void): void;
   /** Zeigerereignisse in Weltkoordinaten (m). Klicks mit Space/Mitteltaste (Pan) werden nicht gemeldet. */
   onPointer(h: PointerHandlers): void;
   setCursor(css: string): void;
@@ -42,6 +44,7 @@ export function mountStage(host: HTMLElement): Stage {
   let queued = false;
   let cb: (vp: Viewport, cursor: [number, number] | null) => void = () => {};
   let cursor: [number, number] | null = null;
+  let frameCb: (vp: Viewport) => void = () => {};
 
   const bg = () => getComputedStyle(host).getPropertyValue("--bg") || "#fff";
 
@@ -51,6 +54,7 @@ export function mountStage(host: HTMLElement): Stage {
     ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx!.fillStyle = bg();
     ctx!.fillRect(0, 0, vp.w, vp.h);
+    frameCb(vp);
     for (const id of LAYER_ORDER) {
       const draw = layers.get(id);
       if (!draw) continue;
@@ -145,6 +149,7 @@ export function mountStage(host: HTMLElement): Stage {
     centerOn(x, y) { vp = { ...vp, cx: x, cy: y }; changed(); },
     get viewport() { return vp; },
     onChange(f) { cb = f; },
+    onFrame(f) { frameCb = f; },
     onPointer(h) { ph = h; },
     setCursor(c) { idleCursor = c; if (!drag && !space) canvas.style.cursor = c; },
     destroy() { ro.disconnect(); window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); canvas.remove(); },

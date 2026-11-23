@@ -1017,7 +1017,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
   }
 
-  stage.setLayer("kontur", (ctx, vp) => { neuerDurchgang(); zeichneKontur(ctx, vp); });
+  stage.onFrame(neuerDurchgang); // vor allen Ebenen: "daemmplan" liegt in LAYER_ORDER vor "kontur"
+  stage.setLayer("kontur", zeichneKontur);
   stage.setLayer("einzugsflaechen", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") zeichneEinzugsflaechen(ctx, vp, modell(), ergebnis); });
   stage.setLayer("daemmplan", (ctx, vp) => {
     if (!ergebnis || ansicht !== "daemmplan") return;

@@ -6,7 +6,7 @@ import {
 import type { Viewport } from "./canvas/viewport";
 import { meter, millimeter, zahl } from "./format";
 import { daemmStandard, packs } from "./packs";
-import { css, dunkel, geteilteBelegung, text, textBreite } from "./zeichnen";
+import { css, dunkel, geteilteBelegung, passtText, platziere, text, textBreite } from "./zeichnen";
 
 export function berechnePlan(m: ProjectModel, slope: SlopeResult): InsulationLayout | null {
   const kat = packs.find((x): x is DaemmplattenPack => x.typ === "daemmplatten");
@@ -47,6 +47,7 @@ function bemasse(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, b
     ctx.beginPath(); ctx.moveTo(hilfA.x, hilfA.y); ctx.lineTo(a.x, a.y); ctx.moveTo(hilfB.x, hilfB.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     pfeil(ctx, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, a, 7 * px); pfeil(ctx, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, b, 7 * px);
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    if (!passtText(l, textBreite(ctx, s, 12, true))) return; // Maßtext entfällt, wenn er nicht zwischen die Pfeile passt
     text(ctx, vp, s, h ? mx : mx - 5 * px, h ? my + 5 * px : my, { px: 12, mono: true, farbe: linie, ankerMitte: true, halo: true, winkel: h ? 0 : -Math.PI / 2 });
   };
   const o1 = 28 * px;
@@ -86,12 +87,9 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     // 5) Verlegestart + N0
     ctx.fillStyle = linie;
     const ex = d.platten.flatMap((q) => q.polygon.outer), bx0 = Math.min(...ex.map((q) => q.x)), bx1 = Math.max(...ex.map((q) => q.x)), by0 = Math.min(...ex.map((q) => q.y)), by1 = Math.max(...ex.map((q) => q.y));
-    for (const v of d.verlegestarts) {
-      ctx.beginPath(); ctx.arc(v.punkt.x, v.punkt.y, 4 * px, 0, Math.PI * 2); ctx.fill();
-      const rechts = v.punkt.x <= (bx0 + bx1) / 2, unten = v.punkt.y <= (by0 + by1) / 2;
-      const dx = rechts ? -86 : 8, dy = unten ? -22 : 8;
-      if (belegung.belege(v.punkt, dx - 2, dy - 2, 82, 18)) text(ctx, vp, "Verlegestart", v.punkt.x + dx * px, v.punkt.y + dy * px, { px: 12, farbe: linie });
-    }
+    // Plan kleiner als ca. 60 px: nur Linien, keine Eckzahlen/Verlegestart-Texte (würden Nachbarn überdecken)
+    const lesbar = Math.min(bx1 - bx0, by1 - by0) * vp.scale >= 60;
+    for (const v of d.verlegestarts) { ctx.beginPath(); ctx.arc(v.punkt.x, v.punkt.y, 4 * px, 0, Math.PI * 2); ctx.fill(); }
     if (d.n0) {
       const { x, y } = d.n0.position;
       belegung.sperre({ x, y }, -2, -24, 22, 26); // Dicken-/Plattenlabels weichen dem N0-Kasten aus
@@ -109,7 +107,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       for (const e of [g.hochpunkt, g.tiefpunkt]) for (const o of e?.orte ?? []) merke(o);
     }
     const mx = (bx0 + bx1) / 2, my = (by0 + by1) / 2;
-    for (const q of punkte) {
+    for (const q of lesbar ? punkte : []) {
       const mm = dickeAn(d.platten, q);
       if (mm === null) continue;
       const t = zahl(dickeRaster(mm), 0), w = textBreite(ctx, t, 12, true) + 4;
@@ -142,21 +140,54 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       const hor = Math.abs(a.richtung.x) > 0.7, bw = hor ? lenPx + 4 : 8, bh = hor ? 8 : lenPx + 4;
       if (belegung.belege({ x: sx, y: sy }, -bw / 2, -bh / 2, bw, bh)) pfeil(ctx, { x: sx, y: sy }, ende, 6 * px);
     }
-    // 6) Ø Gefälledämmung aus dem Plattenlayout
-    const k = plattenDaemmdicke(d);
-    const dach = m.dachflaechen.find((x) => x.id === d.dachflaecheId);
-    if (k && dach) {
-      const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)})`;
-      const ys = dach.kontur.map((q) => q.y), xs = dach.kontur.map((q) => q.x), x0 = Math.min(...xs), yo = Math.max(...ys);
-      const titel = `${dach.name || dach.id}: ${zeilen}`, tw = textBreite(ctx, titel, 12, true);
-      // Zeile je Dach: erste freie Höhe unter der Dachkante (Titel verschiedener Dächer stapeln statt zu überlappen)
-      let off = 72;
-      for (let i = 0; i < 6; i++, off += 18) if (belegung.belege({ x: x0, y: yo }, -2, off - 2, tw + 4, 18)) break;
-      text(ctx, vp, titel, x0, yo + off * px, { px: 12, mono: true, farbe: linie, halo: false });
-      if (d === plan.dachflaechen[0]) text(ctx, vp, "blau: Dämmdicke in mm, auf 5 mm aufgerundet", x0, yo + 54 * px, { px: 12, mono: true, farbe: linie, halo: false });
+    // 5c) „Verlegestart" nach Plattenzahlen und Pfeilen: nur auf freien Platz, nie über Plattenzahlen
+    const vw = textBreite(ctx, "Verlegestart", 12, false) + 4;
+    for (const v of lesbar ? d.verlegestarts : []) {
+      const rechts = v.punkt.x <= (bx0 + bx1) / 2, unten = v.punkt.y <= (by0 + by1) / 2;
+      const ox = rechts ? -(vw + 6) : 8, oy = unten ? -22 : 8;
+      const kand: [number, number][] = [[ox, oy], [ox, unten ? 8 : -22], [rechts ? 8 : -(vw + 6), oy], [rechts ? 8 : -(vw + 6), unten ? 8 : -22]];
+      const z = kand.find(([dx, dy]) => belegung.belege(v.punkt, dx - 2, dy - 2, vw, 18));
+      if (z) text(ctx, vp, "Verlegestart", v.punkt.x + z[0] * px, v.punkt.y + z[1] * px, { px: 12, farbe: linie });
     }
   }
+  titelUndLegende(ctx, vp, m, plan, belegung, linie);
   ctx.restore();
+}
+
+/** 6) Je Dach ein Titelblock „Name: Ø Gefälledämmung …“ (beim ersten Dach mit Platz samt Legende) – nach allen Labels,
+ *  über der oberen Maßkette, sonst unter der unteren; ohne freien Platz entfällt er (Werte stehen auch im Ergebnis-Panel). */
+function titelUndLegende(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, plan: InsulationLayout, belegung: ReturnType<typeof geteilteBelegung>, linie: string): void {
+  const px = 1 / vp.scale, zh = 18, rand = 46; // rand: jenseits des Maßketten-Bands (14…42 px)
+  let legende = ["blau: Dämmdicke in mm, auf 5 mm aufgerundet"];
+  if (plan.dachflaechen.some((d) => d.platten.some((p) => p.zusatzlagen > 0))) legende.push("gelb: Zusatzlage (Bezeichnung n+1)");
+  for (const d of plan.dachflaechen) {
+    const k = plattenDaemmdicke(d), dach = m.dachflaechen.find((x) => x.id === d.dachflaecheId);
+    if (!k || !dach || dach.kontur.length === 0) continue;
+    const xs = dach.kontur.map((q) => q.x), ys = dach.kontur.map((q) => q.y), x0 = Math.min(...xs), yo = Math.max(...ys), yu = Math.min(...ys);
+    const breitePx = (Math.max(...xs) - x0) * vp.scale;
+    if (Math.min(breitePx, (yo - yu) * vp.scale) < 60) continue; // Plan zu klein: Titel wäre ein Vielfaches breiter als das Dach
+    const titel = `${dach.name || dach.id}: Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)})`;
+    const versuche = legende.length ? [[titel, ...legende], [titel]] : [[titel]];
+    for (const zeilen of versuche) {
+      const w = Math.max(...zeilen.map((z) => textBreite(ctx, z, 12, true))) + 4, h = zeilen.length * zh;
+      const stufen = [0, 1, 2, 3, 4, 5].map((i) => i * zh);
+      // Block links- oder rechtsbündig zum Dach; dy = Unterkante über (+) der Oberkante bzw. unter (−) der Unterkante
+      const lagen: [number, number, number[]][] = [];
+      for (const [y, dys] of [[yo, stufen.map((s) => rand + s)], [yu, stufen.map((s) => -(rand + h + s))]] as const) {
+        for (const dx of [-2, breitePx - w + 2]) lagen.push([y, dx, [...dys]]);
+      }
+      let treffer: [number, number, number] | null = null;
+      for (const [y, dx, dys] of lagen) {
+        const dy = platziere(belegung, { x: x0, y }, dx, dys, w, h);
+        if (dy !== null) { treffer = [y, dx, dy]; break; }
+      }
+      if (!treffer) continue;
+      const [basisY, dx, dy] = treffer;
+      zeilen.forEach((z, i) => text(ctx, vp, z, x0 + (dx + 2) * px, basisY + (dy + h - (i + 1) * zh + 4) * px, { px: 12, mono: true, farbe: linie, halo: false }));
+      if (zeilen.length > 1) legende = [];
+      break;
+    }
+  }
 }
 
 function schwerpunkt(p: VerlegtePlatte): Vec2 {

@@ -41,7 +41,7 @@ export function textBreite(ctx: CanvasRenderingContext2D, s: string, px: number,
 /** Belegte Bildschirm-Rechtecke eines Zeichendurchgangs; Labels überlappen nicht (DESIGN §6). */
 export class Belegung {
   private readonly r: [number, number, number, number][] = [];
-  constructor(private readonly vp: Viewport) {}
+  constructor(readonly vp: Viewport) {}
   /** Reserviert ein Rechteck um den Weltpunkt (Bildschirm-px: dx, dy Versatz nach rechts/oben, Breite, Höhe); false bei Kollision. */
   /** Wie `belege`, aber ohne Viewport-Prüfung und ohne Kollisionsprüfung: sperrt eine Fläche (z. B. Maßlinienband) für spätere Labels. */
   sperre(p: Vec2, dx: number, dy: number, w: number, h: number): void {
@@ -58,12 +58,21 @@ export class Belegung {
   }
 }
 
+/** Erste freie Lage aus `kandidaten` (dy in px) für ein Rechteck w×h am Punkt; null, wenn nirgends Platz ist (dann nicht zeichnen). */
+export function platziere(b: Belegung, p: Vec2, dx: number, kandidaten: readonly number[], w: number, h: number): number | null {
+  for (const dy of kandidaten) if (b.belege(p, dx, dy, w, h)) return dy;
+  return null;
+}
+/** Text längs einer Strecke von `l` px nur, wenn er samt Rand hineinpasst (sonst entfällt er, statt Nachbarn zu überdecken). */
+export const passtText = (l: number, textPx: number, rand = 8): boolean => l >= textPx + rand;
+
 let geteilt: Belegung | null = null;
-/** Neuer Zeichendurchgang: die gemeinsame Belegung aller Ebenen wird verworfen (vom ersten Layer aufzurufen). */
+/** Neuer Zeichendurchgang: die gemeinsame Belegung aller Ebenen wird verworfen (Stage `onFrame`, vor allen Ebenen). */
 export const neuerDurchgang = (): void => { geteilt = null; };
-/** Eine Belegung für alle Beschriftungs-Ebenen eines Durchgangs, damit Labels verschiedener Ebenen einander nicht überdecken. */
+/** Eine Belegung für alle Beschriftungs-Ebenen eines Durchgangs, damit Labels verschiedener Ebenen einander nicht überdecken.
+ *  Anderer Viewport = anderes Bild: dann nie die alte Belegung (sonst Kollisionen mit Rechtecken einer früheren Ansicht). */
 export function geteilteBelegung(vp: Viewport): Belegung {
-  if (!geteilt) geteilt = new Belegung(vp);
+  if (!geteilt || geteilt.vp !== vp) geteilt = new Belegung(vp);
   return geteilt;
 }
 
