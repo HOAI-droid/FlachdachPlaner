@@ -9,5 +9,5 @@ describe("Fixture mehrseitig.pdf", () => {
     const gr: number[][] = [];
     for (let i = 1; i <= 3; i++) { const v = (await doc.getPage(i)).getViewport({ scale: 1 }); gr.push([Math.round(v.width), Math.round(v.height)]); }
     expect(gr).toEqual([[595, 842], [842, 595], [300, 200]]);
-  });
+  }, 30000); // pdfjs-Start ist unter Windows-CI/Last langsam (5 s reichten nicht)
 });
