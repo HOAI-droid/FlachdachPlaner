@@ -1,12 +1,13 @@
 /** Hilfsfunktionen zum Modell (rein). */
 import type { Polygon } from "../geometry/types";
 import { SCHEMA_VERSION } from "./migrate";
-import type { Dachflaeche, Kontur, KonturPunkt, ProjectModel } from "./types";
+import type { Dachflaeche, Kontur, KonturPunkt, ProjectModel, Projekt } from "./types";
+import { projektAusModell } from "./varianten";
 
 /** Vorgabe Gefälle-Standard: 2 % (m/m). Nutzervorgabe, kein Regelgrenzwert. */
 export const GEFAELLE_STANDARD = 0.02;
 
-/** Leeres Projekt mit Standardwerten. `jetzt` als ISO-Zeitstempel (Aufrufer liefert die Zeit, Kern bleibt deterministisch). */
+/** Leeres Modell (Dachflächen-Form/Varianten-Ansicht) mit Standardwerten. `jetzt` als ISO-Zeitstempel (Aufrufer liefert die Zeit, Kern bleibt deterministisch). */
 export function createProject(name: string, jetzt: string): ProjectModel {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -18,6 +19,9 @@ export function createProject(name: string, jetzt: string): ProjectModel {
     unterlage: null,
   };
 }
+
+/** Leeres Projekt (Dateiform v3) mit einer leeren Variante „Variante 1“. */
+export const createProjekt = (name: string, jetzt: string): Projekt => projektAusModell(createProject(name, jetzt));
 
 /** Dachfläche als Geometrie-Polygon: Kontur außen, Aufbauten als Löcher. */
 export function dachPolygon(d: Dachflaeche): Polygon {

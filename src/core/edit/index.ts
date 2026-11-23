@@ -17,3 +17,8 @@ export {
   setzeSchwellenBreite, setzeTrennBreite, waehle, waehleWerkzeug, type KantenTreffer, type KlickErgebnis, type WerkzeugId,
   type WerkzeugZustand,
 } from "./tools";
+export {
+  aktiviereVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, benenneVarianteUm,
+  istProjektGeaendert, kopiereDachflaechen, legeVarianteAn, loescheVariante, pruefeVariantenName, vorschlagVariantenName,
+  wechsleVariante, type VariantenErgebnis, type VariantenFehler, type VariantenFehlerCode,
+} from "./varianten";

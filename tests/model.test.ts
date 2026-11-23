@@ -50,8 +50,8 @@ function beispiel(): ProjectModel {
   };
 }
 
-/** Tiefe Kopie als veränderbares Rohdokument (für Negativtests). */
-const roh = (p: ProjectModel) => JSON.parse(serializeProject(p)) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+/** Tiefe Kopie in Dachflächen-Form (Ansicht bzw. v1/v2-Datei) als veränderbares Rohdokument (für Negativtests). */
+const roh = (p: ProjectModel) => JSON.parse(JSON.stringify(p)) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const fehlerPfade = (doc: unknown) => validateProject(doc).map((f) => f.pfad);
 
 describe("Modell", () => {
@@ -112,9 +112,7 @@ describe("Validierung: strukturierte Fehlerliste mit Pfaden (wirft nie)", () => 
     delete d["meta"]["name"];
     d["dachflaechen"][0]["typ"] = "balkon";
     d["dachflaechen"][0]["unbekannt"] = 1;
-    const r = parseProject(JSON.stringify(d));
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
+    const r = { fehler: validateProject(d) };
     expect(r.fehler.map((f) => f.pfad)).toEqual(expect.arrayContaining([
       "/gefaelleStandard", "/dachflaechen/0/kontur/2/x", "/meta/name", "/dachflaechen/0/typ", "/dachflaechen/0/unbekannt",
     ]));
@@ -224,7 +222,7 @@ describe("Schemaversion und Migration", () => {
       dachflaechen: neu.dachflaechen.map((d) => ({ ...d, entwaesserung: d.entwaesserung.map((e) => ({ ...e, z: 0 })) })),
     };
     expect(r.projekt).toEqual(erwartet);
-    expect(r.hinweise).toEqual(["Projekt von Schemaversion 1 auf 2 migriert."]);
+    expect(r.hinweise).toEqual([`Projekt von Schemaversion 1 auf ${SCHEMA_VERSION} migriert.`]);
   });
   it("Migration v1→v2 wirft nicht bei kaputter Struktur; Validierung meldet Fehler mit Pfad", () => {
     const v1 = roh(beispiel());
@@ -235,27 +233,27 @@ describe("Schemaversion und Migration", () => {
     const r = parseProject(JSON.stringify(v1));
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.fehler.map((f) => f.pfad)).toEqual(expect.arrayContaining(["/dachflaechen/0/entwaesserung/1", "/dachflaechen/1/entwaesserung"]));
+    expect(r.fehler.map((f) => f.pfad)).toEqual(expect.arrayContaining(["/varianten/0/dachflaechen/0/entwaesserung/1", "/varianten/0/dachflaechen/1/entwaesserung"]));
     const leer = { ...roh(beispiel()), schemaVersion: 1, dachflaechen: "kaputt" };
     expect(parseProject(JSON.stringify(leer)).ok).toBe(false);
   });
-  it("Beispiel-Migration v2→v3 (angenommen): Kette wird fortgesetzt", () => {
-    // Angenommene v2: Gefälle in Prozent unter "gefaelleProzent"; v3 = heutige Form (m/m).
+  it("Beispiel-Migration v3→v4 (angenommen): Kette wird fortgesetzt", () => {
+    // Angenommene v3: Gefälle in Prozent unter "gefaelleProzent"; v4 = heutige v3-Form (m/m).
     const kette: MigrationChain = {
       ...MIGRATIONS,
-      2: (doc) => {
+      3: (doc) => {
         const { gefaelleProzent, ...rest } = doc;
         return { ...rest, gefaelleStandard: (gefaelleProzent as number) / 100 };
       },
     };
-    const neu = { ...beispiel(), schemaVersion: 3 };
-    const { gefaelleStandard, ...alt } = roh(neu);
-    const v2 = { ...alt, schemaVersion: 2, gefaelleProzent: gefaelleStandard * 100 };
-    const r = parseProject(JSON.stringify(v2), { migrations: kette, zielVersion: 3 });
+    const neu = { ...beispiel(), schemaVersion: 4 };
+    const { gefaelleStandard, ...alt } = JSON.parse(serializeProject(beispiel())) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const v3 = { ...alt, schemaVersion: 3, gefaelleProzent: gefaelleStandard * 100 };
+    const r = parseProject(JSON.stringify(v3), { migrations: kette, zielVersion: 4 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.projekt).toEqual(neu);
-    expect(r.hinweise).toEqual(["Projekt von Schemaversion 2 auf 3 migriert."]);
+    expect(r.hinweise).toEqual(["Projekt von Schemaversion 3 auf 4 migriert."]);
   });
   it("Lücke in der Migrationskette → Fehler", () => {
     const r = parseProject(serializeProject(beispiel()), { migrations: MIGRATIONS, zielVersion: SCHEMA_VERSION + 1 });

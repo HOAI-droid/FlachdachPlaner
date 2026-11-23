@@ -32,10 +32,33 @@ export interface KantenPosition {
   readonly abstand: number;
 }
 
-export interface Projektmetadaten {
+/**
+ * Plankopf-/Schriftfeldangaben (alle optional, Text; seit Schemaversion 3).
+ * Länge je Feld ≤ 200 Zeichen; `planDatum`/`revisionDatum` als ISO-Datum JJJJ-MM-TT.
+ */
+export interface Projektangaben {
+  readonly bauvorhaben?: string;
+  readonly bauherr?: string;
+  /** Planinhalt (Standard bei Ausgabe aus dem Planblatt, z. B. „Gefälleplan“). */
+  readonly planinhalt?: string;
+  readonly bueroName?: string;
+  readonly bueroAnschrift?: string;
+  readonly bueroKontakt?: string;
+  readonly bearbeiter?: string;
+  readonly geprueftVon?: string;
+  readonly planNummer?: string;
+  /** ISO-Datum JJJJ-MM-TT. */
+  readonly planDatum?: string;
+  readonly revision?: string;
+  /** ISO-Datum JJJJ-MM-TT. */
+  readonly revisionDatum?: string;
+}
+
+export interface Projektmetadaten extends Projektangaben {
+  /** Projektname (Anzeige im Plankopf als Projekt). */
   readonly name: string;
   readonly projektnummer?: string;
-  readonly bearbeiter?: string;
+  /** Freitext, ≤ 2000 Zeichen. */
   readonly notiz?: string;
   /** ISO-8601-Zeitstempel. */
   readonly erstelltAm: string;
@@ -187,6 +210,10 @@ export interface Unterlage {
   readonly eingebettet?: { readonly base64: string };
 }
 
+/**
+ * Modell in Dachflächen-Form: Dateiformat bis Schemaversion 2 und seit v3 die *Varianten-Ansicht*
+ * (`modellFuerVariante`), auf der Rechenkern, Werkzeuge und Exporte unverändert arbeiten.
+ */
 export interface ProjectModel {
   readonly schemaVersion: number;
   readonly meta: Projektmetadaten;
@@ -196,5 +223,32 @@ export interface ProjectModel {
   /** Gefälle-Standard (m/m); Vorgabe 0.02. */
   readonly gefaelleStandard: number;
   readonly dachflaechen: readonly Dachflaeche[];
+  readonly unterlage: Unterlage | null;
+}
+
+/** Planungsvariante (seit Schemaversion 3): vollständiger, unabhängiger Satz Dachflächen. */
+export interface Variante {
+  readonly id: Id;
+  /** Nicht leer, projektweit eindeutig (ohne Groß-/Kleinschreibung und Randleerzeichen). */
+  readonly name: string;
+  readonly dachflaechen: readonly Dachflaeche[];
+  /** Abweichender Gefälle-Standard (m/m); fehlt = projektweiter Wert. */
+  readonly gefaelleStandard?: number;
+}
+
+/**
+ * Projektdatei ab Schemaversion 3. Unterlage, Standort, Metadaten und Pack-Versionen gelten
+ * projektweit, Dachflächen je Variante. IDs sind projektweit eindeutig (auch über Varianten).
+ */
+export interface Projekt {
+  readonly schemaVersion: number;
+  readonly meta: Projektmetadaten;
+  readonly packVersionen: Readonly<Record<string, string>>;
+  readonly standort: Standort;
+  /** Projektweiter Gefälle-Standard (m/m), gilt für Varianten ohne eigenen Wert. */
+  readonly gefaelleStandard: number;
+  /** Mindestens eine Variante; Reihenfolge = Listenreihenfolge. */
+  readonly varianten: readonly Variante[];
+  readonly aktiveVariante: Id;
   readonly unterlage: Unterlage | null;
 }

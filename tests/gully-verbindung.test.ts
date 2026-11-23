@@ -94,10 +94,10 @@ describe("Verbundene Gullys: Modell, Datei, Befehle", () => {
   it("validate: verbundenMit nur am Gully und nur als Text", () => {
     const ok = projekt(dach("d1", [gully("g1", 5, 5, 0, "g2"), gully("g2", 15, 5)]));
     expect(validateProject(ok)).toEqual([]);
-    const zahl = JSON.parse(serializeProject(ok)) as { dachflaechen: { entwaesserung: Record<string, unknown>[] }[] };
+    const zahl = JSON.parse(JSON.stringify(ok)) as { dachflaechen: { entwaesserung: Record<string, unknown>[] }[] };
     zahl.dachflaechen[0]!.entwaesserung[0]!["verbundenMit"] = 3;
     expect(validateProject(zahl).map((e) => e.pfad)).toEqual(["/dachflaechen/0/entwaesserung/0/verbundenMit"]);
-    const not = JSON.parse(serializeProject(ok)) as typeof zahl;
+    const not = JSON.parse(JSON.stringify(ok)) as typeof zahl;
     not.dachflaechen[0]!.entwaesserung[1] = { id: "n1", art: "notablauf", name: "N", typ: null, position: { x: 1, y: 1 }, z: 0, verbundenMit: "g1" };
     expect(validateProject(not).length).toBeGreaterThan(0);
   });

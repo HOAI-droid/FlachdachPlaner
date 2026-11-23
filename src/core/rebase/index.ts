@@ -1,7 +1,8 @@
 /** Unterlage austauschen und Abweichungen nachziehen (PLAN Schritt 22a). DOM-frei. */
 import type { Befehl } from "../edit/history";
 import type { Vec2 } from "../geometry/types";
-import type { Dachflaeche, KonturPunkt, ProjectModel } from "../model/types";
+import type { Dachflaeche, KonturPunkt, ProjectModel, Projekt } from "../model/types";
+import { mitModell, modellFuerVariante, variantenListe } from "../model/varianten";
 import type { SnapSegment } from "../snap/snap";
 
 export const TOLERANZ_STANDARD = 0.02;
@@ -16,6 +17,8 @@ export interface PunktRef {
   /** Aufbau-/Zonen-ID; bei `kontur` undefined. */
   readonly objektId?: string;
   readonly punktId: string;
+  /** Variante (nur bei `findeAbweichungenProjekt`); fehlt = Ansicht, auf die der Befehl wirkt. */
+  readonly varianteId?: string;
 }
 
 export interface Abweichung {
@@ -101,4 +104,32 @@ export function verschiebePunkte(eintraege: readonly { ref: PunktRef; pos: Vec2 
 /** Übernimmt Vorschläge (nur Abweichungen mit Vorschlag). */
 export const uebernehmeVorschlaege = (liste: readonly Abweichung[]): Befehl =>
   verschiebePunkte(liste.filter((a) => a.vorschlag).map((a) => ({ ref: a.ref, pos: a.vorschlag! })),
+    liste.length === 1 ? "Punkt auf neuen Fangpunkt setzen" : `${liste.length} Punkte auf neue Fangpunkte setzen`);
+
+/** Wie `findeAbweichungen`, aber über alle Varianten (Listenreihenfolge); `ref.varianteId` gesetzt, `id` mit Variantenpräfix. */
+export function findeAbweichungenProjekt(
+  p: Projekt, altSeg: readonly SnapSegment[], neuSeg: readonly SnapSegment[], toleranz = TOLERANZ_STANDARD,
+): Abweichung[] {
+  return variantenListe(p).flatMap(({ id: vid }) => findeAbweichungen(modellFuerVariante(p, vid), altSeg, neuSeg, toleranz)
+    .map((a) => ({ ...a, id: `${vid}:${a.id}`, ref: { ...a.ref, varianteId: vid } })));
+}
+
+/** Projektbefehl: setzt Konturpunkte in ihren Varianten (`ref.varianteId`, sonst aktive), ein Undo-Schritt. */
+export function verschiebePunkteProjekt(eintraege: readonly { ref: PunktRef; pos: Vec2 }[], label = "Punkte nachziehen"): Befehl<Projekt> {
+  return {
+    label,
+    anwenden: (p) => {
+      let r = p;
+      for (const { id: vid } of variantenListe(p)) {
+        const mine = eintraege.filter((e) => (e.ref.varianteId ?? p.aktiveVariante) === vid);
+        if (mine.length) r = mitModell(r, verschiebePunkte(mine).anwenden(modellFuerVariante(r, vid)), vid);
+      }
+      return r;
+    },
+  };
+}
+
+/** Übernimmt Vorschläge aus `findeAbweichungenProjekt` (alle Varianten, ein Undo-Schritt). */
+export const uebernehmeVorschlaegeProjekt = (liste: readonly Abweichung[]): Befehl<Projekt> =>
+  verschiebePunkteProjekt(liste.filter((a) => a.vorschlag).map((a) => ({ ref: a.ref, pos: a.vorschlag! })),
     liste.length === 1 ? "Punkt auf neuen Fangpunkt setzen" : `${liste.length} Punkte auf neue Fangpunkte setzen`);

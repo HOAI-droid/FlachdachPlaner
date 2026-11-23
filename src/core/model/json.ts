@@ -1,7 +1,8 @@
 /** Projekt-JSON: deterministische Ausgabe, Einlesen mit Migration und Validierung (wirft nie). */
 import { MIGRATIONS, SCHEMA_VERSION, migrate, type MigrationChain, type RohDokument } from "./migrate";
-import type { ProjectModel } from "./types";
-import { validateProject, type ValidationError } from "./validate";
+import type { ProjectModel, Projekt } from "./types";
+import { validateProject, validateProjekt, type ValidationError } from "./validate";
+import { modellFuerVariante, projektAusModell } from "./varianten";
 
 /**
  * Kanonische Form: Objektschlüssel sortiert (Wurzel: `schemaVersion` zuerst),
@@ -17,15 +18,23 @@ function kanonisch(v: unknown): unknown {
   return v;
 }
 
-/** Serialisiert ein Projekt deterministisch (gleiches Modell → byte-gleiche Ausgabe). */
-export function serializeProject(p: ProjectModel): string {
+function kanonischerText(p: object): string {
   const k = kanonisch(p) as Record<string, unknown>;
   const { schemaVersion, ...rest } = k;
   return JSON.stringify({ schemaVersion, ...rest }, null, 2) + "\n";
 }
 
-export type ParseResult =
-  | { readonly ok: true; readonly projekt: ProjectModel; readonly hinweise: readonly string[] }
+/** Serialisiert eine Projektdatei (v3) deterministisch (gleiches Projekt → byte-gleiche Ausgabe). */
+export const serializeProjekt = (p: Projekt): string => kanonischerText(p);
+
+/**
+ * Übergang bis zur Varianten-UI (Schritt 37): schreibt ein Modell in Dachflächen-Form als v3-Datei
+ * mit genau einer Variante. Weitere Varianten gehen dabei nicht ein → für Projekte `serializeProjekt`.
+ */
+export const serializeProject = (m: ProjectModel): string => serializeProjekt(projektAusModell(m));
+
+export type ParseResult<T = ProjectModel> =
+  | { readonly ok: true; readonly projekt: T; readonly hinweise: readonly string[] }
   | { readonly ok: false; readonly fehler: readonly ValidationError[]; readonly neuereVersion: boolean };
 
 export interface ParseOptions {
@@ -37,8 +46,11 @@ export interface ParseOptions {
 const fehler = (pfad: string, meldung: string, neuereVersion = false): ParseResult =>
   ({ ok: false, fehler: [{ pfad, meldung }], neuereVersion });
 
-/** Liest Projekt-JSON: Syntax → Schemaversion → Migration → Validierung. */
-export function parseProject(text: string, opts: ParseOptions = {}): ParseResult {
+/**
+ * Liest Projekt-JSON: Syntax → Schemaversion → Migration → Validierung. Ergebnis ist das Rohdokument
+ * der Zielversion (Varianten-Form ab v3, Dachflächen-Form bis v2).
+ */
+function parseRoh(text: string, opts: ParseOptions): ParseResult<unknown> {
   const ziel = opts.zielVersion ?? SCHEMA_VERSION;
   let raw: unknown;
   try {
@@ -53,7 +65,23 @@ export function parseProject(text: string, opts: ParseOptions = {}): ParseResult
   }
   const m = migrate(raw as RohDokument, opts.migrations ?? MIGRATIONS, ziel);
   if (!m.ok) return fehler("/schemaVersion", m.meldung, m.neuereVersion);
-  const errs = validateProject(m.doc, ziel);
+  const errs = ziel >= 3 ? validateProjekt(m.doc, ziel) : validateProject(m.doc, ziel);
   if (errs.length > 0) return { ok: false, fehler: errs, neuereVersion: false };
-  return { ok: true, projekt: m.doc as unknown as ProjectModel, hinweise: m.hinweise };
+  return { ok: true, projekt: m.doc, hinweise: m.hinweise };
+}
+
+/** Liest eine Projektdatei (jede bekannte Version) als `Projekt` (v3, Varianten-Form). */
+export function parseProjekt(text: string, opts: ParseOptions = {}): ParseResult<Projekt> {
+  return parseRoh(text, opts) as ParseResult<Projekt>;
+}
+
+/**
+ * Übergang bis zur Varianten-UI (Schritt 37): liest eine Projektdatei und liefert die Ansicht der
+ * aktiven Variante (Dachflächen-Form). Für Zielversionen < 3 (Tests) das Dokument selbst.
+ */
+export function parseProject(text: string, opts: ParseOptions = {}): ParseResult {
+  const r = parseRoh(text, opts);
+  if (!r.ok) return r;
+  if ((opts.zielVersion ?? SCHEMA_VERSION) < 3) return r as ParseResult;
+  return { ok: true, projekt: modellFuerVariante(r.projekt as Projekt), hinweise: r.hinweise };
 }

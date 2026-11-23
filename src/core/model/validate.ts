@@ -8,6 +8,8 @@ import { EPS } from "../geometry/eps";
 import { signedArea } from "../geometry/polygon";
 import { dist } from "../geometry/segment";
 import { SCHEMA_VERSION } from "./migrate";
+import { PROJEKTANGABEN_FELDER, pruefeAngabe } from "./projektangaben";
+import { VARIANTEN_NAME_MAX, variantenNameSchluessel } from "./varianten";
 
 export interface ValidationError {
   readonly pfad: string;
@@ -297,38 +299,84 @@ function pruefeUnterlage(c: Pruefer, p: string, v: unknown): void {
   }
 }
 
-/**
- * Prüft ein (bereits migriertes) Projektdokument gegen das Schema `schemaVersion`.
- * Leere Liste = gültig.
- */
-export function validateProject(raw: unknown, schemaVersion: number = SCHEMA_VERSION): ValidationError[] {
-  if (!isObj(raw)) return [{ pfad: "", meldung: "Projekt muss ein JSON-Objekt sein" }];
-  const packVersionen = raw["packVersionen"];
-  const packIds = new Set(isObj(packVersionen) ? Object.keys(packVersionen) : []);
-  const c = new Pruefer(packIds);
-  const o = c.obj("", raw, ["schemaVersion", "meta", "packVersionen", "standort", "gefaelleStandard", "dachflaechen", "unterlage"]);
-  if (!o) return c.fehler;
-
-  if (o["schemaVersion"] !== schemaVersion) c.err("/schemaVersion", `Schemaversion ${schemaVersion} erwartet`);
-
-  const m = c.obj("/meta", o["meta"], ["name", "erstelltAm", "geaendertAm"], ["projektnummer", "bearbeiter", "notiz"]);
-  if (m) {
-    c.str("/meta/name", m["name"]);
-    for (const k of ["erstelltAm", "geaendertAm"]) {
-      c.str(sub("/meta", k), m[k], { muster: ISO_ZEIT, text: "ISO-8601-Zeitstempel erwartet" });
-    }
-    for (const k of ["projektnummer", "bearbeiter", "notiz"]) c.optStr("/meta", m, k);
+function pruefeMeta(c: Pruefer, v: unknown): void {
+  const m = c.obj("/meta", v, ["name", "erstelltAm", "geaendertAm"], ["projektnummer", "notiz", ...PROJEKTANGABEN_FELDER]);
+  if (!m) return;
+  c.str("/meta/name", m["name"]);
+  for (const k of ["erstelltAm", "geaendertAm"]) {
+    c.str(sub("/meta", k), m[k], { muster: ISO_ZEIT, text: "ISO-8601-Zeitstempel erwartet" });
   }
+  c.optStr("/meta", m, "projektnummer");
+  for (const k of [...PROJEKTANGABEN_FELDER, "notiz"] as const) {
+    if (m[k] === undefined || !c.str(sub("/meta", k), m[k])) continue;
+    const f = pruefeAngabe(k, m[k]);
+    if (f) c.err(sub("/meta", k), f);
+  }
+}
 
+/** Projektweite Teile (gleich in Dachflächen- und Varianten-Form). */
+function pruefeGemeinsam(c: Pruefer, o: Obj): void {
+  pruefeMeta(c, o["meta"]);
+  const packVersionen = o["packVersionen"];
   if (!isObj(packVersionen)) c.err("/packVersionen", "Objekt erwartet");
   else for (const [k, ver] of Object.entries(packVersionen)) {
     if (!PACK_ID.test(k)) c.err(sub("/packVersionen", k), "Ungültige Pack-ID (erlaubt: a-z, 0-9, . _ -)");
     c.str(sub("/packVersionen", k), ver, { nichtLeer: true });
   }
-
   pruefeStandort(c, "/standort", o["standort"]);
   c.num("/gefaelleStandard", o["gefaelleStandard"], { min: 0 });
-  c.arr("/dachflaechen", o["dachflaechen"])?.forEach((d, i) => pruefeDach(c, sub("/dachflaechen", i), d));
   if (o["unterlage"] !== null) pruefeUnterlage(c, "/unterlage", o["unterlage"]);
+}
+
+const packIdsVon = (raw: Obj) => new Set(isObj(raw["packVersionen"]) ? Object.keys(raw["packVersionen"]) : []);
+
+/**
+ * Prüft ein Modell in Dachflächen-Form (Projektdatei bis Schemaversion 2 bzw. Varianten-Ansicht
+ * `ProjectModel`) gegen `schemaVersion`. Leere Liste = gültig.
+ */
+export function validateProject(raw: unknown, schemaVersion: number = SCHEMA_VERSION): ValidationError[] {
+  if (!isObj(raw)) return [{ pfad: "", meldung: "Projekt muss ein JSON-Objekt sein" }];
+  const c = new Pruefer(packIdsVon(raw));
+  const o = c.obj("", raw, ["schemaVersion", "meta", "packVersionen", "standort", "gefaelleStandard", "dachflaechen", "unterlage"]);
+  if (!o) return c.fehler;
+  if (o["schemaVersion"] !== schemaVersion) c.err("/schemaVersion", `Schemaversion ${schemaVersion} erwartet`);
+  pruefeGemeinsam(c, o);
+  c.arr("/dachflaechen", o["dachflaechen"])?.forEach((d, i) => pruefeDach(c, sub("/dachflaechen", i), d));
+  return c.fehler;
+}
+
+/**
+ * Prüft eine Projektdatei in Varianten-Form (ab Schemaversion 3). IDs (Varianten und Objekte) sind
+ * projektweit eindeutig; Variantennamen nicht leer und eindeutig; `aktiveVariante` muss existieren.
+ */
+export function validateProjekt(raw: unknown, schemaVersion: number = SCHEMA_VERSION): ValidationError[] {
+  if (!isObj(raw)) return [{ pfad: "", meldung: "Projekt muss ein JSON-Objekt sein" }];
+  const c = new Pruefer(packIdsVon(raw));
+  const o = c.obj("", raw, ["schemaVersion", "meta", "packVersionen", "standort", "gefaelleStandard", "varianten", "aktiveVariante", "unterlage"]);
+  if (!o) return c.fehler;
+  if (o["schemaVersion"] !== schemaVersion) c.err("/schemaVersion", `Schemaversion ${schemaVersion} erwartet`);
+  pruefeGemeinsam(c, o);
+  const ids = new Set<string>();
+  const namen = new Map<string, string>();
+  c.arr("/varianten", o["varianten"], 1)?.forEach((v, i) => {
+    const q = sub("/varianten", i);
+    const x = c.obj(q, v, ["id", "name", "dachflaechen"], ["gefaelleStandard"]);
+    if (!x) return;
+    c.id(sub(q, "id"), x["id"]);
+    if (typeof x["id"] === "string") ids.add(x["id"]);
+    const name = x["name"];
+    if (c.str(sub(q, "name"), name, { nichtLeer: true }) && name.trim() !== "") {
+      if (name.length > VARIANTEN_NAME_MAX) c.err(sub(q, "name"), `Höchstens ${VARIANTEN_NAME_MAX} Zeichen`);
+      const frueher = namen.get(variantenNameSchluessel(name));
+      if (frueher !== undefined) c.err(sub(q, "name"), `Variantenname „${name.trim()}“ ist bereits vergeben (${frueher})`);
+      else namen.set(variantenNameSchluessel(name), sub(q, "name"));
+    }
+    c.optNum(q, x, "gefaelleStandard", { min: 0 });
+    c.arr(sub(q, "dachflaechen"), x["dachflaechen"])?.forEach((d, j) => pruefeDach(c, sub(sub(q, "dachflaechen"), j), d));
+  });
+  const a = o["aktiveVariante"];
+  if (c.str("/aktiveVariante", a, { nichtLeer: true }) && Array.isArray(o["varianten"]) && !ids.has(a)) {
+    c.err("/aktiveVariante", `Variante "${a}" gibt es nicht`);
+  }
   return c.fehler;
 }

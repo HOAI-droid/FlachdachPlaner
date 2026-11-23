@@ -4,6 +4,7 @@ import { EPS } from "../geometry/eps";
 import { pointInRing, ringArea, ringCentroid, signedArea } from "../geometry/polygon";
 import { dist, distPointSegment } from "../geometry/segment";
 import { konturKante } from "../model/model";
+import { idsDerDachflaechen, reservierteIds } from "../model/varianten";
 import type {
   AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Gully, Id, Koordinate, Kontur, KonturPunkt, PackRef, ProjectModel, Regenspende,
   Tuerschwelle, Unterlage, Zone,
@@ -16,18 +17,13 @@ import { STANDARD_ATTIKA_BREITE } from "./tools";
 /** ID-Präfixe: d Dachfläche, p Konturpunkt, au Aufbau, zo Zone, at Attika, ts Türschwelle, en Entwässerung. */
 export type IdPraefix = "d" | "p" | "au" | "zo" | "at" | "ts" | "en";
 
-function alleIds(m: ProjectModel): string[] {
-  const ids: string[] = [];
-  for (const d of m.dachflaechen) {
-    ids.push(d.id, ...d.kontur.map((p) => p.id));
-    for (const a of d.aufbauten) ids.push(a.id, ...a.kontur.map((p) => p.id));
-    for (const z of d.zonen) ids.push(z.id, ...z.kontur.map((p) => p.id));
-    ids.push(...d.attika.map((a) => a.id), ...d.tuerschwellen.map((t) => t.id), ...d.entwaesserung.map((e) => e.id));
-  }
-  return ids;
-}
+/** IDs der Ansicht plus die in anderen Varianten belegten (projektweite Eindeutigkeit). */
+const alleIds = (m: ProjectModel): string[] => [...idsDerDachflaechen(m.dachflaechen), ...reservierteIds(m)];
 
-/** Nächste freie ID `${praefix}${n}` (n = größte vorhandene Nummer dieses Präfixes + 1); `anzahl` fortlaufende IDs. */
+/**
+ * Nächste freie ID `${praefix}${n}` (n = größte vorhandene Nummer dieses Präfixes + 1, projektweit
+ * über alle Varianten einer Ansicht); `anzahl` fortlaufende IDs.
+ */
 export function neueIds(m: ProjectModel, praefix: IdPraefix, anzahl = 1): string[] {
   let max = 0;
   const re = new RegExp(`^${praefix}(\\d+)$`);
