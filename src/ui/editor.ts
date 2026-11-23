@@ -481,7 +481,14 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (antwort !== "export") return null;
     return liste.filter((v) => gewaehlt.has(v.id)).map((v) => v.id);
   }
+  let pdfLaeuft = false;
+  /** Sperre gegen Doppelstart: während des Exports (inkl. Dialog und Speichern) startet kein zweiter. */
   async function exportierePdf() {
+    if (pdfLaeuft) return;
+    pdfLaeuft = true;
+    try { await exportierePdfJetzt(); } finally { pdfLaeuft = false; }
+  }
+  async function exportierePdfJetzt() {
     const pr = aktuellesProjekt();
     const ids = await waehleExportVarianten();
     if (!ids) return;
@@ -495,7 +502,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       const leer: string[] = [];
       for (const [i, id] of ids.entries()) {
         const name = variantenListe(pr).find((v) => v.id === id)?.name ?? id;
-        if (ids.length > 1) { projektMeldung = `PDF wird erstellt: Variante ${i + 1}/${ids.length} …`; refresh(); await new Promise((res) => setTimeout(res, 0)); }
+        if (ids.length > 1) { projektMeldung = `PDF wird erstellt: Variante ${i + 1}/${ids.length} …`; refresh(); await new Promise<void>((res) => requestAnimationFrame(() => setTimeout(res, 0))); }
         const t = baueExportEingabe(modellFuerVariante(pr, id), name, datum, regelwerk, mehrere);
         if (t) teile.push(t); else leer.push(name);
       }

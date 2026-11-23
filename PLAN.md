@@ -143,7 +143,6 @@ modellFuerVariante(p: Projekt, id?: Id): ProjectModel   // heutiges Format → c
 - **Desktop:** Actions-Läufe 29/30 (Menü-Rust-Code, nicht lokal kompilierbar) prüfen; Menü/Speichern/Öffnen unter macOS/Windows manuell testen. Mac: `xattr -cr /Applications/Flachdachplaner.app`. Intel-Mac, Signierung, Auto-Update zurückgestellt.
 
 ### Review-Rest (Meilenstein Varianten/Undo/PDF) – offen
-- PDF-Export/Speichern ohne Doppelstart-Sperre; Fortschritt: `requestAnimationFrame` vor `setTimeout(0)`.
 - `schluessel()` (JSON.stringify) bei jedem refresh bei geändertem Stand: entprellen oder nur in `darfVerwerfen`.
 - Tauri-CSP: `unsafe-eval` und `connect-src https:` prüfen/einengen.
 - Tests: Undo nach Kalibrieren, Undo mit Variantenwechsel bei offenem Entwurf, fehlgeschlagenes Laden einer eingebetteten Unterlage, Pfeil je Facette im PDF.
