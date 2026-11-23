@@ -72,7 +72,6 @@ function flaechenLabel(e: Ergebnis, f: Ergebnis["catchments"]["flaechen"][number
 
 export function zeichneEinzugsflaechen(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, e: Ergebnis): void {
   const px = 1 / vp.scale;
-  const belegung = geteilteBelegung(vp);
   const dk = dunkel();
   ctx.save(); ctx.setLineDash([]); ctx.lineJoin = "round";
   for (const f of e.catchments.flaechen) {
@@ -96,7 +95,15 @@ export function zeichneEinzugsflaechen(ctx: CanvasRenderingContext2D, vp: Viewpo
       ctx.restore();
     }
   }
-  // Labels (nach den Flächen, damit nichts überdeckt wird)
+  ctx.restore();
+}
+
+/** Flächen-Etiketten (Pills); eigene Ebene über den Linien, reserviert ihren Platz vor Pfeil- und Kotentexten. */
+export function zeichneFlaechenLabels(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, e: Ergebnis): void {
+  void m;
+  const px = 1 / vp.scale;
+  const belegung = geteilteBelegung(vp);
+  ctx.save(); ctx.setLineDash([]); ctx.lineJoin = "round";
   for (const f of e.catchments.flaechen) {
     const [, rand] = farbe(f.farbe);
     const s = flaechenLabel(e, f);
@@ -174,7 +181,8 @@ export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Er
       let w = Math.atan2(-ry, rx);
       if (w > Math.PI / 2) w -= Math.PI; else if (w < -Math.PI / 2) w += Math.PI;
       const mx = x + rx * len / 2 + Math.sin(w) * 9 * px, my = y + ry * len / 2 + Math.cos(w) * 9 * px;
-      if (belegung.belege({ x: mx, y: my }, -16, -6, 32, 12)) text(ctx, vp, s, mx, my, { px: 11, mono: true, ankerMitte: true, winkel: w });
+      const senkrecht = Math.abs(Math.sin(w)) > 0.7;
+      if (belegung.belege({ x: mx, y: my }, senkrecht ? -8 : -20, senkrecht ? -20 : -8, senkrecht ? 16 : 40, senkrecht ? 40 : 16)) text(ctx, vp, s, mx, my, { px: 11, mono: true, ankerMitte: true, winkel: w });
     }
   }
   ctx.restore();
@@ -214,7 +222,7 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
 
 /** Notentwässerungsbereich: Streifen entlang der Kante (DESIGN §6), gestrichelt in --warn, Füllung 10 %. */
 export function zeichneNotbereich(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel, e: Ergebnis): void {
-  const px = 1 / vp.scale, warn = css("--warn", "#8A5A00");
+  const px = 1 / vp.scale, warn = css("--warn", "#8A5A00"), belegung = geteilteBelegung(vp);
   ctx.save();
   for (const s of e.notfall) {
     const d = dachVon(m, s.dachflaecheId);
@@ -225,7 +233,8 @@ export function zeichneNotbereich(ctx: CanvasRenderingContext2D, vp: Viewport, m
       bahn(ctx, q); ctx.globalAlpha = 0.1; ctx.fillStyle = warn; ctx.fill();
       ctx.globalAlpha = 1; ctx.setLineDash([6 * px, 3 * px]); ctx.strokeStyle = warn; ctx.lineWidth = 1.5 * px; ctx.stroke();
       const mx = (b.von.x + b.bis.x) / 2 + n.x * t * 0.5, my = (b.von.y + b.bis.y) / 2 + n.y * t * 0.5;
-      if (Math.hypot(b.bis.x - b.von.x, b.bis.y - b.von.y) * vp.scale > 320) text(ctx, vp, "Bereich Notentwässerung", mx, my - 4 * px, { px: 11, farbe: warn, ankerMitte: true, winkel: Math.atan2(-(b.bis.y - b.von.y), b.bis.x - b.von.x) });
+      const winkelN = Math.atan2(-(b.bis.y - b.von.y), b.bis.x - b.von.x), vert = Math.abs(Math.sin(winkelN)) > 0.7;
+      if (Math.hypot(b.bis.x - b.von.x, b.bis.y - b.von.y) * vp.scale > 320 && belegung.belege({ x: mx, y: my }, vert ? -9 : -85, vert ? -85 : -9, vert ? 18 : 170, vert ? 170 : 18)) text(ctx, vp, "Bereich Notentwässerung", mx, my - 4 * px, { px: 11, farbe: warn, ankerMitte: true, winkel: Math.atan2(-(b.bis.y - b.von.y), b.bis.x - b.von.x) });
     }
   }
   ctx.restore();

@@ -15,7 +15,7 @@ import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
 import { baueProjektPdf } from "../io/pdf/plan";
 import { dateiname } from "../io/dateiname";
 import { baueProjektDxf } from "../io/dxf/export";
-import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneFaltlinien, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
+import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneFaltlinien, zeichneFlaechenLabels, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
 import { meter, quadratmeter, zahl } from "./format";
 import { packs, standardTyp, typOptionen } from "./packs";
 import { mountStandort } from "./standort";
@@ -857,7 +857,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (planFuer !== ergebnis) { planFuer = ergebnis; try { plan = berechnePlan(modell(), ergebnis.slope); } catch { plan = null; } }
     zeichneDaemmplan(ctx, vp, modell(), ergebnis.slope, plan);
   });
-  stage.setLayer("pfeile", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") { zeichneFaltlinien(ctx, vp, ergebnis); zeichnePfeile(ctx, vp, ergebnis); zeichneNotbereich(ctx, vp, modell(), ergebnis); } });
+  stage.setLayer("pfeile", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") { zeichneFaltlinien(ctx, vp, ergebnis); zeichneFlaechenLabels(ctx, vp, modell(), ergebnis); zeichneNotbereich(ctx, vp, modell(), ergebnis); zeichnePfeile(ctx, vp, ergebnis); } });
   stage.setLayer("koten", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") zeichneKoten(ctx, vp, ergebnis); });
   stage.setLayer("symbole", zeichneSymbole);
   stage.setLayer("auswahl", zeichneAuswahl);
