@@ -5,6 +5,14 @@ export {
   pruefeVorgaben, type VorgabenOptionen,
 } from "./vorgaben";
 export {
+  computeAnschluesse, okFertigAm,
+  type Anschluss, type AnschlussArt, type SollRegel,
+} from "./anschluesse";
+export {
+  VERMERK_SCHAETZUNG, computeNotwasserstaende, poleniUeberfallhoehe,
+  type NotelementArt, type Notwasserstand,
+} from "./notwasser";
+export {
   REGEL_ANSCHLUSS, REGEL_BARRIEREFREI, REGEL_GEFAELLE, REGEL_PACK_UNGEPRUEFT, REGEL_PFUETZEN, REGEL_REGEN_MANUELL,
   runChecks, type CheckErgebnisse, type CheckOptionen,
 } from "./pruefung";
