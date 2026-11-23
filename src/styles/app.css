@@ -80,6 +80,7 @@ button, input, select { font: inherit; color: inherit; }
 .row > span:first-child { color: var(--text-muted); }
 .note { padding: var(--sp-3) var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .note.warn { color: var(--warn); background: var(--warn-soft); }
+.note.warn::before { content: "\26A0\FE0E  "; font-weight: 700; }
 .note.error { color: var(--error); background: var(--error-soft); }
 .check-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) 0; }
 

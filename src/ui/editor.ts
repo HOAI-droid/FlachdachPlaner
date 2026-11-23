@@ -657,14 +657,16 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         const c = zn.kontur.reduce((s, q) => ({ x: s.x + q.x / zn.kontur.length, y: s.y + q.y / zn.kontur.length }), { x: 0, y: 0 });
         text(ctx, vp, zn.name, c.x, c.y);
       }
-      for (const s of d.attika) {
-        // Streifen immer außen an der Kante (attikaStreifen); Dachkontur bleibt Gefällefläche.
-        const q = attikaStreifen(d, s);
-        if (q.length < 4) continue;
-        bahn(ctx, q);
-        ctx.globalAlpha = .25; ctx.fillStyle = css("--text", "#222"); ctx.fill();
-        ctx.globalAlpha = 1; ctx.strokeStyle = css("--text", "#222"); ctx.lineWidth = px;
-        bahn(ctx, [q[3]!, q[2]!], false); ctx.stroke();
+      {
+        // Streifen immer außen an der Kante (attikaStreifen); ein gemeinsamer Pfad, damit sich die Füllung an Gehrungsnähten nicht überlagert.
+        const qs = d.attika.map((s) => attikaStreifen(d, s)).filter((q) => q.length >= 4);
+        if (qs.length) {
+          ctx.beginPath();
+          for (const q of qs) { ctx.moveTo(q[0]!.x, q[0]!.y); for (const pt of q.slice(1)) ctx.lineTo(pt.x, pt.y); ctx.closePath(); }
+          ctx.globalAlpha = .25; ctx.fillStyle = css("--text", "#222"); ctx.fill("nonzero");
+          ctx.globalAlpha = 1; ctx.strokeStyle = css("--text", "#222"); ctx.lineWidth = px;
+          for (const q of qs) { bahn(ctx, [q[3]!, q[2]!], false); ctx.stroke(); }
+        }
       }
       for (const au of d.aufbauten) {
         bahn(ctx, au.kontur);
