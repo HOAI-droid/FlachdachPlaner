@@ -28,7 +28,8 @@ import { frageSpeichern, oeffneDialog } from "./dialog";
 import { gibDateiAus } from "./datei-ausgabe";
 import { oeffneAngabenDialog } from "./angaben";
 import { waehlePdfSeite } from "./pdf-seiten";
-import { schuetzeFenster } from "./schliessen";
+import { istTauri, schuetzeFenster } from "./schliessen";
+import { hoereAufMenue, waehleProjektText } from "./datei-ausgabe";
 import { autosaveSchreiben, base64ZuBytes, bytesZuBase64, leseProjekt, speichereDatei, waehleDatei } from "./speicher";
 
 const FANG_PX = 10;
@@ -386,6 +387,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   async function oeffneProjekt() {
     if (!(await darfVerwerfen("dem Öffnen"))) return;
+    if (istTauri()) { const t = await waehleProjektText().catch(() => null); if (t !== null) await oeffneText(t); return; }
     const f = await waehleDatei();
     if (f) await oeffneText(await f.text());
   }
@@ -557,7 +559,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     wahl.className = "visually-hidden"; wahl.tabIndex = -1;
     wahl.addEventListener("change", () => { const f = wahl.files?.[0]; wahl.value = ""; if (f) void darfVerwerfen("dem Öffnen").then((ok) => ok ? f.text().then(oeffneText) : undefined); });
     const zeile = el("div", "btn-row");
-    zeile.append(button("Neu", () => void neuesProjekt()), button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", () => void exportierePdf()), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
+    zeile.append(button("Neu", () => void neuesProjekt()), button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", () => void exportierePdf()), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if (istTauri() || (window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
     const lab = el("label", "check-row");
     const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten"; cb.disabled = !unterlage;
     cb.addEventListener("change", () => { einbetten = cb.checked; });
@@ -1029,6 +1031,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
       if (k === "n" && !e.shiftKey) { e.preventDefault(); void neuesProjekt(); return; }
+      if (k === "s" && !e.shiftKey) { e.preventDefault(); void speichereProjekt(); return; }
+      if (k === "o" && !e.shiftKey) { e.preventDefault(); void oeffneProjekt(); return; }
       if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); } else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
       return;
     }
@@ -1044,6 +1048,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   standortPanel = mountStandort(shell.panels.standort, { modell, ausfuehre: ausfuehreBefehl });
   setzeWerkzeug("select");
   refresh();
+  if (istTauri()) void hoereAufMenue((id) => { if (id === "neu") void neuesProjekt(); else if (id === "oeffnen") void oeffneProjekt(); else if (id === "speichern") void speichereProjekt(); });
   void schuetzeFenster(geaendert, () => darfVerwerfen("dem Schließen"));
   Object.defineProperties(api, {
     ausfuehre: { value: ausfuehreBefehl },

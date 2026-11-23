@@ -160,26 +160,31 @@ function massstabsbalken(s: PdfSeite, a: Abbildung, x: number, y: number): void 
 }
 
 function bemassung(s: PdfSeite, a: Abbildung, m: ProjectModel): void {
-  const u = umfang(m);
-  if (!u) return;
   const pfeil = (p: Punkt, q: Punkt) => {
     const dx = q.x - p.x, dy = q.y - p.y, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l;
     for (const [pos, r] of [[p, 1], [q, -1]] as const) {
       s.flaeche([[pos, { x: pos.x + r * (ux * 2.4 - uy * 0.5), y: pos.y + r * (uy * 2.4 + ux * 0.5) }, { x: pos.x + r * (ux * 2.4 + uy * 0.5), y: pos.y + r * (uy * 2.4 - ux * 0.5) }]], { fuell: "#000000", breite: 0 });
     }
   };
-  const xs = a.x(u.x0), xe = a.x(u.x1), ys = a.y(u.y0), ye = a.y(u.y1);
-  const yb = ys - 9, xr = xe + 9;
-  s.linie([{ x: xs, y: ys - 1 }, { x: xs, y: yb - 2 }], { breite: LW.fein });
-  s.linie([{ x: xe, y: ys - 1 }, { x: xe, y: yb - 2 }], { breite: LW.fein });
-  s.linie([{ x: xs, y: yb }, { x: xe, y: yb }], { breite: LW.fein });
-  pfeil({ x: xs, y: yb }, { x: xe, y: yb });
-  s.text(`${zahl(u.x1 - u.x0, 2)} m`, (xs + xe) / 2, yb + 1, { groesse: T.klein, anker: "m" });
-  s.linie([{ x: xe + 1, y: ys }, { x: xr + 2, y: ys }], { breite: LW.fein });
-  s.linie([{ x: xe + 1, y: ye }, { x: xr + 2, y: ye }], { breite: LW.fein });
-  s.linie([{ x: xr, y: ys }, { x: xr, y: ye }], { breite: LW.fein });
-  pfeil({ x: xr, y: ys }, { x: xr, y: ye });
-  s.text(`${zahl(u.y1 - u.y0, 2)} m`, xr - 1, (ys + ye) / 2, { groesse: T.klein, anker: "m", winkel: Math.PI / 2 });
+  // Jede Dachfläche für sich bemaßt (keine Gesamtmaße über leere Bereiche).
+  for (const d of m.dachflaechen) {
+    if (d.kontur.length === 0) continue;
+    const px = d.kontur.map((p) => a.x(p.x)), py = d.kontur.map((p) => a.y(p.y));
+    const xs = Math.min(...px), xe = Math.max(...px), ys = Math.min(...py), ye = Math.max(...py);
+    const wx = Math.max(...d.kontur.map((p) => p.x)) - Math.min(...d.kontur.map((p) => p.x));
+    const wy = Math.max(...d.kontur.map((p) => p.y)) - Math.min(...d.kontur.map((p) => p.y));
+    const yb = ys - 9, xr = xe + 9;
+    s.linie([{ x: xs, y: ys - 1 }, { x: xs, y: yb - 2 }], { breite: LW.fein });
+    s.linie([{ x: xe, y: ys - 1 }, { x: xe, y: yb - 2 }], { breite: LW.fein });
+    s.linie([{ x: xs, y: yb }, { x: xe, y: yb }], { breite: LW.fein });
+    pfeil({ x: xs, y: yb }, { x: xe, y: yb });
+    s.text(`${zahl(wx, 2)} m`, (xs + xe) / 2, yb + 1, { groesse: T.klein, anker: "m" });
+    s.linie([{ x: xe + 1, y: ys }, { x: xr + 2, y: ys }], { breite: LW.fein });
+    s.linie([{ x: xe + 1, y: ye }, { x: xr + 2, y: ye }], { breite: LW.fein });
+    s.linie([{ x: xr, y: ys }, { x: xr, y: ye }], { breite: LW.fein });
+    pfeil({ x: xr, y: ys }, { x: xr, y: ye });
+    s.text(`${zahl(wy, 2)} m`, xr - 1, (ys + ye) / 2, { groesse: T.klein, anker: "m", winkel: Math.PI / 2 });
+  }
 }
 
 // ---------- Tabellen und Legende ----------

@@ -35,13 +35,10 @@ function polygonPfad(ctx: CanvasRenderingContext2D, p: VerlegtePlatte["polygon"]
 /** Kleinste Ausdehnung des Stücks auf dem Bildschirm (px) – kleine Stücke bekommen keine Beschriftung. */
 const ausdehnung = (p: VerlegtePlatte, s: number) => Math.min(p.laenge, p.breite) * s;
 
+/** Jede Dachfläche wird für sich bemaßt (Gesamtmaß + Teilketten bei Knicken) – keine Gesamtbemaßung über leere Bereiche. */
 function bemasse(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel): void {
   const px = 1 / vp.scale, linie = css("--text", "#222");
-  const pts = m.dachflaechen.flatMap((d) => d.kontur);
-  if (pts.length === 0) return;
   const eindeutig = (w: number[]) => [...new Set(w.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
-  const xs = eindeutig(pts.map((p) => p.x)), ys = eindeutig(pts.map((p) => p.y));
-  const x0 = xs[0]!, x1 = xs[xs.length - 1]!, y0 = ys[0]!, y1 = ys[ys.length - 1]!;
   ctx.save(); ctx.strokeStyle = linie; ctx.lineWidth = px; ctx.setLineDash([]);
   const maß = (a: Vec2, b: Vec2, s: string, hilfA: Vec2, hilfB: Vec2, h: boolean) => {
     ctx.beginPath(); ctx.moveTo(hilfA.x, hilfA.y); ctx.lineTo(a.x, a.y); ctx.moveTo(hilfB.x, hilfB.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -50,11 +47,16 @@ function bemasse(ctx: CanvasRenderingContext2D, vp: Viewport, m: ProjectModel): 
     text(ctx, vp, s, h ? mx : mx - 5 * px, h ? my + 5 * px : my, { px: 12, mono: true, farbe: linie, ankerMitte: true, halo: true, winkel: h ? 0 : -Math.PI / 2 });
   };
   const o1 = 28 * px;
-  // außen unten/rechts: Gesamtmaße; oben/links: Teilmaße je Eckpunkt-Koordinate (nur bei Mehrfachketten)
-  maß({ x: x0, y: y0 - o1 }, { x: x1, y: y0 - o1 }, meter(x1 - x0, 2), { x: x0, y: y0 }, { x: x1, y: y0 }, true);
-  maß({ x: x1 + o1, y: y0 }, { x: x1 + o1, y: y1 }, meter(y1 - y0, 2), { x: x1, y: y0 }, { x: x1, y: y1 }, false);
-  if (xs.length > 2) for (let i = 0; i + 1 < xs.length; i++) maß({ x: xs[i]!, y: y1 + o1 }, { x: xs[i + 1]!, y: y1 + o1 }, meter(xs[i + 1]! - xs[i]!, 2), { x: xs[i]!, y: y1 }, { x: xs[i + 1]!, y: y1 }, true);
-  if (ys.length > 2) for (let i = 0; i + 1 < ys.length; i++) maß({ x: x0 - o1, y: ys[i]! }, { x: x0 - o1, y: ys[i + 1]! }, meter(ys[i + 1]! - ys[i]!, 2), { x: x0, y: ys[i]! }, { x: x0, y: ys[i + 1]! }, false);
+  for (const d of m.dachflaechen) {
+    if (d.kontur.length === 0) continue;
+    const xs = eindeutig(d.kontur.map((p) => p.x)), ys = eindeutig(d.kontur.map((p) => p.y));
+    const x0 = xs[0]!, x1 = xs[xs.length - 1]!, y0 = ys[0]!, y1 = ys[ys.length - 1]!;
+    maß({ x: x0, y: y0 - o1 }, { x: x1, y: y0 - o1 }, meter(x1 - x0, 2), { x: x0, y: y0 }, { x: x1, y: y0 }, true);
+    maß({ x: x1 + o1, y: y0 }, { x: x1 + o1, y: y1 }, meter(y1 - y0, 2), { x: x1, y: y0 }, { x: x1, y: y1 }, false);
+    // Teilmaße je Eckpunkt-Koordinate der Fläche (nur bei Knicken)
+    if (xs.length > 2) for (let i = 0; i + 1 < xs.length; i++) maß({ x: xs[i]!, y: y1 + o1 }, { x: xs[i + 1]!, y: y1 + o1 }, meter(xs[i + 1]! - xs[i]!, 2), { x: xs[i]!, y: y1 }, { x: xs[i + 1]!, y: y1 }, true);
+    if (ys.length > 2) for (let i = 0; i + 1 < ys.length; i++) maß({ x: x0 - o1, y: ys[i]! }, { x: x0 - o1, y: ys[i + 1]! }, meter(ys[i + 1]! - ys[i]!, 2), { x: x0, y: ys[i]! }, { x: x0, y: ys[i + 1]! }, false);
+  }
   ctx.restore();
 }
 
