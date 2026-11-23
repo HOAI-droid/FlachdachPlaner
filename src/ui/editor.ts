@@ -112,8 +112,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let gespeichertSchluessel = schluessel();
   /** Gespeicherter Stand als Referenz: schneller Vergleich ohne Serialisieren (null = nur Schlüssel zählt). */
   let gespeichertStand: Projekt | null = verlauf.aktuell;
-  const markiereGespeichert = () => { gespeichertSchluessel = schluessel(); gespeichertStand = verlauf.aktuell; };
-  const geaendert = () => (gespeichertStand !== null && !istProjektGeaendert(verlauf, gespeichertStand) ? false : schluessel() !== gespeichertSchluessel);
+  /** Einbetten ändert die Projektdatei, nicht das Modell: zählt deshalb extra als Änderung. */
+  let gespeichertEinbetten = false;
+  const markiereGespeichert = () => { gespeichertSchluessel = schluessel(); gespeichertStand = verlauf.aktuell; gespeichertEinbetten = einbetten; };
+  const geaendert = () => einbetten !== gespeichertEinbetten || (gespeichertStand !== null && !istProjektGeaendert(verlauf, gespeichertStand) ? false : schluessel() !== gespeichertSchluessel);
   let z: WerkzeugZustand = neuerZustand();
   let auswahl: Auswahl | null = null;
   let unterlage: UnterlageUI | null = null;
@@ -437,7 +439,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   async function neuesProjekt() {
     if (!(await darfVerwerfen("dem Anlegen eines neuen Projekts"))) return;
     verlauf = neuerVerlauf(createProjekt("Neues Projekt", new Date().toISOString())); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
-    einbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
+    einbetten = false; gespeichertEinbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
   }
@@ -601,7 +603,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     zeile.append(button("Neu", () => void neuesProjekt()), button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", () => void exportierePdf()), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if (istTauri() || (window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
     const lab = el("label", "check-row");
     const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten"; cb.disabled = !unterlage;
-    cb.addEventListener("change", () => { einbetten = cb.checked; });
+    cb.addEventListener("change", () => { einbetten = cb.checked; refresh(); });
     lab.append(cb, el("span", "", "Unterlage in Projektdatei einbetten"));
     const angaben = button("Projektangaben (Plankopf) …", () => void oeffneAngabenDialog(modell().meta, setzeAngaben)); angaben.dataset.k = "projektangaben";
     box.append(blockVarianten(), el("div", "label", "Projekt"), angaben, zeile, lab, wahl);
@@ -1094,7 +1096,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     ausfuehre: { value: ausfuehreBefehl },
     modell: { get: () => modell() },
     lade: { value: (m: ProjectModel) => { verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
-    ladeProjekt: { value: (pr: Projekt) => { verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
+    ladeProjekt: { value: (pr: Projekt) => { verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
     projekt: { get: () => aktuellesProjekt() },
   });
   return api;
