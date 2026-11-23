@@ -92,7 +92,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     for (const v of d.verlegestarts) { ctx.beginPath(); ctx.arc(v.punkt.x, v.punkt.y, 4 * px, 0, Math.PI * 2); ctx.fill(); }
     if (d.n0) {
       const { x, y } = d.n0.position;
-      belegung.sperre({ x, y }, -2, -24, 22, 26); // Dicken-/Plattenlabels weichen dem N0-Kasten aus
+      belegung.sperre({ x, y }, -5, -27, 28, 32); // Dicken-/Plattenlabels weichen dem N0-Kasten aus
       ctx.lineWidth = px; ctx.strokeStyle = linie; ctx.strokeRect(x, y - 22 * px, 18 * px, 22 * px);
       text(ctx, vp, "N0", x + 2 * px, y - 15 * px, { px: 11, farbe: linie, mono: true, halo: false });
     }
@@ -116,7 +116,9 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       for (const [fx, fy] of [[ox, oy], [ox, -oy], [-ox, oy], [-ox, -oy]] as const) {
         kand.push([fx < 0 ? -(w + 5) : 5, fy < 0 ? -19 : 5]);
       }
-      const z = kand.find(([dx, dy]) => belegung.belege(q, dx - 2, dy - 2, w + 4, 18));
+      // Zahl nur, wenn Mitte und beide Enden im Dach liegen (bei L-/U-Formen zeigt „nach innen“ sonst ins Freie)
+      const imDach = (dx: number, dy: number) => [0, w / 2, w].every((o) => liegtInPlatten(d.platten, { x: q.x + (dx + o) * px, y: q.y + (dy + 4) * px }));
+      const z = kand.find(([dx, dy]) => imDach(dx, dy) && belegung.belege(q, dx - 2, dy - 2, w + 4, 18));
       ctx.fillStyle = linie; ctx.beginPath(); ctx.arc(q.x, q.y, 2.2 * px, 0, Math.PI * 2); ctx.fill();
       if (z) text(ctx, vp, t, q.x + z[0] * px, q.y + z[1] * px, { px: 12, mono: true, farbe: css("--accent", "#1F4FA3") });
     }
@@ -141,7 +143,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
       const lenPx = Math.max(10, Math.min(22, 0.4 * refL * vp.scale)), len = lenPx * px, sx = a.start.x - (Math.abs(a.richtung.x) > 0.7 ? lenPx / 2 + 9 : 9) * px, sy = a.start.y;
       const ende = { x: sx + a.richtung.x * len, y: sy + a.richtung.y * len };
       const hor = Math.abs(a.richtung.x) > 0.7, bw = hor ? lenPx + 4 : 8, bh = hor ? 8 : lenPx + 4;
-      if (belegung.belege({ x: sx, y: sy }, -bw / 2, -bh / 2, bw, bh)) pfeil(ctx, { x: sx, y: sy }, ende, 6 * px);
+      if (belegung.belege({ x: sx, y: sy }, -bw / 2 - 3, -bh / 2 - 3, bw + 6, bh + 6)) pfeil(ctx, { x: sx, y: sy }, ende, 6 * px);
     }
     // 5c) „Verlegestart" nach Plattenzahlen und Pfeilen: nur auf freien Platz, nie über Plattenzahlen
     const vw = textBreite(ctx, "Verlegestart", 12, false) + 4;
@@ -175,14 +177,17 @@ function titelUndLegende(ctx: CanvasRenderingContext2D, vp: Viewport, m: Project
       const w = Math.max(...zeilen.map((z) => textBreite(ctx, z, 12, true))) + 4, h = zeilen.length * zh;
       const stufen = [0, 1, 2, 3, 4, 5].map((i) => i * zh);
       // Block links- oder rechtsbündig zum Dach; dy = Unterkante über (+) der Oberkante bzw. unter (−) der Unterkante
-      const lagen: [number, number, number[]][] = [];
-      for (const [y, dys] of [[yo, stufen.map((s) => rand + s)], [yu, stufen.map((s) => -(rand + h + s))]] as const) {
-        for (const dx of [-2, breitePx - w + 2]) lagen.push([y, dx, [...dys]]);
-      }
+      // nächstgelegene freie Lage gewinnt: je Stufe oben links/rechts, dann unten links/rechts (kein Wandern weit über das Dach)
       let treffer: [number, number, number] | null = null;
-      for (const [y, dx, dys] of lagen) {
-        const dy = platziere(belegung, { x: x0, y }, dx, dys, w, h);
-        if (dy !== null) { treffer = [y, dx, dy]; break; }
+      for (const s of stufen) {
+        for (const [y, dys] of [[yo, [rand + s]], [yu, [-(rand + h + s)]]] as const) {
+          for (const dx of [-2, breitePx - w + 2]) {
+            const dy = platziere(belegung, { x: x0, y }, dx, [...dys], w, h);
+            if (dy !== null) { treffer = [y, dx, dy]; break; }
+          }
+          if (treffer) break;
+        }
+        if (treffer) break;
       }
       if (!treffer) continue;
       const [basisY, dx, dy] = treffer;
@@ -191,6 +196,18 @@ function titelUndLegende(ctx: CanvasRenderingContext2D, vp: Viewport, m: Project
       break;
     }
   }
+}
+
+/** Punkt in irgendeiner Platte (Strahlverfahren, Ränder zählen mit kleiner Toleranz als innen). */
+function liegtInPlatten(platten: readonly VerlegtePlatte[], p: Vec2): boolean {
+  return platten.some((pl) => {
+    const o = pl.polygon.outer; let innen = false;
+    for (let i = 0, j = o.length - 1; i < o.length; j = i++) {
+      const a = o[i]!, b = o[j]!;
+      if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) innen = !innen;
+    }
+    return innen;
+  });
 }
 
 function schwerpunkt(p: VerlegtePlatte): Vec2 {
