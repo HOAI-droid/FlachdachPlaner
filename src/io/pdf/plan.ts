@@ -181,7 +181,8 @@ function bemassung(s: PdfSeite, a: Abbildung, m: ProjectModel): void {
     s.linie([{ x: xRand + r, y: y1 }, { x: xLinie + r * 2, y: y1 }], { breite: LW.fein });
     s.linie([{ x: xLinie, y: y0 }, { x: xLinie, y: y1 }], { breite: LW.fein });
     pfeil({ x: xLinie, y: y0 }, { x: xLinie, y: y1 });
-    s.text(t, xLinie - 1, (y0 + y1) / 2, { groesse: T.klein, anker: "m", winkel: Math.PI / 2 });
+    // Text außen neben der Maßlinie (nicht zwischen Linie und Dachrand, dort stehen Koten)
+    s.text(t, r > 0 ? xLinie + 3.2 : xLinie - 1, (y0 + y1) / 2,{ groesse: T.klein, anker: "m", winkel: Math.PI / 2 });
   };
   const eindeutig = (w: number[]) => [...new Set(w.map((v) => Math.round(v * 1000) / 1000))].sort((p, q) => p - q);
   for (const d of m.dachflaechen) {
@@ -304,12 +305,27 @@ function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
   }
   konturen(s, a, e.modell);
   faltlinien(s, a, e.slope);
+  // Abläufe zuerst reservieren, damit das Flächenlabel ihnen ausweicht
+  const ablaufLabels: { t: string; x: number; y: number }[] = [];
+  for (const d of e.modell.dachflaechen) {
+    for (const en of d.entwaesserung) {
+      const pts = dachEntwaesserung(d, en);
+      if (!pts) continue;
+      const c = a.p(pts[0]!), t = `${en.name || en.id} ${kote(en.z)}`, w = textBreite(t, T.klein, true);
+      frei.belege(c.x - 3, c.y - 3, 6, 6);
+      for (const [dx, dy] of [[3, -1], [-3 - w, -1], [3, 3.5], [-3 - w, 3.5]] as const) {
+        if (frei.belege(c.x + dx, c.y + dy, w, 3)) { ablaufLabels.push({ t, x: c.x + dx, y: c.y + dy + 0.4 }); break; }
+      }
+    }
+  }
   for (const f of e.catchments.flaechen) {
     const gr = [...f.polygone].sort((p, q) => q.outer.length - p.outer.length)[0];
     if (!gr) continue;
     const c = a.p(polygonCentroid(gr)), t = `${e.eids.get(f.id) ?? ""} · ${zahl(f.gesamtFlaeche, 1)} m²`;
     const w = textBreite(t, T.normal, true);
-    if (frei.belege(c.x - w / 2, c.y - 1, w, 4)) s.text(t, c.x, c.y, { groesse: T.normal, fett: true, anker: "m" });
+    for (const [ox, oy] of [[0, 0], [0, -7], [0, 7], [0, -14], [0, 14], [-12, 0], [12, 0]] as const) {
+      if (frei.belege(c.x + ox - w / 2, c.y + oy - 1, w, 4)) { s.text(t, c.x + ox, c.y + oy, { groesse: T.normal, fett: true, anker: "m" }); break; }
+    }
   }
   // Gefällepfeile (bergab) mit Gefälle in %
   for (const g of e.slope.dachflaechen) {
@@ -336,13 +352,9 @@ function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
       if (en.art === "les" && pts.length === 2) s.linie(pts.map((q) => a.p(q)), { breite: LW.stark });
       const c = a.p(pts[0]!);
       symbol(s, en.art, c);
-      const t = `${en.name || en.id} ${kote(en.z)}`, w = textBreite(t, T.klein, true);
-      frei.belege(c.x - 3, c.y - 3, 6, 6);
-      for (const [dx, dy] of [[3, -1], [-3 - w, -1], [3, 3.5], [-3 - w, 3.5]] as const) {
-        if (frei.belege(c.x + dx, c.y + dy, w, 3)) { s.text(t, c.x + dx, c.y + dy + 0.4, { groesse: T.klein, fett: true }); break; }
-      }
     }
   }
+  for (const l of ablaufLabels) s.text(l.t, l.x, l.y, { groesse: T.klein, fett: true });
   // Koten an Ecken, Linienenden, Abläufen (Abläufe sind oben beschriftet)
   // Gebündelt (kotenMarken): nahezu gleiche Stelle und Höhe → eine Kote, auch über Dachflächengrenzen.
   for (const k of kotenMarken(e.slope.dachflaechen)) {
