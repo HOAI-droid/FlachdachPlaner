@@ -22,6 +22,7 @@
               "art": { "enum": ["gully", "notablauf"] },
               "nennweite": { "type": "integer", "exclusiveMinimum": 0, "description": "DN" },
               "wehrhoehe": { "$ref": "basis.schema.json#/$defs/dicke", "description": "Notablauf: Höhe Wehrkante in m" },
+              "anstauBeiQ": { "$ref": "basis.schema.json#/$defs/dicke", "description": "Notablauf: Anstauhöhe über Wehrkante bei Bemessungsabfluss in m (Herstellerwert)" },
               "abflussleistung": { "$ref": "basis.schema.json#/$defs/abflussleistung" },
               "fundstelle": { "$ref": "basis.schema.json#/$defs/fundstelle" }
             },

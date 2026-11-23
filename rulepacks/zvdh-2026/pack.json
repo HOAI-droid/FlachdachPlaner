@@ -35,7 +35,23 @@
         "id": "notentwaesserung-anstau",
         "titel": "Maximale Anstauhöhe Notentwässerung",
         "fundstelle": "Nutzer-Scan S. 56/57",
-        "parameter": { "max": { "wert": 0.035, "einheit": "m" } }
+        "parameter": {
+          "max": { "wert": 0.035, "einheit": "m" },
+          "freibordNot": { "wert": 0, "einheit": "m" },
+          "ueberfallbeiwert": { "wert": 0.6, "einheit": "1" }
+        }
+      },
+      {
+        "id": "anschlusshoehe",
+        "titel": "Mindest-Anschlusshöhe über OK Belag (Attika, Wand, Tür, Aufbau)",
+        "fundstelle": "laut Nutzer, ungeprüft",
+        "parameter": {
+          "attikaMin": { "wert": 0.15, "einheit": "m" },
+          "wandMin": { "wert": 0.15, "einheit": "m" },
+          "tuerMin": { "wert": 0.15, "einheit": "m" },
+          "tuerMitRinneMin": { "wert": 0.05, "einheit": "m" },
+          "aufbauMin": { "wert": 0.15, "einheit": "m" }
+        }
       },
       {
         "id": "barrierefrei-schwelle",

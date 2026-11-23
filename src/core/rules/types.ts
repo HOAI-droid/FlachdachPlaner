@@ -43,6 +43,8 @@ export interface AblaufEintrag {
   readonly art: "gully" | "notablauf";
   readonly nennweite?: number;
   readonly wehrhoehe?: number;
+  /** Notablauf: Anstauhöhe über der Wehrkante bei Bemessungsabfluss (m). */
+  readonly anstauBeiQ?: number;
   readonly abflussleistung: readonly Abflusspunkt[];
   readonly fundstelle?: string;
 }
@@ -68,6 +70,8 @@ export interface DachreiterEintrag {
   readonly hoehe: number;
   readonly einbaulaenge: number;
   readonly einlaufhoehe?: number;
+  /** Notüberlauf/Speier: wirksame Überlaufbreite (m). */
+  readonly ueberlaufBreite?: number;
   readonly abflussleistung?: readonly Abflusspunkt[];
   readonly fundstelle?: string;
 }

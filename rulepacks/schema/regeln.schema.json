@@ -28,7 +28,7 @@
                   "type": "object",
                   "required": ["wert", "einheit"],
                   "properties": {
-                    "wert": { "type": "number" },
+                    "wert": { "type": "number", "minimum": 0 },
                     "einheit": { "enum": ["m2", "m", "m/m", "1", "l/s", "l/(s·ha)"] }
                   },
                   "additionalProperties": false

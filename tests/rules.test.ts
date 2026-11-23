@@ -231,3 +231,39 @@ describe("Grenzwerte 300/350 m² nur aus Pack", () => {
     for (const [d, text] of dateien) expect(text, d).not.toMatch(/(?<![\w.])(300|350)(?![\w])/);
   });
 });
+
+describe("M9 Anschlusshöhe und Notentwässerung (Pack-Werte)", () => {
+  const pack = (): RegelPack => lade<RegelPack>(lies("zvdh-2026"));
+  it("Regel anschlusshoehe liefert die Sollwerte nur aus dem Pack", () => {
+    for (const [n, w] of [["attikaMin", 0.15], ["wandMin", 0.15], ["tuerMin", 0.15], ["tuerMitRinneMin", 0.05], ["aufbauMin", 0.15]] as const) {
+      expect(regelParameter(pack(), "anschlusshoehe", n)).toMatchObject({ wert: w, einheit: "m", packId: "zvdh-2026" });
+    }
+    expect(regelParameter(pack(), "notentwaesserung-anstau", "freibordNot")?.wert).toBe(0);
+    expect(regelParameter(pack(), "notentwaesserung-anstau", "ueberfallbeiwert")?.wert).toBe(0.6);
+  });
+  it("Änderung von attikaMin im Pack schlägt durch", () => {
+    const raw = kopie(lies("zvdh-2026")) as { daten: { regeln: { id: string; parameter: Record<string, { wert: number }> }[] } };
+    raw.daten.regeln.find((r) => r.id === "anschlusshoehe")!.parameter["attikaMin"]!.wert = 0.1;
+    expect(regelParameter(lade<RegelPack>(raw), "anschlusshoehe", "attikaMin")?.wert).toBe(0.1);
+  });
+  it("negative Regelwerte werden abgelehnt", () => {
+    const raw = kopie(lies("zvdh-2026")) as { daten: { regeln: { id: string; parameter: Record<string, { wert: number }> }[] } };
+    raw.daten.regeln.find((r) => r.id === "anschlusshoehe")!.parameter["tuerMin"]!.wert = -0.01;
+    expect(validateRulePack(raw).length).toBeGreaterThan(0);
+  });
+  it("anstauBeiQ und ueberlaufBreite: gültig; negativ bzw. 0 abgelehnt", () => {
+    const ab = (x: Record<string, unknown>) => ({ id: "t-ab", typ: "ablaeufe", ...kopf, daten: { eintraege: [{ id: "a", hersteller: "T", produkt: "P", art: "notablauf", abflussleistung: [{ anstau: 0.03, q: 5 }], ...x }] } });
+    expect(validateRulePack(ab({ anstauBeiQ: 0.04 }))).toEqual([]);
+    expect(validateRulePack(ab({ anstauBeiQ: -0.01 })).length).toBeGreaterThan(0);
+    const dr = (x: Record<string, unknown>) => { const p = dachreiterPack() as { daten: { eintraege: Record<string, unknown>[] } }; Object.assign(p.daten.eintraege[0]!, x); return p; };
+    expect(validateRulePack(dr({ ueberlaufBreite: 0.3 }))).toEqual([]);
+    expect(validateRulePack(dr({ ueberlaufBreite: 0 })).length).toBeGreaterThan(0);
+  });
+  it("keine Anschluss-Sollwerte als Literal in src/core/checks", () => {
+    for (const [pfad, text] of Object.entries(kernQuellen)) {
+      if (!pfad.includes("/core/checks/")) continue;
+      const code = text.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      expect(code, pfad).not.toMatch(/\b0\.15\b|\b0\.05\b/);
+    }
+  });
+});
