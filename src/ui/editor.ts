@@ -1,18 +1,18 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, istGeaendert, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aktiviereVariante, vorschlagVariantenName, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
-  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
+  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
   type Abweichung, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
-  type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
+  type Projekt, type ProjektangabenTeil, type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
 import type { Stage } from "./canvas/stage";
 import type { Viewport } from "./canvas/viewport";
 import { Ansicht3D } from "./ansicht3d";
 import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
-import { baueProjektPdf } from "../io/pdf/plan";
+import { baueVariantenPdf } from "../io/pdf/plan";
 import { dateiname } from "../io/dateiname";
 import { baueProjektDxf } from "../io/dxf/export";
 import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneFaltlinien, zeichneFlaechenLabels, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
@@ -24,7 +24,8 @@ import { kantenLage, zeichneEntwaesserung } from "./symbole";
 import { geteilteBelegung, neuerDurchgang } from "./zeichnen";
 import type { Shell } from "./shell";
 import { dxfModell, ladeDxf, ladePdf, pdfModell, type UnterlageUI } from "./underlay";
-import { frageSpeichern } from "./dialog";
+import { frageSpeichern, oeffneDialog } from "./dialog";
+import { oeffneAngabenDialog } from "./angaben";
 import { waehlePdfSeite } from "./pdf-seiten";
 import { schuetzeFenster } from "./schliessen";
 import { autosaveSchreiben, base64ZuBytes, bytesZuBase64, leseProjekt, speichereDatei, waehleDatei } from "./speicher";
@@ -82,6 +83,9 @@ function button(text: string, onClick: () => void, cls = "btn"): HTMLButtonEleme
 export interface Editor {
   readonly modell: ProjectModel;
   lade(m: ProjectModel): void;
+  /** Ganzes Projekt (alle Varianten) laden. */
+  ladeProjekt(p: Projekt): void;
+  readonly projekt: Projekt;
   /** Befehl ausführen (Undo-fähig), z. B. aus dem Standort-Panel. */
   ausfuehre(b: Befehl): void;
   /** Wird nach jeder Aktualisierung aufgerufen (z. B. Update-Panel). */
@@ -90,10 +94,22 @@ export interface Editor {
 
 
 export function mountEditor(shell: Shell, stage: Stage): Editor {
-  let verlauf: Verlauf = neuerVerlauf(createProject("Neues Projekt", new Date().toISOString()));
-  /** Modellstand beim letzten Speichern/Öffnen/Neu (Referenzvergleich, siehe `istGeaendert`). */
-  let gespeichert: ProjectModel = verlauf.aktuell;
-  const geaendert = () => istGeaendert(verlauf, gespeichert);
+  /** Projekt mit allen Varianten; `verlauf` hält die Ansicht der aktiven Variante (Undo gilt je Variante, Wechsel leert es). */
+  let projekt: Projekt = createProjekt("Neues Projekt", new Date().toISOString());
+  let verlauf: Verlauf = neuerVerlauf(modellFuerVariante(projekt));
+  /** Gesamtstand: Projekt mit der Ansicht der aktiven Variante zurückgeschrieben. */
+  const aktuellesProjekt = (): Projekt => mitModell(projekt, verlauf.aktuell);
+  /** Inhaltsschlüssel (ohne aktive Variante) → Umschalten der Variante gilt nicht als Änderung. */
+  let schluesselMemo: { m: ProjectModel; p: Projekt; k: string } | null = null;
+  const schluessel = (): string => {
+    if (!schluesselMemo || schluesselMemo.m !== verlauf.aktuell || schluesselMemo.p !== projekt) {
+      schluesselMemo = { m: verlauf.aktuell, p: projekt, k: JSON.stringify({ ...aktuellesProjekt(), aktiveVariante: "" }) };
+    }
+    return schluesselMemo.k;
+  };
+  let gespeichertSchluessel = schluessel();
+  const markiereGespeichert = () => { gespeichertSchluessel = schluessel(); };
+  const geaendert = () => schluessel() !== gespeichertSchluessel;
   let z: WerkzeugZustand = neuerZustand();
   let auswahl: Auswahl | null = null;
   let unterlage: UnterlageUI | null = null;
@@ -124,7 +140,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let standortPanel: ReturnType<typeof mountStandort> | null = null;
   const leeresErgebnis = { slope: { dachflaechen: [], hinweise: [] }, catchments: { flaechen: [], nachbarn: [], hinweise: [] }, notfall: [], befunde: [], hinweise: [], eids: new Map() } as unknown as Ergebnis;
   /** Autosave ins lokale Speichern (ohne Netz); Fehler (z. B. privater Modus) werden ignoriert. */
-  function speichere() { void autosaveSchreiben(serializeProject(modell())); }
+  function speichere() { void autosaveSchreiben(serializeProjekt(aktuellesProjekt())); }
 
   const modell = () => verlauf.aktuell;
   const tol = () => FANG_PX / stage.viewport.scale;
@@ -344,9 +360,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     return m;
   }
   async function speichereProjekt(): Promise<boolean> {
-    const ok = await speichereDatei(serializeProject(modellFuerDatei()), dateiname(modell().meta.name));
+    const ok = await speichereDatei(serializeProjekt(mitModell(projekt, modellFuerDatei())), dateiname(modell().meta.name));
     projektMeldung = ok ? "Projekt gespeichert." : null;
-    if (ok) gespeichert = modell();
+    if (ok) markiereGespeichert();
     refresh();
     return ok;
   }
@@ -356,14 +372,14 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const u = r.projekt.unterlage;
     let m = r.projekt;
     if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
-    verlauf = neuerVerlauf(m); gespeichert = m; auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
+    projekt = m; verlauf = neuerVerlauf(modellFuerVariante(m)); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
     projektMeldung = r.hinweise.length ? r.hinweise.join(" ") : "Projekt geöffnet.";
     if (u?.eingebettet) {
       const bytes = base64ZuBytes(u.eingebettet.base64);
       offeneUnterlage = u;
       await ladeDatei(new File([bytes], u.dateiname), true);
       einbetten = true;
-      gespeichert = verlauf.aktuell;
+      markiereGespeichert();
     } else if (u) { offeneUnterlage = u; projektMeldung += ` Unterlage „${u.dateiname}“ ist nur verknüpft: bitte Datei erneut wählen.`; }
     refresh();
   }
@@ -382,28 +398,71 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   async function neuesProjekt() {
     if (!(await darfVerwerfen("dem Anlegen eines neuen Projekts"))) return;
-    const m = createProject("Neues Projekt", new Date().toISOString());
-    verlauf = neuerVerlauf(m); gespeichert = m; auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
+    projekt = createProjekt("Neues Projekt", new Date().toISOString());
+    verlauf = neuerVerlauf(modellFuerVariante(projekt)); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
     einbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
   }
-  function exportierePdf() {
-    if (!ergebnis) { projektMeldung = "PDF-Export: erst eine Dachfläche zeichnen."; refresh(); return; }
+  function baueExportEingabe(m: ProjectModel, name: string, datum: string, regelwerk: string, mitName: boolean) {
+    const erg = m.dachflaechen.length ? berechne(m) : null;
+    if (!erg) return null;
+    let pl = null;
+    try { pl = berechnePlan(m, erg.slope); } catch { /* ohne Dämmplan */ }
+    return { eingabe: { modell: m, slope: erg.slope, catchments: erg.catchments, eids: erg.eids, plan: pl, farbe: (i: number) => farbe(i)[0], datum, regelwerk, ...(mitName ? { variante: name } : {}) } };
+  }
+  /** Fragt bei mehreren Varianten, welche exportiert werden (Standard: die aktive); null = abgebrochen. */
+  async function waehleExportVarianten(): Promise<string[] | null> {
+    const liste = variantenListe(projekt);
+    if (liste.length < 2) return [projekt.aktiveVariante];
+    const gewaehlt = new Set<string>([projekt.aktiveVariante]);
+    const box = el("div", "pad");
+    const hinweis = el("div", "note warn", "Wählen Sie mindestens eine Variante.");
+    hinweis.hidden = true;
+    const felder: HTMLInputElement[] = [];
+    for (const v of liste) {
+      const lab = el("label", "check-row");
+      const cb = el("input"); cb.type = "checkbox"; cb.checked = gewaehlt.has(v.id); cb.dataset.k = `export-${v.id}`;
+      cb.addEventListener("change", () => { if (cb.checked) gewaehlt.add(v.id); else gewaehlt.delete(v.id); aktualisiere(); });
+      felder.push(cb);
+      lab.append(cb, el("span", "", v.name + (v.aktiv ? " (aktiv)" : "")));
+      box.append(lab);
+    }
+    box.append(hinweis);
+    const d = oeffneDialog({
+      titel: "Plan als PDF exportieren", text: "Welche Varianten sollen ins PDF? Jede Variante erhält ihre eigenen Blätter.", inhalt: box,
+      knoepfe: [{ id: "abbrechen", label: "Abbrechen" }, { id: "export", label: "Exportieren", primaer: true }], abbruchId: "abbrechen",
+    });
+    const ok = d.wurzel.querySelector<HTMLButtonElement>("[data-k='dialog-export']")!;
+    function aktualisiere() { ok.disabled = gewaehlt.size === 0; hinweis.hidden = gewaehlt.size > 0; }
+    const antwort = await d.ergebnis;
+    if (antwort !== "export") return null;
+    return liste.filter((v) => gewaehlt.has(v.id)).map((v) => v.id);
+  }
+  async function exportierePdf() {
+    const pr = aktuellesProjekt();
+    const ids = await waehleExportVarianten();
+    if (!ids) return;
     try {
-      let p = null;
-      try { p = berechnePlan(modell(), ergebnis.slope); } catch { /* ohne Dämmplan */ }
       const regeln = packs.find((x) => x.typ === "regeln");
       const heute = new Date();
-      const r = baueProjektPdf({
-        modell: modell(), slope: ergebnis.slope, catchments: ergebnis.catchments, eids: ergebnis.eids, plan: p, farbe: (i) => farbe(i)[0],
-        datum: `${String(heute.getDate()).padStart(2, "0")}.${String(heute.getMonth() + 1).padStart(2, "0")}.${heute.getFullYear()}`,
-        regelwerk: regeln ? `${regeln.titel ?? regeln.id} · ${regeln.version}` : "–",
-      });
+      const datum = `${String(heute.getDate()).padStart(2, "0")}.${String(heute.getMonth() + 1).padStart(2, "0")}.${heute.getFullYear()}`;
+      const regelwerk = regeln ? `${regeln.titel ?? regeln.id} · ${regeln.version}` : "–";
+      const mehrere = variantenListe(pr).length > 1;
+      const teile = [];
+      const leer: string[] = [];
+      for (const id of ids) {
+        const name = variantenListe(pr).find((v) => v.id === id)?.name ?? id;
+        const t = baueExportEingabe(modellFuerVariante(pr, id), name, datum, regelwerk, mehrere);
+        if (t) teile.push(t); else leer.push(name);
+      }
+      if (teile.length === 0) { projektMeldung = "PDF-Export: erst eine Dachfläche zeichnen."; refresh(); return; }
+      const r = baueVariantenPdf(teile);
+      const einzel = ids.length === 1 && mehrere ? `-${dateiname(variantenListe(pr).find((v) => v.id === ids[0])?.name ?? "")}` : "";
       const url = URL.createObjectURL(new Blob([r.bytes as BlobPart], { type: "application/pdf" }));
-      const a = document.createElement("a"); a.href = url; a.download = `${dateiname(modell().meta.name)}-Plan.pdf`; document.body.append(a); a.click(); a.remove();
+      const a = document.createElement("a"); a.href = url; a.download = `${dateiname(pr.meta.name)}${einzel}-Plan.pdf`; document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      projektMeldung = `PDF erstellt (A3, Maßstab 1 : ${r.massstab}).`;
+      projektMeldung = `PDF erstellt (A3, ${teile.length} ${teile.length === 1 ? "Variante" : "Varianten"}, Maßstab 1 : ${[...new Set(r.massstaebe)].join(" / 1 : ")}).` + (leer.length ? ` Ohne Dachfläche übersprungen: ${leer.join(", ")}.` : "");
     } catch (e) { projektMeldung = `PDF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; }
     refresh();
   }
@@ -422,6 +481,75 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     refresh();
   }
 
+  // ---------- Varianten und Projektangaben ----------
+  /** Wechselt zum Projektstand `neu` (andere aktive Variante / Struktur): Ansicht und Auswahl neu aufbauen, Unterlage bleibt. */
+  function uebernimmProjekt(neu: Projekt, meldungText: string) {
+    projekt = neu; verlauf = neuerVerlauf(modellFuerVariante(neu));
+    auswahl = null; tausch = null; kal = {}; z = neuerZustand(); vergissErfasste();
+    projektMeldung = meldungText; speichere(); refresh();
+  }
+  function wechsleZuVariante(id: string) {
+    const r = aktiviereVariante(aktuellesProjekt(), id);
+    if (r.ok && r.projekt !== aktuellesProjekt()) uebernimmProjekt(r.projekt, `Variante „${variantenListe(r.projekt).find((v) => v.aktiv)?.name}“ aktiv.`);
+  }
+  function neueVariante(kopieVon?: string) {
+    const pr = aktuellesProjekt();
+    const r = legeVarianteAn(pr, vorschlagVariantenName(pr, kopieVon), kopieVon);
+    if (r.ok) uebernimmProjekt(r.projekt, kopieVon ? "Variante dupliziert." : "Leere Variante angelegt."); else { projektMeldung = r.fehler.meldung; refresh(); }
+  }
+  async function loescheVarianteFrage(id: string) {
+    const pr = aktuellesProjekt();
+    const name = variantenListe(pr).find((v) => v.id === id)?.name ?? id;
+    const d = oeffneDialog({
+      titel: "Variante löschen?", text: `Die Variante „${name}“ mit allen Dachflächen wird gelöscht. Das kann nicht rückgängig gemacht werden.`,
+      knoepfe: [{ id: "abbrechen", label: "Abbrechen", primaer: true }, { id: "loeschen", label: "Löschen" }], abbruchId: "abbrechen",
+    });
+    if ((await d.ergebnis) !== "loeschen") return;
+    const r = loescheVariante(pr, id);
+    if (r.ok) uebernimmProjekt(r.projekt, `Variante „${name}“ gelöscht.`); else { projektMeldung = r.fehler.meldung; refresh(); }
+  }
+  function benenneAktive(name: string): string | null {
+    const pr = aktuellesProjekt();
+    const r = benenneVarianteUm(pr, pr.aktiveVariante, name);
+    if (!r.ok) return r.fehler.meldung;
+    if (r.projekt !== pr) { projekt = r.projekt; verlauf = { ...verlauf, aktuell: modellFuerVariante(r.projekt, r.id) }; speichere(); refresh(); }
+    return null;
+  }
+  function setzeAngaben(teil: ProjektangabenTeil): string | null {
+    const r = setzeProjektangaben(modell(), teil);
+    if (!r.ok) return r.fehler.map((f) => f.meldung).join(" ");
+    if (r.modell !== modell()) { verlauf = ausfuehren(verlauf, { label: "Projektangaben", anwenden: (m) => { const x = setzeProjektangaben(m, teil); return x.ok ? x.modell : m; } }); refresh(); }
+    return null;
+  }
+  function blockVarianten(): HTMLElement {
+    const pr = aktuellesProjekt();
+    const box = el("div", "varianten");
+    box.append(el("div", "label", "Varianten"));
+    const liste = el("div", "varianten-liste");
+    liste.setAttribute("role", "list");
+    for (const v of variantenListe(pr)) {
+      const b = button(v.name, () => wechsleZuVariante(v.id), v.aktiv ? "btn primary variante" : "btn variante");
+      b.dataset.k = `variante-${v.id}`; b.setAttribute("role", "listitem");
+      if (v.aktiv) b.setAttribute("aria-current", "true");
+      liste.append(b);
+    }
+    box.append(liste);
+    const f = el("div", "field");
+    const l = el("label", "", "Name"); const i = el("input"); i.id = "f-variante-name"; l.htmlFor = i.id; i.dataset.k = "variante-name";
+    i.value = variantenListe(pr).find((v) => v.aktiv)?.name ?? "";
+    const fehler = el("div", "note error"); fehler.hidden = true; fehler.setAttribute("role", "alert");
+    i.addEventListener("change", () => { const m = benenneAktive(i.value); if (m) { fehler.textContent = m; fehler.hidden = false; } });
+    i.addEventListener("keydown", (e) => { if (e.key === "Enter") i.blur(); });
+    f.append(l, i);
+    const zeile = el("div", "btn-row");
+    const b1 = button("Neue Variante", () => neueVariante()); b1.dataset.k = "variante-neu";
+    const b2 = button("Duplizieren", () => neueVariante(pr.aktiveVariante)); b2.dataset.k = "variante-duplizieren";
+    const b3 = button("Löschen …", () => void loescheVarianteFrage(pr.aktiveVariante)); b3.dataset.k = "variante-loeschen"; b3.disabled = variantenListe(pr).length < 2;
+    zeile.append(b1, b2, b3);
+    box.append(f, fehler, zeile);
+    return box;
+  }
+
   function panelProjekt() {
     const p = shell.panels.projekt;
     p.querySelector(".projekt-datei")?.remove();
@@ -431,12 +559,13 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     wahl.className = "visually-hidden"; wahl.tabIndex = -1;
     wahl.addEventListener("change", () => { const f = wahl.files?.[0]; wahl.value = ""; if (f) void darfVerwerfen("dem Öffnen").then((ok) => ok ? f.text().then(oeffneText) : undefined); });
     const zeile = el("div", "btn-row");
-    zeile.append(button("Neu", () => void neuesProjekt()), button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", exportierePdf), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
+    zeile.append(button("Neu", () => void neuesProjekt()), button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", () => void exportierePdf()), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
     const lab = el("label", "check-row");
     const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten"; cb.disabled = !unterlage;
     cb.addEventListener("change", () => { einbetten = cb.checked; });
     lab.append(cb, el("span", "", "Unterlage in Projektdatei einbetten"));
-    box.append(zeile, lab, wahl);
+    const angaben = button("Projektangaben (Plankopf) …", () => void oeffneAngabenDialog(modell().meta, setzeAngaben)); angaben.dataset.k = "projektangaben";
+    box.append(blockVarianten(), el("div", "label", "Projekt"), angaben, zeile, lab, wahl);
     if (projektMeldung) { const n = el("div", "note", projektMeldung); n.dataset.k = "projekt-meldung"; n.setAttribute("role", "status"); box.append(n); }
     p.append(box);
   }
@@ -621,7 +750,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
       speichere();
     }
-    shell.status.projekt.textContent = geaendert() ? "ungespeichert" : "";
+    shell.status.projekt.textContent = [variantenListe(projekt).length > 1 ? `Variante: ${variantenListe(projekt).find((x) => x.aktiv)?.name ?? ""}` : "", geaendert() ? "ungespeichert" : ""].filter(Boolean).join(" · ");
     berechneAbweichungen();
     panelUnterlage(); panelWerkzeug(); panelAuswahl(); panelProjekt();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
@@ -921,7 +1050,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   Object.defineProperties(api, {
     ausfuehre: { value: ausfuehreBefehl },
     modell: { get: () => modell() },
-    lade: { value: (m: ProjectModel) => { verlauf = neuerVerlauf(m); gespeichert = m; auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
+    lade: { value: (m: ProjectModel) => { projekt = projektAusModell(m); verlauf = neuerVerlauf(modellFuerVariante(projekt)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
+    ladeProjekt: { value: (pr: Projekt) => { projekt = pr; verlauf = neuerVerlauf(modellFuerVariante(pr)); markiereGespeichert(); auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
+    projekt: { get: () => aktuellesProjekt() },
   });
   return api;
 }

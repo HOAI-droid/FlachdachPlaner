@@ -1,5 +1,5 @@
 /** Lokales Speichern (PLAN Schritt 22): .fdp-Datei, IndexedDB-Autosave. Kein Netz, keine Telemetrie. */
-import { parseProject, type ProjectModel } from "../core/index";
+import { parseProjekt, type Projekt } from "../core/index";
 
 const DB = "flachdachplaner", STORE = "projekt", PACKS = "packs", KEY = "autosave";
 const LS_KEY = "flachdachplaner-projekt";
@@ -76,12 +76,12 @@ export async function waehleDatei(): Promise<File | null> {
 }
 
 export type OeffneErgebnis =
-  | { readonly ok: true; readonly projekt: ProjectModel; readonly hinweise: readonly string[] }
+  | { readonly ok: true; readonly projekt: Projekt; readonly hinweise: readonly string[] }
   | { readonly ok: false; readonly meldung: string };
 
 /** Projekttext prüfen: fremde (neuere) Version → verständlicher Hinweis, nichts wird verändert. */
 export function leseProjekt(text: string): OeffneErgebnis {
-  const r = parseProject(text);
+  const r = parseProjekt(text);
   if (r.ok) return { ok: true, projekt: r.projekt, hinweise: r.hinweise };
   const erste = r.fehler[0]?.meldung ?? "unbekannter Fehler";
   return { ok: false, meldung: r.neuereVersion

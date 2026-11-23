@@ -34,7 +34,7 @@ if (root) {
     await ladeInstallierte();
     const editor = mountEditor(shell, stage);
     mountUpdate(shell.panels.update, editor);
-    if (gespeichert) { const r = leseProjekt(gespeichert); if (r.ok) editor.lade(r.projekt); }
+    if (gespeichert) { const r = leseProjekt(gespeichert); if (r.ok) editor.ladeProjekt(r.projekt); }
     (window as unknown as { __editor: typeof editor }).__editor = editor;
   })();
   (window as unknown as { __stage: typeof stage }).__stage = stage;

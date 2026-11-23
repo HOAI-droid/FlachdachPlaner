@@ -22,6 +22,8 @@ export interface PlanEingabe {
   readonly datum: string;
   /** Regelwerk samt Version, z. B. „DIN 18531 · Pack 1.0“. */
   readonly regelwerk: string;
+  /** Variantenname (erscheint im Schriftfeld hinter dem Planinhalt). */
+  readonly variante?: string;
 }
 
 export interface PlanErgebnis {
@@ -102,12 +104,17 @@ function rahmen(s: PdfSeite): void {
   s.linie([{ x: rand, y: rand }, { x: b - rand, y: rand }, { x: b - rand, y: h - rand }, { x: rand, y: h - rand }], { breite: LW.stark, zu: true });
 }
 
+/** ISO JJJJ-MM-TT → TT.MM.JJJJ (sonst unverändert). */
+const deutschesDatum = (iso: string): string => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); return m ? `${m[3]}.${m[2]}.${m[1]}` : iso; };
+
 function schriftfeld(s: PdfSeite, e: PlanEingabe, inhalt: string, massstab: number, blatt: string): void {
   const x1 = BLATT.b - BLATT.rand, x0 = x1 - 180, y0 = BLATT.rand, y1 = y0 + 50;
   s.linie([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], { breite: LW.stark, zu: true });
-  const spalte = x0 + 100;
+  const spalte = x0 + 100, mitte = x0 + 140;
   s.linie([{ x: spalte, y: y0 }, { x: spalte, y: y1 }], { breite: LW.normal });
   for (const dy of [12.5, 25, 37.5]) s.linie([{ x: x0, y: y0 + dy }, { x: x1, y: y0 + dy }], { breite: dy === 25 ? LW.normal : LW.fein });
+  // Die oberste Zeile ist rechts nicht geteilt; darunter teilt eine zweite Spalte die rechte Hälfte.
+  s.linie([{ x: mitte, y: y0 }, { x: mitte, y: y0 + 37.5 }], { breite: LW.fein });
   const feld = (kopf: string, wert: string, x: number, y: number, g: number = T.normal, fett = false, max = 96) => {
     s.text(kopf, x + 1.5, y + 7.6, { groesse: 1.8, farbe: "#555555" });
     let t = wert;
@@ -115,14 +122,24 @@ function schriftfeld(s: PdfSeite, e: PlanEingabe, inhalt: string, massstab: numb
     s.text(t, x + 1.5, y + 2.6, { groesse: g, fett });
   };
   const m = e.modell.meta;
+  const plandatum = m.planDatum ? deutschesDatum(m.planDatum) : e.datum;
+  const rev = m.revision ? (m.revisionDatum ? `${m.revision} · ${deutschesDatum(m.revisionDatum)}` : m.revision) : "–";
+  const bearb = [m.bearbeiter, m.geprueftVon ? `gepr. ${m.geprueftVon}` : ""].filter(Boolean).join(" · ") || "–";
   feld("PROJEKT", m.name || "–", x0, y0 + 37.5, T.normal, true);
-  feld("PROJEKTNUMMER", m.projektnummer || "–", x0, y0 + 25);
-  feld("PLANINHALT", inhalt, x0, y0 + 12.5, T.normal, true);
-  feld("BEARBEITER", m.bearbeiter || "–", x0, y0);
-  feld("MASSSTAB", `1 : ${massstab}`, spalte, y0 + 37.5, T.normal, true, 76);
-  feld("DATUM", e.datum, spalte, y0 + 25, T.normal, false, 76);
-  feld("REGELWERK / VERSION", e.regelwerk, spalte, y0 + 12.5, T.klein, false, 76);
-  feld("INDEX · BLATT", `– · ${blatt}`, spalte, y0, T.normal, false, 76);
+  feld("BAUHERR", m.bauherr || "–", spalte, y0 + 37.5, T.normal, false, 76);
+  feld("BAUVORHABEN", m.bauvorhaben || "–", x0, y0 + 25);
+  feld("PROJEKT-NR.", m.projektnummer || "–", spalte, y0 + 25, T.normal, false, 36);
+  feld("PLAN-NR.", m.planNummer || "–", mitte, y0 + 25, T.normal, false, 36);
+  feld("PLANINHALT", e.variante ? `${inhalt} · ${e.variante}` : inhalt, x0, y0 + 12.5, T.normal, true);
+  feld("MASSSTAB", `1 : ${massstab}`, spalte, y0 + 12.5, T.normal, true, 36);
+  feld("DATUM", plandatum, mitte, y0 + 12.5, T.normal, false, 36);
+  feld("BÜRO · BEARBEITER", [m.bueroName, bearb].filter((x) => x && x !== "–").join(" · ") || "–", x0, y0, T.klein);
+  feld("REVISION", rev, spalte, y0, T.klein, false, 36);
+  feld("BLATT", blatt, mitte, y0, T.normal, false, 36);
+  // Büro-Anschrift und Regelwerk klein über dem Schriftfeld.
+  const kontakt = [m.bueroAnschrift, m.bueroKontakt].filter(Boolean).join(" · ");
+  s.text(`Regelwerk ${e.regelwerk}`, x0, y1 + 1.6, { groesse: 1.8, farbe: "#555555" });
+  if (kontakt) s.text(kontakt, x0, y1 + 4.4, { groesse: 1.8, farbe: "#555555" });
 }
 
 function nordpfeil(s: PdfSeite, x: number, y: number): void {
@@ -427,24 +444,41 @@ function legendeDaemmplan(s: PdfSeite, y: number): number {
   return y - 2;
 }
 
+/** Eine Variante für den Mehrvarianten-Export. */
+export interface VariantenPlan { readonly eingabe: PlanEingabe }
+
+/** Baut ein PDF mit je Variante Gefälleplan (+ Gefälledämmplan, falls berechnet), in der übergebenen Reihenfolge. */
+export function baueVariantenPdf(vs: readonly VariantenPlan[], titel?: string): PlanErgebnis & { readonly massstaebe: readonly number[] } {
+  if (vs.length === 0) throw new Error("Keine Variante für den PDF-Export gewählt.");
+  const dok = new PdfDokument(titel ?? `${vs[0]!.eingabe.modell.meta.name || "Projekt"} – Planunterlagen`);
+  const gesamt = vs.reduce((n, v) => n + (v.eingabe.plan ? 2 : 1), 0);
+  let nr = 0;
+  const massstaebe: number[] = [];
+  for (const { eingabe: e } of vs) {
+    const a = abbildung(e.modell);
+    massstaebe.push(a.massstab);
+    const blaetter: { titel: string; zeichne: (s: PdfSeite) => void; legende: (s: PdfSeite, y: number) => number }[] = [
+      { titel: "Gefälleplan", zeichne: (s) => gefaelleplan(s, a, e), legende: (s) => legendeGefaelle(s, e, PLAN.y1 - 4) },
+      ...(e.plan ? [{ titel: "Gefälledämmplan", zeichne: (s: PdfSeite) => daemmplan(s, a, e), legende: (s: PdfSeite) => legendeDaemmplan(s, PLAN.y1 - 4) }] : []),
+    ];
+    for (const b of blaetter) {
+      const s = dok.seite(BLATT.b, BLATT.h);
+      nr++;
+      rahmen(s);
+      b.zeichne(s);
+      bemassung(s, a, e.modell);
+      nordpfeil(s, PLAN.x0 + 8, PLAN.y1 - 26);
+      massstabsbalken(s, a, PLAN.x0 + 20, PLAN.y0 + 3);
+      const y = b.legende(s, PLAN.y1 - 4);
+      tabellen(s, e, y - 4);
+      schriftfeld(s, e, b.titel, a.massstab, `${nr}/${gesamt}`);
+    }
+  }
+  return { bytes: dok.bytes(), massstab: massstaebe[0]!, massstaebe };
+}
+
 /** Baut das PDF mit Gefälleplan (Blatt 1) und Gefälledämmplan (Blatt 2); Rückgabe samt Maßstab. */
 export function baueProjektPdf(e: PlanEingabe): PlanErgebnis {
-  const dok = new PdfDokument(`${e.modell.meta.name || "Projekt"} – Planunterlagen`);
-  const a = abbildung(e.modell);
-  const blaetter: { titel: string; zeichne: (s: PdfSeite) => void; legende: (s: PdfSeite, y: number) => number }[] = [
-    { titel: "Gefälleplan", zeichne: (s) => gefaelleplan(s, a, e), legende: (s, y) => legendeGefaelle(s, e, y) },
-    ...(e.plan ? [{ titel: "Gefälledämmplan", zeichne: (s: PdfSeite) => daemmplan(s, a, e), legende: (s: PdfSeite, y: number) => legendeDaemmplan(s, y) }] : []),
-  ];
-  blaetter.forEach((b, i) => {
-    const s = dok.seite(BLATT.b, BLATT.h);
-    rahmen(s);
-    b.zeichne(s);
-    bemassung(s, a, e.modell);
-    nordpfeil(s, PLAN.x0 + 8, PLAN.y1 - 26);
-    massstabsbalken(s, a, PLAN.x0 + 20, PLAN.y0 + 3);
-    const y = b.legende(s, PLAN.y1 - 4);
-    tabellen(s, e, y - 4);
-    schriftfeld(s, e, b.titel, a.massstab, `${i + 1}/${blaetter.length}`);
-  });
-  return { bytes: dok.bytes(), massstab: a.massstab };
+  const r = baueVariantenPdf([{ eingabe: e }]);
+  return { bytes: r.bytes, massstab: r.massstab };
 }
