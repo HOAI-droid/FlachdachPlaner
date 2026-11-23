@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
-  computeSlope, createProject, dachachse, hoeheAm, polygonArea, polygonCentroid, pointInPolygon,
+  CLIPPER_SCALE, computeSlope, createProject, dachachse, hoeheAm, polygonArea, polygonCentroid, pointInPolygon,
   type Dachflaeche, type DachGefaelle, type Entwaesserung, type Kontur, type ProjectModel, type Vec2,
 } from "../src/core/index";
 
@@ -209,6 +209,14 @@ function ausFall(f: Fall, shift = 0, winkel = 0): ProjectModel {
   return projekt({ kontur, entwaesserung, daemmdickeTiefpunkt: f.dtp }, f.s);
 }
 
+/**
+ * Clipper rechnet auf einem 0,1-mm-Raster (CLIPPER_SCALE). Jede Facette wird für sich gerundet; benachbarte
+ * Facetten haben daher Haarrisse/Überlappungen von höchstens zwei Rasterschritten Breite (belegt: Versatz der
+ * Facetten um 0,2 mm schließt jede Lücke). Fehlerschranke der Flächensumme: Σ Umfang · Raster.
+ */
+const rasterSchranke = (g: DachGefaelle) => g.facetten.reduce((s, f) => s + [f.polygon.outer, ...f.polygon.holes]
+  .reduce((u, r) => u + r.reduce((a, p, i) => a + Math.hypot(r[(i + 1) % r.length]!.x - p.x, r[(i + 1) % r.length]!.y - p.y), 0), 0), 0) / CLIPPER_SCALE;
+
 describe("Eigenschaften", () => {
   it("d_TP ≤ d_m ≤ Max; Facetten partitionieren die Dachfläche; Koten = Höhenfeld", () => {
     fc.assert(fc.property(fall, (f) => {
@@ -219,12 +227,12 @@ describe("Eigenschaften", () => {
       expect(d.mittel).toBeGreaterThanOrEqual(dtp - 1e-9);
       expect(d.mittel).toBeLessThanOrEqual(d.max + 1e-9);
       const summe = g.facetten.reduce((s, x) => s + x.flaeche, 0);
-      expect(Math.abs(summe - f.w * f.h)).toBeLessThan(0.01);
+      expect(Math.abs(summe - f.w * f.h)).toBeLessThan(rasterSchranke(g));
       expect(Math.abs(polygonArea({ outer: ausFall(f).dachflaechen[0]!.kontur, holes: [] }) - f.w * f.h)).toBeLessThan(1e-6);
       for (const k of g.koten) expect(k.kote).toBeCloseTo(hoeheAm(g.feld, k.position), 9);
       expect(g.hochpunkt!.kote).toBeGreaterThanOrEqual(Math.max(...g.koten.map((k) => k.kote)) - 1e-12);
     }), { numRuns: 120 });
-  });
+  }, 20_000);
   it("gemeinsame Verschiebung aller z ändert d_m nicht (verschiebt nur die Koten)", () => {
     fc.assert(fc.property(fall, (f) => {
       const a = erstes(ausFall(f));
@@ -233,7 +241,7 @@ describe("Eigenschaften", () => {
       expect(Math.abs(a.daemmung!.max - b.daemmung!.max)).toBeLessThan(1e-6);
       expect(b.hochpunkt!.kote - a.hochpunkt!.kote).toBeCloseTo(f.shift, 9);
     }), { numRuns: 80 });
-  });
+  }, 20_000);
   it("Drehung von Dach samt Abläufen ändert d_m und HP nicht (L∞ in Dachachsrichtung)", () => {
     fc.assert(fc.property(fall, (f) => {
       const a = erstes(ausFall(f));
@@ -247,7 +255,10 @@ describe("Eigenschaften", () => {
       const dh = f.s * 0.05 * 2;
       expect(Math.abs(a.daemmung!.mittel - b.daemmung!.mittel)).toBeLessThan(dh * 1000 + 0.05);
       expect(Math.abs(b.hochpunkt!.kote - a.hochpunkt!.kote)).toBeLessThan(dh + 1e-9);
-      expect(b.facetten.reduce((s, x) => s + x.flaeche, 0)).toBeCloseTo(f.w * f.h, 2);
+      expect(Math.abs(b.facetten.reduce((s, x) => s + x.flaeche, 0) - f.w * f.h)).toBeLessThan(rasterSchranke(b));
     }), { numRuns: 80 });
-  });
+    // 80 Fälle × 2 vollständige Gefälleberechnungen dauern ~4–5 s (auch ohne Streifenfilter gemessen, bis 5,1 s):
+    // der vitest-Standard von 5 s ließ den Test zufällig am Zeitlimit scheitern, nicht an einer Eigenschaft
+    // (je 4000 Fälle aller drei Eigenschaften ohne Zeitlimit: keine Verletzung). Daher 20 s für alle drei.
+  }, 20_000);
 });

@@ -107,6 +107,24 @@ export function quellAbstand(q: Hoehenquelle, p: Vec2): number {
 export const auswerten = (e: Ebene, p: Vec2): number => e.a * p.x + e.b * p.y + e.c;
 export const differenz = (e: Ebene, f: Ebene): Ebene => ({ a: e.a - f.a, b: e.b - f.b, c: e.c - f.c });
 
+/**
+ * Ebene, die im Punkt p die Höhe bestimmt (tiefste Pyramide, dort ihre höchste Seite); null ohne Quellen.
+ * Gleichstand: erste Quelle bzw. erste Seite in SEITEN-Reihenfolge.
+ */
+export function aktiveEbene(f: Hoehenfeld, p: Vec2): Ebene | null {
+  let best: Ebene | null = null, h = Infinity;
+  f.quellen.forEach((q, i) => {
+    const dx = p.x - q.position.x, dy = p.y - q.position.y;
+    const t = dx * q.achse.x + dy * q.achse.y, v = dx * -q.achse.y + dy * q.achse.x;
+    const terme = [t - quellLaenge(q), v, -t, -v]; // Index = Seite (0 = +Achse ab B, 1 = +Quer, 2 = −Achse, 3 = −Quer)
+    let k = 0;
+    for (const s of SEITEN) if (terme[s]! > terme[k]!) k = s;
+    const hi = q.z + f.gefaelle * terme[k]!;
+    if (hi < h) { h = hi; best = ebeneVon(f, i, k as Seite); }
+  });
+  return best;
+}
+
 /** Höhe des Felds im Punkt p (m); NaN, wenn das Feld keine Quellen hat. */
 export function hoeheAm(f: Hoehenfeld, p: Vec2): number {
   let h = Number.NaN;

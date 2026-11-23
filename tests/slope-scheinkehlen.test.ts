@@ -69,11 +69,17 @@ describe("Scheinkehlen: Lagetoleranz 5 cm (Repro 8,84 × 4,35)", () => {
   it("Referenz: 8 Kehlen, ein Grat zwischen den Gullys, ebene Platten zusammengefasst", () => {
     expect(zaehle(ref)).toEqual({ kehlen: 8, grate: 1, platten: 6 });
   });
-  it("Δx = 6 cm (über der Toleranz): keine Angleichung, Verhalten wie bisher", () => {
+  it("Δx = 6 cm (über der Toleranz): keine Angleichung, aber Streifen < 5 cm breit → keine Scheinlinie", () => {
     const gs: [Vec2, Vec2] = [{ x: 4.42, y: 0.2 }, { x: 4.48, y: 4.13 }];
     const g = dach(SCHIEF, gs);
     expect(g.feld.quellen.map((q) => q.position)).toEqual(gs);
-    expect(zaehle(g)).not.toEqual(zaehle(ref));
+    // Grat und Kehle lägen nur Δx/√2 ≈ 4,2 cm nebeneinander (Höhenversatz s·Δx = 1,2 mm): keine Faltlinie.
+    expect(g.linien.filter((l) => l.art === "kehle")).toHaveLength(8);
+    expect(g.linien.filter((l) => l.art === "grat")).toHaveLength(1);
+    expect(g.linien.some((l) => l.art === "kehle" && l.ablaufIds[0] === "g1" && Math.min(l.von.y, l.bis.y) < 1e-9)).toBe(false);
+  });
+  it("Δx = 10 cm: Streifen breiter als LAGE_TOL → Grat und Kehle bleiben (echte Geometrie)", () => {
+    const g = dach(SCHIEF, [{ x: 4.42, y: 0.2 }, { x: 4.52, y: 4.13 }]);
     expect(g.linien.some((l) => l.art === "kehle" && l.ablaufIds[0] === "g1" && Math.min(l.von.y, l.bis.y) < 1e-9)).toBe(true);
   });
   it("Dachachse rastet ein: Kante 4 cm schief → (1, 0); 6 cm → bleibt schief", () => {
@@ -93,4 +99,32 @@ describe("Scheinkehlen: Lagetoleranz 5 cm (Repro 8,84 × 4,35)", () => {
     expect(g.linien.filter((l) => l.art === "kehle")).toHaveLength(8);
     expect(g.koten.filter((k) => k.art === "ablauf").map((k) => k.kote).sort()).toEqual([0, 0.05]);
   });
+});
+
+/**
+ * Regression „Scheingrat zur Ecke“ (Nutzerfall): schiefe Kontur, E1 unten mittig, E2 oben mittig, um 7 cm
+ * (knapp über LAGE_TOL, daher nicht angeglichen) versetzt. Vorher: Grat von der Dachecke diagonal zum
+ * Kehlenknick an der Teilungslinie plus Kehle 5 cm daneben (Streifen mit 1,4 mm Höhenversatz).
+ */
+describe("Scheingrat zur Dachecke (2 Gullys gegenüber, schiefe Kontur)", () => {
+  const drehe = (w: number) => (x: number, y: number): Vec2 => ({ x: x * Math.cos(w) - y * Math.sin(w), y: x * Math.sin(w) + y * Math.cos(w) });
+  for (const w of [0, 0.02, 0.3]) {
+    it(`Drehung ${w} rad: keine Faltlinie zur Ecke, ein Grat (Teilungslinie), HP an den Ecken`, () => {
+      const r = drehe(w);
+      const ecken = [r(0, 0), r(8.8, 0), r(8.83, 4.5), r(0, 4.5)];
+      const kontur: Kontur = ecken.map((p, i) => pt(`k${i}`, p.x, p.y));
+      const e1 = r(4.4, 0.1), e2 = r(4.47, 4.4);
+      const g = dach(kontur, [e1, e2]);
+      for (const l of g.linien) {
+        for (const p of [l.von, l.bis]) {
+          expect(ecken.some((e) => nah(e, p, LAGE_TOL)), `Linie zur Ecke ${JSON.stringify(l)}`).toBe(false);
+        }
+      }
+      expect(g.linien.filter((l) => l.art === "grat")).toHaveLength(1);
+      expect(g.linien.filter((l) => l.art === "kehle")).toHaveLength(8);
+      expect(g.hochpunkt!.kote).toBeCloseTo(0.088, 6);
+      // Kehlenknick an der Teilungslinie: +0,043 (s · 2,15 m)
+      expect(g.koten.some((k) => k.art !== "ecke" && Math.abs(k.kote - 0.043) < 2e-3)).toBe(true);
+    });
+  }
 });

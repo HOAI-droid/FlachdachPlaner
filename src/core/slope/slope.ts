@@ -18,7 +18,7 @@ import type { Polygon, Ring, Vec2 } from "../geometry/types";
 import { dachPolygon } from "../model/model";
 import type { Dachflaeche, ProjectModel, Zone } from "../model/types";
 import {
-  SEITEN, achseEingerastet, auswerten, dachachse, differenz, ebeneVon, hoeheAm, quellLaenge, quellenAngeglichen, seitenRichtung,
+  LAGE_TOL, SEITEN, achseEingerastet, aktiveEbene, auswerten, dachachse, differenz, ebeneVon, hoeheAm, quellLaenge, quellenAngeglichen, seitenRichtung,
 } from "./hoehenfeld";
 import { istSplitter, quellenAus } from "./quellen";
 import type {
@@ -359,6 +359,54 @@ function nurKnicke(f: Hoehenfeld, p0: Vec2, dir: Vec2, iv: Intervalle): Interval
   return out.map(([s, e]) => [s - a0(iv, s) <= 1e-6 ? a0(iv, s) : s, b0(iv, e) - e <= 1e-6 ? b0(iv, e) : e] as [number, number]);
 }
 
+/**
+ * Entfernt Teilstücke ohne Knick im Rahmen der Lagetoleranz: Liegt im Abstand LAGE_TOL beiderseits der
+ * Linie dieselbe Neigung (parallele Ebenen), ist sie nur Rand eines Streifens schmaler als LAGE_TOL, dessen
+ * Höhenversatz höchstens s · √2 · LAGE_TOL beträgt (z. B. Abläufe knapp über LAGE_TOL versetzt: Grat und
+ * Kehle wenige cm nebeneinander, Scheingrat zur Dachecke). Danach verbleibende Reststücke ≤ LAGE_TOL entfallen.
+ */
+function ohneStreifen(f: Hoehenfeld, p0: Vec2, dir: Vec2, iv: Intervalle): Intervalle {
+  const N = 24, schritte = 48, q = LAGE_TOL;
+  const gleicheEbene = (e: Ebene, g: Ebene) => { const d = differenz(e, g); return parallel(d) && Math.abs(d.c) <= EPS; };
+  /** Grenze zwischen den Ebenen e und g verläuft parallel zur Linie (Streifen statt Kreuzung/Einmündung). */
+  const laengs = (e: Ebene, g: Ebene) => {
+    const d = differenz(e, g);
+    return Math.abs(d.a * dir.x + d.b * dir.y) <= EPS * Math.hypot(d.a, d.b);
+  };
+  const echt = (t: number) => {
+    const p = { x: p0.x + t * dir.x, y: p0.y + t * dir.y };
+    const bei = (s: number) => aktiveEbene(f, { x: p.x - s * dir.y, y: p.y + s * dir.x })!;
+    const [s1, s2, n1, n2] = [bei(q), bei(-q), bei(KOTEN_GLEICH), bei(-KOTEN_GLEICH)];
+    // Streifen: außen parallele, aber verschiedene Ebenen; jeder Ebenenwechsel innerhalb q läuft längs der Linie.
+    if (!parallel(differenz(s1, s2)) || gleicheEbene(s1, s2)) return true;
+    return !([[n1, s1], [n2, s2]] as const).every(([n, s]) => gleicheEbene(n, s) || laengs(n, s));
+  };
+  const grenze = (tJa: number, tNein: number) => {
+    let ja = tJa, nein = tNein;
+    for (let i = 0; i < schritte && Math.abs(nein - ja) > EPS; i++) {
+      const m = (ja + nein) / 2;
+      if (echt(m)) ja = m; else nein = m;
+    }
+    return ja;
+  };
+  const out: Intervalle = [];
+  for (const [a, b] of iv) {
+    const teile: Intervalle = [];
+    let start: number | null = null;
+    const n = Math.max(N, Math.ceil((b - a) / q));
+    const pos = (i: number) => a + ((b - a) * i) / n;
+    for (let i = 0; i <= n; i++) {
+      const k = echt(pos(i));
+      if (k && start === null) start = i === 0 ? a : grenze(pos(i), pos(i - 1));
+      else if (!k && start !== null) { teile.push([start, grenze(pos(i - 1), pos(i))]); start = null; }
+    }
+    if (start !== null) teile.push([start, b]);
+    const ganz = teile.length === 1 && teile[0]![0] === a && teile[0]![1] === b;
+    out.push(...(ganz ? teile : teile.filter(([s, e]) => e - s > LAGE_TOL)));
+  }
+  return out;
+}
+
 /** Anfang/Ende des Ausgangsintervalls, das t enthält. */
 const a0 = (iv: Intervalle, t: number) => iv.find(([a, b]) => t >= a - 1e-6 && t <= b + 1e-6)?.[0] ?? t;
 const b0 = (iv: Intervalle, t: number) => iv.find(([a, b]) => t >= a - 1e-6 && t <= b + 1e-6)?.[1] ?? t;
@@ -366,6 +414,12 @@ const b0 = (iv: Intervalle, t: number) => iv.find(([a, b]) => t >= a - 1e-6 && t
 function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlinie[] {
   const mitte = { x: (box[0]!.x + box[2]!.x) / 2, y: (box[0]!.y + box[2]!.y) / 2 };
   const ebenen = f.quellen.flatMap((_, i) => SEITEN.map((k) => ({ i, k, L: ebeneVon(f, i, k) })));
+  // Ein Streifen (ohneStreifen) setzt eine parallele Ebene voraus, deren Versatz höchstens der Höhenänderung
+  // über LAGE_TOL entspricht (Breite ≤ LAGE_TOL, Neigungsunterschied ≤ 2 s); sonst entfällt die Abtastung.
+  const streifenMoeglich = (L: Ebene) => ebenen.some((E) => {
+    const d = differenz(E.L, L);
+    return parallel(d) && Math.abs(d.c) > EPS && Math.abs(d.c) <= 2 * f.gefaelle * LAGE_TOL;
+  });
   const out: Faltlinie[] = [];
   for (let x = 0; x < ebenen.length; x++) {
     for (let y = x + 1; y < ebenen.length; y++) {
@@ -401,6 +455,7 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
         iv = ohneWoAllePositiv(iv, SEITEN.map((k2) => entlang(differenz(A.L, ebeneVon(f, j, k2)))));
       });
       iv = nurKnicke(f, p0, dir, iv);
+      if (iv.length > 0 && (streifenMoeglich(A.L) || streifenMoeglich(B.L))) iv = ohneStreifen(f, p0, dir, iv);
       for (const [a, b] of iv) {
         if (b - a <= EPS) continue;
         const von = { x: p0.x + a * dir.x, y: p0.y + a * dir.y }, bis = { x: p0.x + b * dir.x, y: p0.y + b * dir.y };
@@ -411,7 +466,9 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
       }
     }
   }
-  return out;
+  // Linien, die im Rahmen der Lagetoleranz auf einer Konturkante liegen, sind keine eigene Faltlinie.
+  const kanten = [dach.outer, ...dach.holes].flatMap((r) => r.map((p, i) => [p, r[(i + 1) % r.length]!] as const));
+  return out.filter((l) => !kanten.some(([p, q]) => distPointSegment(l.von, p, q) <= LAGE_TOL && distPointSegment(l.bis, p, q) <= LAGE_TOL));
 }
 
 // ---------- Koten, HP/TP ----------
