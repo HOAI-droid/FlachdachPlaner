@@ -270,10 +270,6 @@ export function fuelleErgebnis(p: HTMLElement, m: ProjectModel, e: Ergebnis): vo
       t.append(r);
     }
     p.append(el("div", "label", "Ø Gefälledämmung"), t);
-    const g0 = mitD[0]!.daemmung!;
-    const b = el("div", "badge", `Ø ${zahl(g0.mittel, 0)} mm (min ${zahl(g0.min, 0)} · max ${zahl(g0.max, 0)} mm)`);
-    b.dataset.k = "daemmung-badge";
-    p.append(b);
   }
   if (e.catchments.flaechen.length) {
     const t = el("table", "ergebnis"); t.dataset.k = "einzug";
@@ -356,11 +352,14 @@ export function fuellePruefliste(p: HTMLElement, m: ProjectModel, e: Ergebnis | 
   kopf.textContent = (["fehler", "warnung", "hinweis"] as const).map((k) => `${anzahl[k]} ${ZAEHLER[k]![anzahl[k] === 1 ? 0 : 1]}`).join(" · ");
   p.append(kopf);
   const liste = el("ul", "befunde");
+  const kopfZeile = el("li", "befund-kopf");
+  for (const t of ["Stufe", "Meldung", "Objekt", "Regel · Quelle"]) kopfZeile.append(el("span", "", t));
+  liste.append(kopfZeile);
   for (const b of sortiert) {
     const li = el("li", `befund ${b.stufe}`);
     li.dataset.code = b.code;
     if (b.objektId) li.dataset.objekt = b.objektId;
-    li.append(el("span", "stufe", STUFE[b.stufe]!), el("span", "", b.meldung));
+    li.append(el("span", "stufe", STUFE[b.stufe]!), el("span", "meldung", b.meldung), el("span", "objekt", b.objektId ?? "–"), el("span", "quelle", [b.regelId, b.quelle].filter(Boolean).join(" · ") || "–"));
     li.title = b.quelle;
     const ziel = bei ? befundZiel(m, b) : null;
     if (ziel && (ziel.auswahl || ziel.mitte)) {
@@ -371,7 +370,7 @@ export function fuellePruefliste(p: HTMLElement, m: ProjectModel, e: Ergebnis | 
     }
     liste.append(li);
   }
-  for (const h of e.hinweise) { const li = el("li", "befund hinweis"); li.dataset.code = "berechnung"; li.append(el("span", "stufe", "Hinweis"), el("span", "", h)); liste.append(li); }
-  if (!liste.childElementCount) p.append(el("div", "ok", "Keine Befunde."));
+  for (const h of e.hinweise) { const li = el("li", "befund hinweis"); li.dataset.code = "berechnung"; li.append(el("span", "stufe", "Hinweis"), el("span", "meldung", h), el("span", "objekt", "–"), el("span", "quelle", "–")); liste.append(li); }
+  if (liste.childElementCount <= 1) p.append(el("div", "ok", "Keine Befunde."));
   else p.append(liste);
 }

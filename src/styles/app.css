@@ -88,7 +88,16 @@ button, input, select { font: inherit; color: inherit; }
 
 /* Ergebnis, Prüfliste, Standort */
 .ergebnis { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
-.ergebnis th { text-align: left; color: var(--text-muted); font-weight: 500; padding: var(--sp-2) var(--sp-3); }
+.ergebnis th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; background: var(--surface-2); padding: var(--sp-2) var(--sp-3); }
+.ergebnis th.num { text-align: right; }
+.section-body > .label, .section-body > .empty { padding: var(--sp-3) var(--sp-4) var(--sp-1); }
+.ergebnis th:first-child, .ergebnis td:first-child { padding-left: var(--sp-4); }
+.ergebnis th:last-child, .ergebnis td:last-child { padding-right: var(--sp-4); }
+.varianten, .projekt-datei { padding-inline: var(--sp-4); }
+.varianten .label { padding: 0; }
+.varianten .field { padding-inline: 0; }
+.varianten .btn-row, .projekt-datei .btn-row { gap: var(--sp-3); }
+.projekt-datei .btn, .varianten .btn { height: 28px; }
 .ergebnis td { padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--line); }
 .ergebnis td.num { text-align: right; font-family: var(--font-mono); }
 .badge { display: inline-block; padding: var(--sp-1) var(--sp-3); margin: var(--sp-3);
@@ -171,3 +180,15 @@ button, input, select { font: inherit; color: inherit; }
 .angaben .btn { justify-self: start; }
 .varianten { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); }
 .varianten-liste { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.projekt-datei { display: grid; gap: var(--sp-3); }
+.projekt-datei .label { padding: 0; color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.varianten .label { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.varianten .field input { text-align: left; font-family: var(--font-ui); }
+.projekt-datei .varianten { padding: 0; }
+/* Prüfliste als Tabellenraster: Stufe | Meldung | Objekt | Regel · Quelle */
+.befunde { gap: 0; padding-inline: 0; }
+.befund, .befund-kopf { display: grid; grid-template-columns: 96px minmax(0, 1fr) 96px minmax(0, 30%); gap: var(--sp-3); align-items: center; min-height: 28px; padding: var(--sp-1) var(--sp-4); border-radius: 0; border-top: 1px solid var(--line); }
+.befund-kopf { background: var(--surface-2); color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
+.befund .stufe { margin: 0; }
+.befund .objekt, .befund .quelle { color: var(--text-muted); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.befund .objekt { font-family: var(--font-mono); }

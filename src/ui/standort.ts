@@ -67,7 +67,7 @@ export function mountStandort(panel: HTMLElement, api: StandortApi): StandortPan
     const pack = el("div", "row"); pack.append(el("span", "", `${titel} Pack`), el("span", "num", s.packWert === null ? "–" : zahl(s.packWert, 0)));
     pack.querySelector(".num")!.setAttribute("data-k", `${name}-pack`);
     box.append(pack);
-    const f = feld(`${titel} manuell (l/(s·ha))`, s.manuellWert === undefined ? "" : zahl(s.manuellWert, 0), `${name}-manuell`, (v) => {
+    const f = feld(`${titel} manuell`, s.manuellWert === undefined ? "" : zahl(s.manuellWert, 0), `${name}-manuell`, (v) => {
       const t = v.trim();
       if (t === "") api.ausfuehre(setRegenManuell(name, undefined));
       else { const n = num(t); if (Number.isFinite(n) && n > 0) api.ausfuehre(setRegenManuell(name, n)); else meldung = "Manueller Wert muss größer 0 sein."; }
