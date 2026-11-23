@@ -66,13 +66,14 @@ export function baueAngabenFormular(meta: Projektmetadaten, setze: (teil: Projek
         fehler.hidden = m === null; fehler.textContent = m ?? "";
         i.setAttribute("aria-invalid", m === null ? "false" : "true");
       });
-      zeile.append(l, i);
-      sec.append(zeile, fehler);
       if (f.art === "datum") {
+        i.lang = "de";
         const heute = mk("button", "btn", "Heute"); heute.type = "button"; heute.dataset.k = `${id}-heute`;
         heute.addEventListener("click", () => { i.value = heuteIso(); i.dispatchEvent(new Event("change")); });
-        sec.append(heute);
-      }
+        const z = mk("div", "feld-zeile"); z.append(i, heute);
+        zeile.append(l, z);
+      } else zeile.append(l, i);
+      sec.append(zeile, fehler);
     }
     wurzel.append(sec);
   }
@@ -89,5 +90,6 @@ export function oeffneAngabenDialog(meta: Projektmetadaten, setze: (teil: Projek
     abbruchId: "fertig",
     breit: true,
   });
+  d.wurzel.querySelector<HTMLElement>("input")?.focus();
   return d.ergebnis.then(() => undefined);
 }

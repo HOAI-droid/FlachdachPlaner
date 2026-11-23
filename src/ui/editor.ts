@@ -528,7 +528,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const liste = el("div", "varianten-liste");
     liste.setAttribute("role", "list");
     for (const v of variantenListe(pr)) {
-      const b = button(v.name, () => wechsleZuVariante(v.id), v.aktiv ? "btn primary variante" : "btn variante");
+      const b = button(v.name, () => wechsleZuVariante(v.id), v.aktiv ? "btn variante aktiv" : "btn variante");
       b.dataset.k = `variante-${v.id}`; b.setAttribute("role", "listitem");
       if (v.aktiv) b.setAttribute("aria-current", "true");
       liste.append(b);
@@ -544,7 +544,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const zeile = el("div", "btn-row");
     const b1 = button("Neue Variante", () => neueVariante()); b1.dataset.k = "variante-neu";
     const b2 = button("Duplizieren", () => neueVariante(pr.aktiveVariante)); b2.dataset.k = "variante-duplizieren";
-    const b3 = button("Löschen …", () => void loescheVarianteFrage(pr.aktiveVariante)); b3.dataset.k = "variante-loeschen"; b3.disabled = variantenListe(pr).length < 2;
+    const b3 = button("Löschen …", () => void loescheVarianteFrage(pr.aktiveVariante), "btn gefahr"); b3.dataset.k = "variante-loeschen"; b3.disabled = variantenListe(pr).length < 2;
     zeile.append(b1, b2, b3);
     box.append(f, fehler, zeile);
     return box;

@@ -145,7 +145,7 @@ button, input, select { font: inherit; color: inherit; }
 /* Modaler Dialog (Speichern-Rückfrage, PDF-Seitenwahl) */
 .dialog-bg { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / .4); }
 .dialog-bg .dialog { max-width: min(440px, calc(100vw - var(--sp-6))); max-height: calc(100vh - var(--sp-6)); overflow: auto; box-shadow: var(--shadow-1); }
-.dialog-bg .dialog.breit { width: min(760px, calc(100vw - var(--sp-6))); max-width: none; }
+.dialog-bg .dialog.breit { width: min(560px, calc(100vw - var(--sp-6))); max-width: none; }
 .dialog-titel { margin: 0 0 var(--sp-3); font-size: var(--fs-lg); font-weight: 600; }
 .dialog-text { margin: 0 0 var(--sp-4); color: var(--text-muted); }
 .dialog-knoepfe { justify-content: flex-end; margin-top: var(--sp-4); }
@@ -158,9 +158,14 @@ button, input, select { font: inherit; color: inherit; }
 
 /* Projektangaben-Maske und Varianten-Liste */
 .angaben { display: grid; gap: var(--sp-4); }
-.angaben-gruppe { border: 1px solid var(--line); border-radius: var(--r-1); padding: var(--sp-3) var(--sp-4); display: grid; gap: var(--sp-2); }
-.angaben-gruppe legend { padding: 0 var(--sp-2); color: var(--text-muted); font-weight: 600; }
-.angaben .field { grid-template-columns: 200px 1fr; }
+.angaben-gruppe { border: 0; border-top: 1px solid var(--line); margin: 0; padding: var(--sp-3) 0 0; min-width: 0; display: grid; gap: var(--sp-2); }
+.angaben-gruppe legend { padding: 0 var(--sp-2) 0 0; color: var(--text-muted); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+.angaben .feld-zeile { display: grid; grid-template-columns: 1fr auto; gap: var(--sp-2); align-items: center; }
+.dialog-bg .dialog-knoepfe { position: sticky; bottom: calc(-1 * var(--sp-5)); background: var(--surface); padding: var(--sp-3) 0; margin-bottom: calc(-1 * var(--sp-3)); }
+.dialog input[type=checkbox] { accent-color: var(--accent); }
+.varianten-liste .btn.variante.aktiv { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.btn.gefahr { color: var(--error); border-color: var(--error); }
+.angaben .field { grid-template-columns: 160px 1fr; }
 .angaben .field input, .angaben .field textarea { text-align: left; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-1); padding: var(--sp-2) var(--sp-3); font: inherit; color: var(--text); min-width: 0; }
 .angaben .field input { height: 28px; padding-block: 0; }
 .angaben .btn { justify-self: start; }
