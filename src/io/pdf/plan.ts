@@ -4,7 +4,7 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  attikaStreifen, dickeAn, dickeRaster, kotenMarken, plattenDaemmdicke, polygonCentroid,
+  attikaStreifen, dickeAn, dickeRaster, kotenMarken, pfeilLage, plattenDaemmdicke, polygonCentroid,
   type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfSeite, type Punkt } from "./pdf";
@@ -313,9 +313,14 @@ function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
   }
   // Gefällepfeile (bergab) mit Gefälle in %
   for (const g of e.slope.dachflaechen) {
+    const abl = g.koten.filter((k) => k.art === "ablauf").map((k) => k.position);
     for (const p of g.pfeile) {
-      const v = a.p(p.start), l = 7, ux = p.richtung.x, uy = p.richtung.y;
-      const bis = { x: v.x + ux * l, y: v.y + uy * l };
+      // wie im Canvas: Pfeil ganz in der Facette, Abstand zu Abläufen (Länge 7 mm im Plan)
+      const f = g.facetten.find((x) => x.id === p.facetteId), lW = 7 / Math.max(1e-9, a.mm(1));
+      const lage = f ? pfeilLage(p.start, p.richtung, f.polygon, lW, abl, 2.5 / Math.max(1e-9, a.mm(1))) : null;
+      if (!lage) continue;
+      const v = a.p(lage.von), bis = a.p(lage.bis), dl = Math.hypot(bis.x - v.x, bis.y - v.y) || 1;
+      const ux = (bis.x - v.x) / dl, uy = (bis.y - v.y) / dl;
       const t = `${zahl(p.gefaelle * 100, 1)} %`, w = textBreite(t, 2, false);
       if (!frei.belege(Math.min(v.x, bis.x) - 0.5, Math.min(v.y, bis.y) - 0.5, Math.abs(bis.x - v.x) + w + 1, Math.abs(bis.y - v.y) + 3)) continue;
       s.linie([v, bis], { breite: LW.fein });
