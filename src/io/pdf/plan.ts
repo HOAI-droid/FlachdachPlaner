@@ -166,24 +166,32 @@ function bemassung(s: PdfSeite, a: Abbildung, m: ProjectModel): void {
       s.flaeche([[pos, { x: pos.x + r * (ux * 2.4 - uy * 0.5), y: pos.y + r * (uy * 2.4 + ux * 0.5) }, { x: pos.x + r * (ux * 2.4 + uy * 0.5), y: pos.y + r * (uy * 2.4 - ux * 0.5) }]], { fuell: "#000000", breite: 0 });
     }
   };
-  // Jede Dachfläche für sich bemaßt (keine Gesamtmaße über leere Bereiche).
+  // Jede Dachfläche für sich bemaßt (keine Gesamtmaße über leere Bereiche); Teilketten oben/links bei Knicken.
+  const horizontal = (x0: number, x1: number, yRand: number, yLinie: number, t: string) => {
+    const r = yLinie < yRand ? -1 : 1;
+    s.linie([{ x: x0, y: yRand + r * -1 }, { x: x0, y: yLinie + r * 2 }], { breite: LW.fein });
+    s.linie([{ x: x1, y: yRand + r * -1 }, { x: x1, y: yLinie + r * 2 }], { breite: LW.fein });
+    s.linie([{ x: x0, y: yLinie }, { x: x1, y: yLinie }], { breite: LW.fein });
+    pfeil({ x: x0, y: yLinie }, { x: x1, y: yLinie });
+    s.text(t, (x0 + x1) / 2, yLinie + (r < 0 ? 1 : 1), { groesse: T.klein, anker: "m" });
+  };
+  const vertikal = (y0: number, y1: number, xRand: number, xLinie: number, t: string) => {
+    const r = xLinie > xRand ? 1 : -1;
+    s.linie([{ x: xRand + r, y: y0 }, { x: xLinie + r * 2, y: y0 }], { breite: LW.fein });
+    s.linie([{ x: xRand + r, y: y1 }, { x: xLinie + r * 2, y: y1 }], { breite: LW.fein });
+    s.linie([{ x: xLinie, y: y0 }, { x: xLinie, y: y1 }], { breite: LW.fein });
+    pfeil({ x: xLinie, y: y0 }, { x: xLinie, y: y1 });
+    s.text(t, xLinie - 1, (y0 + y1) / 2, { groesse: T.klein, anker: "m", winkel: Math.PI / 2 });
+  };
+  const eindeutig = (w: number[]) => [...new Set(w.map((v) => Math.round(v * 1000) / 1000))].sort((p, q) => p - q);
   for (const d of m.dachflaechen) {
     if (d.kontur.length === 0) continue;
-    const px = d.kontur.map((p) => a.x(p.x)), py = d.kontur.map((p) => a.y(p.y));
-    const xs = Math.min(...px), xe = Math.max(...px), ys = Math.min(...py), ye = Math.max(...py);
-    const wx = Math.max(...d.kontur.map((p) => p.x)) - Math.min(...d.kontur.map((p) => p.x));
-    const wy = Math.max(...d.kontur.map((p) => p.y)) - Math.min(...d.kontur.map((p) => p.y));
-    const yb = ys - 9, xr = xe + 9;
-    s.linie([{ x: xs, y: ys - 1 }, { x: xs, y: yb - 2 }], { breite: LW.fein });
-    s.linie([{ x: xe, y: ys - 1 }, { x: xe, y: yb - 2 }], { breite: LW.fein });
-    s.linie([{ x: xs, y: yb }, { x: xe, y: yb }], { breite: LW.fein });
-    pfeil({ x: xs, y: yb }, { x: xe, y: yb });
-    s.text(`${zahl(wx, 2)} m`, (xs + xe) / 2, yb + 1, { groesse: T.klein, anker: "m" });
-    s.linie([{ x: xe + 1, y: ys }, { x: xr + 2, y: ys }], { breite: LW.fein });
-    s.linie([{ x: xe + 1, y: ye }, { x: xr + 2, y: ye }], { breite: LW.fein });
-    s.linie([{ x: xr, y: ys }, { x: xr, y: ye }], { breite: LW.fein });
-    pfeil({ x: xr, y: ys }, { x: xr, y: ye });
-    s.text(`${zahl(wy, 2)} m`, xr - 1, (ys + ye) / 2, { groesse: T.klein, anker: "m", winkel: Math.PI / 2 });
+    const wx = eindeutig(d.kontur.map((p) => p.x)), wy = eindeutig(d.kontur.map((p) => p.y));
+    const xs = a.x(wx[0]!), xe = a.x(wx[wx.length - 1]!), ys = a.y(wy[0]!), ye = a.y(wy[wy.length - 1]!);
+    horizontal(xs, xe, ys, ys - 9, `${zahl(wx[wx.length - 1]! - wx[0]!, 2)} m`);
+    vertikal(ys, ye, xe, xe + 9, `${zahl(wy[wy.length - 1]! - wy[0]!, 2)} m`);
+    if (wx.length > 2) for (let i = 0; i + 1 < wx.length; i++) horizontal(a.x(wx[i]!), a.x(wx[i + 1]!), ye, ye + 9, `${zahl(wx[i + 1]! - wx[i]!, 2)} m`);
+    if (wy.length > 2) for (let i = 0; i + 1 < wy.length; i++) vertikal(a.y(wy[i]!), a.y(wy[i + 1]!), xs, xs - 9, `${zahl(wy[i + 1]! - wy[i]!, 2)} m`);
   }
 }
 
