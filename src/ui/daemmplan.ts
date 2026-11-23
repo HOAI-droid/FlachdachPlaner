@@ -94,6 +94,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     }
     if (d.n0) {
       const { x, y } = d.n0.position;
+      belegung.sperre({ x, y }, -2, -24, 22, 26); // Dicken-/Plattenlabels weichen dem N0-Kasten aus
       ctx.lineWidth = px; ctx.strokeStyle = linie; ctx.strokeRect(x, y - 22 * px, 18 * px, 22 * px);
       text(ctx, vp, "N0", x + 2 * px, y - 15 * px, { px: 11, farbe: linie, mono: true, halo: false });
     }
@@ -147,7 +148,11 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     if (k && dach) {
       const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)})`;
       const ys = dach.kontur.map((q) => q.y), xs = dach.kontur.map((q) => q.x), x0 = Math.min(...xs), yo = Math.max(...ys);
-      text(ctx, vp, `${dach.name || dach.id}: ${zeilen}`, x0, yo + 72 * px, { px: 12, mono: true, farbe: linie, halo: false });
+      const titel = `${dach.name || dach.id}: ${zeilen}`, tw = textBreite(ctx, titel, 12, true);
+      // Zeile je Dach: erste freie Höhe unter der Dachkante (Titel verschiedener Dächer stapeln statt zu überlappen)
+      let off = 72;
+      for (let i = 0; i < 6; i++, off += 18) if (belegung.belege({ x: x0, y: yo }, -2, off - 2, tw + 4, 18)) break;
+      text(ctx, vp, titel, x0, yo + off * px, { px: 12, mono: true, farbe: linie, halo: false });
       if (d === plan.dachflaechen[0]) text(ctx, vp, "blau: Dämmdicke in mm, auf 5 mm aufgerundet", x0, yo + 54 * px, { px: 12, mono: true, farbe: linie, halo: false });
     }
   }

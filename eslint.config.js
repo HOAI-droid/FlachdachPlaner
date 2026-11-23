@@ -1,7 +1,7 @@
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", "tests/fixtures/lint"] },
+  { ignores: ["dist", "node_modules", "tests/fixtures/lint", "scripts/*.cjs"] },
   ...tseslint.configs.recommended,
   {
     // Der Kern ist UI-unabhängig: kein DOM, keine UI-/3D-Importe.
