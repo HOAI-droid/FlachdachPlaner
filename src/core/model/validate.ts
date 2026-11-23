@@ -31,7 +31,11 @@ const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !
 class Pruefer {
   readonly fehler: ValidationError[] = [];
   private readonly ids = new Map<string, string>();
-  constructor(private readonly packIds: ReadonlySet<string>) {}
+  /** `v4`: Felder ab Schemaversion 4 (Anschlusshöhen) sind erlaubt; davor gelten sie als unbekannt. */
+  constructor(private readonly packIds: ReadonlySet<string>, readonly v4: boolean) {}
+
+  /** Optionale Felder, die erst ab Schemaversion 4 gelten. */
+  ab4(felder: readonly string[]): readonly string[] { return this.v4 ? felder : []; }
 
   err(pfad: string, meldung: string): void { this.fehler.push({ pfad, meldung }); }
 
@@ -187,8 +191,10 @@ function pruefeEntwaesserung(c: Pruefer, p: string, v: unknown, kanten: Map<stri
   if (!c.oneOf(sub(p, "art"), v["art"], ["gully", "notablauf", "dachreiter", "les"] as const)) return;
   const art = v["art"];
   const extra = art === "dachreiter" ? ["lage"] : art === "les" ? ["von", "bis"] : ["position"];
-  const o = c.obj(p, v, [...basis, ...extra], art === "gully" ? ["verbundenMit"] : []);
+  const optional = art === "gully" ? ["verbundenMit"] : art === "notablauf" || art === "dachreiter" ? c.ab4(["ueberlaufKante"]) : [];
+  const o = c.obj(p, v, [...basis, ...extra], optional);
   if (!o) return;
+  c.optNum(p, o, "ueberlaufKante", { min: 0 });
   c.id(sub(p, "id"), o["id"]);
   // Nur Form; ein fehlender/fremder Partner ist ein Hinweis der Gefälleplanung, kein Ladefehler.
   if (art === "gully") c.optStr(p, o, "verbundenMit");
@@ -204,9 +210,11 @@ function pruefeEntwaesserung(c: Pruefer, p: string, v: unknown, kanten: Map<stri
 }
 
 function pruefeDach(c: Pruefer, p: string, v: unknown): void {
-  const o = c.obj(p, v, ["id", "name", "typ", "kontur", "aufbauten", "zonen", "vorgaben", "attika", "tuerschwellen", "entwaesserung"], ["daemmdickeTiefpunkt"]);
+  const o = c.obj(p, v, ["id", "name", "typ", "kontur", "aufbauten", "zonen", "vorgaben", "attika", "tuerschwellen", "entwaesserung"],
+    ["daemmdickeTiefpunkt", ...c.ab4(["belagDicke", "wandanschluesse"])]);
   if (!o) return;
   c.optNum(p, o, "daemmdickeTiefpunkt", { min: 0 });
+  c.optNum(p, o, "belagDicke", { min: 0 });
   c.id(sub(p, "id"), o["id"]);
   c.str(sub(p, "name"), o["name"]);
   c.oneOf(sub(p, "typ"), o["typ"], ["dach", "terrasse"] as const);
@@ -215,17 +223,19 @@ function pruefeDach(c: Pruefer, p: string, v: unknown): void {
 
   c.arr(sub(p, "aufbauten"), o["aufbauten"])?.forEach((e, i) => {
     const q = sub(sub(p, "aufbauten"), i);
-    const a = c.obj(q, e, ["id", "name", "kontur"]);
+    const a = c.obj(q, e, ["id", "name", "kontur"], c.ab4(["oberkante"]));
     if (!a) return;
     c.id(sub(q, "id"), a["id"]);
     c.str(sub(q, "name"), a["name"]);
     c.kontur(sub(q, "kontur"), a["kontur"]);
+    c.optNum(q, a, "oberkante");
   });
 
   c.arr(sub(p, "zonen"), o["zonen"])?.forEach((e, i) => {
     const q = sub(sub(p, "zonen"), i);
-    const z = c.obj(q, e, ["id", "name", "kontur", "hoehenversatz"], ["gefaelle", "begruendung", "vorgaben"]);
+    const z = c.obj(q, e, ["id", "name", "kontur", "hoehenversatz"], ["gefaelle", "begruendung", "vorgaben", ...c.ab4(["belagDicke"])]);
     if (!z) return;
+    c.optNum(q, z, "belagDicke", { min: 0 });
     c.id(sub(q, "id"), z["id"]);
     c.str(sub(q, "name"), z["name"]);
     c.kontur(sub(q, "kontur"), z["kontur"]);
@@ -254,7 +264,7 @@ function pruefeDach(c: Pruefer, p: string, v: unknown): void {
 
   c.arr(sub(p, "tuerschwellen"), o["tuerschwellen"])?.forEach((e, i) => {
     const q = sub(sub(p, "tuerschwellen"), i);
-    const t = c.obj(q, e, ["id", "name", "lage", "breite", "barrierefrei"], ["oberkante"]);
+    const t = c.obj(q, e, ["id", "name", "lage", "breite", "barrierefrei"], ["oberkante", ...c.ab4(["rinne"])]);
     if (!t) return;
     c.id(sub(q, "id"), t["id"]);
     c.str(sub(q, "name"), t["name"]);
@@ -262,6 +272,19 @@ function pruefeDach(c: Pruefer, p: string, v: unknown): void {
     c.kantenPos(sub(q, "lage"), t["lage"], kanten, okB ? (t["breite"] as number) : 0);
     c.optNum(q, t, "oberkante");
     c.bool(sub(q, "barrierefrei"), t["barrierefrei"]);
+    c.bool(sub(q, "rinne"), t["rinne"]);
+  });
+
+  c.arr(sub(p, "wandanschluesse"), o["wandanschluesse"])?.forEach((e, i) => {
+    const q = sub(sub(p, "wandanschluesse"), i);
+    const w = c.obj(q, e, ["id", "name", "lage", "laenge"], ["oberkante"]);
+    if (!w) return;
+    c.id(sub(q, "id"), w["id"]);
+    c.str(sub(q, "name"), w["name"]);
+    const okL = c.num(sub(q, "laenge"), w["laenge"], { gt: 0 });
+    const l = w["laenge"] as number;
+    c.kantenPos(sub(q, "lage"), w["lage"], kanten, okL && l > 0 ? l : 0);
+    c.optNum(q, w, "oberkante");
   });
 
   c.arr(sub(p, "entwaesserung"), o["entwaesserung"])?.forEach((e, i) =>
@@ -336,7 +359,7 @@ const packIdsVon = (raw: Obj) => new Set(isObj(raw["packVersionen"]) ? Object.ke
  */
 export function validateProject(raw: unknown, schemaVersion: number = SCHEMA_VERSION): ValidationError[] {
   if (!isObj(raw)) return [{ pfad: "", meldung: "Projekt muss ein JSON-Objekt sein" }];
-  const c = new Pruefer(packIdsVon(raw));
+  const c = new Pruefer(packIdsVon(raw), schemaVersion >= 4);
   const o = c.obj("", raw, ["schemaVersion", "meta", "packVersionen", "standort", "gefaelleStandard", "dachflaechen", "unterlage"]);
   if (!o) return c.fehler;
   if (o["schemaVersion"] !== schemaVersion) c.err("/schemaVersion", `Schemaversion ${schemaVersion} erwartet`);
@@ -351,7 +374,7 @@ export function validateProject(raw: unknown, schemaVersion: number = SCHEMA_VER
  */
 export function validateProjekt(raw: unknown, schemaVersion: number = SCHEMA_VERSION): ValidationError[] {
   if (!isObj(raw)) return [{ pfad: "", meldung: "Projekt muss ein JSON-Objekt sein" }];
-  const c = new Pruefer(packIdsVon(raw));
+  const c = new Pruefer(packIdsVon(raw), schemaVersion >= 4);
   const o = c.obj("", raw, ["schemaVersion", "meta", "packVersionen", "standort", "gefaelleStandard", "varianten", "aktiveVariante", "unterlage"]);
   if (!o) return c.fehler;
   if (o["schemaVersion"] !== schemaVersion) c.err("/schemaVersion", `Schemaversion ${schemaVersion} erwartet`);

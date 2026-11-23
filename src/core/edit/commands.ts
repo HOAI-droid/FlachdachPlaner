@@ -7,15 +7,15 @@ import { konturKante } from "../model/model";
 import { idsDerDachflaechen, reservierteIds } from "../model/varianten";
 import type {
   AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Gully, Id, Koordinate, Kontur, KonturPunkt, PackRef, ProjectModel, Regenspende,
-  Tuerschwelle, Unterlage, Zone,
+  Tuerschwelle, Unterlage, Wandanschluss, Zone,
 } from "../model/types";
 import type { RainData } from "../rain/rain";
 import type { Ring, Vec2 } from "../geometry/types";
 import type { Befehl } from "./history";
 import { STANDARD_ATTIKA_BREITE } from "./tools";
 
-/** ID-Präfixe: d Dachfläche, p Konturpunkt, au Aufbau, zo Zone, at Attika, ts Türschwelle, en Entwässerung. */
-export type IdPraefix = "d" | "p" | "au" | "zo" | "at" | "ts" | "en";
+/** ID-Präfixe: d Dachfläche, p Konturpunkt, au Aufbau, zo Zone, at Attika, ts Türschwelle, wa Wandanschluss, en Entwässerung. */
+export type IdPraefix = "d" | "p" | "au" | "zo" | "at" | "ts" | "wa" | "en";
 
 /** IDs der Ansicht plus die in anderen Varianten belegten (projektweite Eindeutigkeit). */
 const alleIds = (m: ProjectModel): string[] => [...idsDerDachflaechen(m.dachflaechen), ...reservierteIds(m)];
@@ -164,6 +164,139 @@ export function setTuerschwelleBreite(dachId: Id, id: Id, breite: number): Befeh
   };
 }
 
+// ---------- Anschlusshöhen (M9, Schritt 40) ----------
+/**
+ * Optionales Feld setzen (`undefined` entfernt es ganz, damit Dateien ohne den Wert byte-gleich bleiben).
+ * Unverändert → dasselbe Objekt (kein Undo-Schritt).
+ */
+function mitFeld<T extends object, K extends keyof T>(o: T, k: K, v: T[K] | undefined): T {
+  if (v === undefined ? !Object.hasOwn(o, k) : o[k] === v) return o;
+  const r = { ...o };
+  if (v === undefined) delete r[k]; else r[k] = v;
+  return r;
+}
+/** Optionaler Zahlenwert: undefined (entfernen) oder endlich und ≥ `min`; sonst ungültig. */
+const gueltig = (v: number | undefined, min = -Infinity): boolean => v === undefined || (Number.isFinite(v) && v >= min);
+
+/** Element `id` einer Liste per `f` ersetzen; unverändert → dieselbe Liste. */
+function mapListe<T extends { readonly id: Id }>(xs: readonly T[], id: Id, f: (x: T) => T): readonly T[] {
+  const x = xs.find((e) => e.id === id);
+  if (!x) return xs;
+  const n = f(x);
+  return n === x ? xs : xs.map((e) => (e === x ? n : e));
+}
+/** Dachfläche mit geänderter Liste `k` (dieselbe Liste → dieselbe Dachfläche). */
+function mitListe<K extends "aufbauten" | "zonen" | "attika" | "tuerschwellen" | "entwaesserung" | "wandanschluesse">(
+  d: Dachflaeche, k: K, neu: Dachflaeche[K]): Dachflaeche {
+  return neu === d[k] ? d : { ...d, [k]: neu };
+}
+
+/** Wandanschluss auf einer Konturkante; `abstand` wird so begrenzt, dass die Strecke auf die Kante passt. */
+export function addWandanschluss(dachId: Id, kante: Id, abstand: number, laenge: number, oberkante?: number): Befehl {
+  return {
+    label: "Wandanschluss setzen",
+    anwenden: (m) => mapDach(m, dachId, (d) => {
+      const k = konturKante(d.kontur, kante);
+      if (!k || !(Number.isFinite(laenge) && laenge > 0) || !Number.isFinite(abstand) || !gueltig(oberkante)) return d;
+      const l = dist(k[0], k[1]);
+      if (laenge > l + EPS) return d;
+      const lg = Math.min(laenge, l);
+      const [id] = neueIds(m, "wa");
+      const liste = d.wandanschluesse ?? [];
+      const w: Wandanschluss = {
+        id: id!, name: `Wandanschluss ${liste.length + 1}`,
+        lage: { kante, abstand: Math.min(Math.max(0, abstand), l - lg) }, laenge: lg,
+        ...(oberkante !== undefined ? { oberkante } : {}),
+      };
+      return { ...d, wandanschluesse: [...liste, w] };
+    }),
+  };
+}
+
+/** Länge eines Wandanschlusses; der Abstand rückt nach, damit er auf der Kante bleibt. */
+export function setWandanschlussLaenge(dachId: Id, id: Id, laenge: number): Befehl {
+  return {
+    label: "Länge Wandanschluss ändern",
+    anwenden: (m) => mapDach(m, dachId, (d) => mitListe(d, "wandanschluesse", mapListe(d.wandanschluesse ?? [], id, (w) => {
+      if (!(Number.isFinite(laenge) && laenge > 0) || w.laenge === laenge) return w;
+      const k = konturKante(d.kontur, w.lage.kante);
+      const l = k ? dist(k[0], k[1]) : 0;
+      if (laenge > l + EPS) return w;
+      const lg = Math.min(laenge, l);
+      return { ...w, laenge: lg, lage: { ...w.lage, abstand: Math.min(w.lage.abstand, l - lg) } };
+    }))),
+  };
+}
+
+/** Oberkante (z in m) eines Wandanschlusses; `undefined` entfernt sie. */
+export function setWandanschlussOberkante(dachId: Id, id: Id, oberkante: number | undefined): Befehl {
+  return {
+    label: "OK Wandanschluss ändern",
+    anwenden: (m) => mapDach(m, dachId, (d) => (!gueltig(oberkante) ? d
+      : mitListe(d, "wandanschluesse", mapListe(d.wandanschluesse ?? [], id, (w) => mitFeld(w, "oberkante", oberkante))))),
+  };
+}
+
+/** Oberkante Attika (z in m) eines Segments; `undefined` entfernt sie. */
+export function setAttikaOberkante(dachId: Id, attikaId: Id, oberkante: number | undefined): Befehl {
+  return {
+    label: "OK Attika ändern",
+    anwenden: (m) => mapDach(m, dachId, (d) => (!gueltig(oberkante) ? d
+      : mitListe(d, "attika", mapListe(d.attika, attikaId, (a) => mitFeld(a, "oberkante", oberkante))))),
+  };
+}
+
+/** Oberkante Türschwelle (z in m); `undefined` entfernt sie. */
+export function setTuerschwelleOberkante(dachId: Id, id: Id, oberkante: number | undefined): Befehl {
+  return {
+    label: "OK Türschwelle ändern",
+    anwenden: (m) => mapDach(m, dachId, (d) => (!gueltig(oberkante) ? d
+      : mitListe(d, "tuerschwellen", mapListe(d.tuerschwellen, id, (t) => mitFeld(t, "oberkante", oberkante))))),
+  };
+}
+
+/** Rinne vor der Tür ein/aus (aus = Feld entfällt, wie in v3-Dateien). */
+export function setTuerschwelleRinne(dachId: Id, id: Id, rinne: boolean): Befehl {
+  return {
+    label: rinne ? "Rinne vor Tür setzen" : "Rinne vor Tür entfernen",
+    anwenden: (m) => mapDach(m, dachId, (d) =>
+      mitListe(d, "tuerschwellen", mapListe(d.tuerschwellen, id, (t) => mitFeld(t, "rinne", rinne ? true : undefined)))),
+  };
+}
+
+/** Oberkante Aufsetzkranz (z in m) eines Aufbaus; `undefined` entfernt sie. */
+export function setAufbauOberkante(dachId: Id, aufbauId: Id, oberkante: number | undefined): Befehl {
+  return {
+    label: "OK Aufbau ändern",
+    anwenden: (m) => mapDach(m, dachId, (d) => (!gueltig(oberkante) ? d
+      : mitListe(d, "aufbauten", mapListe(d.aufbauten, aufbauId, (a) => mitFeld(a, "oberkante", oberkante))))),
+  };
+}
+
+/**
+ * Belagdicke (m, ≥ 0) der Dachfläche (`zoneId` null) bzw. einer Zone; `undefined` entfernt den Wert
+ * (Dachfläche: 0, Zone: Wert der Dachfläche). Negative oder nicht endliche Werte ändern nichts.
+ */
+export function setBelagDicke(dachId: Id, zoneId: Id | null, dicke: number | undefined): Befehl {
+  return {
+    label: "Belagdicke ändern",
+    anwenden: (m) => mapDach(m, dachId, (d) => {
+      if (!gueltig(dicke, 0)) return d;
+      if (zoneId === null) return mitFeld(d, "belagDicke", dicke);
+      return mitListe(d, "zonen", mapListe(d.zonen, zoneId, (z) => mitFeld(z, "belagDicke", dicke)));
+    }),
+  };
+}
+
+/** Überflutungskante (m über z, ≥ 0) eines Notablaufs bzw. Dachreiters; `undefined` = Pack-Wert gilt. */
+export function setUeberlaufKante(dachId: Id, id: Id, kante: number | undefined): Befehl {
+  return {
+    label: "Überlaufkante ändern",
+    anwenden: (m) => (!gueltig(kante, 0) ? m : mapEntw(m, dachId, id, (e) =>
+      (e.art === "notablauf" || e.art === "dachreiter" ? mitFeld(e, "ueberlaufKante", kante) : e))),
+  };
+}
+
 const ART_NAME: Record<EntwaesserungsArt, string> = { gully: "Gully", notablauf: "Notablauf", dachreiter: "Dachreiter", les: "LES" };
 
 /** Pack-Verweis samt Pack-Version (landet in `ProjectModel.packVersionen`). */
@@ -276,7 +409,7 @@ export function setGullyVerbindung(dachId: Id, id: Id, partnerId: Id | null): Be
 
 export type Auswahl =
   | { readonly art: "dach"; readonly id: Id; readonly dachId: Id }
-  | { readonly art: "aufbau" | "zone" | "attika" | "tuerschwelle" | "entwaesserung"; readonly id: Id; readonly dachId: Id };
+  | { readonly art: "aufbau" | "zone" | "attika" | "tuerschwelle" | "wandanschluss" | "entwaesserung"; readonly id: Id; readonly dachId: Id };
 
 /** Löscht das gewählte Objekt (Dachfläche samt Inhalt). */
 export function loesche(a: Auswahl): Befehl {
@@ -292,6 +425,10 @@ export function loesche(a: Auswahl): Befehl {
           case "zone": return { ...d, zonen: d.zonen.filter((x) => x.id !== a.id) };
           case "attika": return { ...d, attika: d.attika.filter((x) => x.id !== a.id) };
           case "tuerschwelle": return { ...d, tuerschwellen: d.tuerschwellen.filter((x) => x.id !== a.id) };
+          case "wandanschluss": {
+            const ws = d.wandanschluesse ?? [];
+            return ws.some((x) => x.id === a.id) ? { ...d, wandanschluesse: ws.filter((x) => x.id !== a.id) } : d;
+          }
           case "entwaesserung": return { ...d, entwaesserung: ohneVerbindungZu(d.entwaesserung.filter((x) => x.id !== a.id), [a.id]) };
         }
       });
@@ -442,6 +579,15 @@ export function trenneDachflaeche(dachId: Id, a: Vec2, b: Vec2, breite: number =
           const abstand = Math.min(Math.max(0, Math.min(dist(k.p, w0), dist(k.p, w1))), laenge - t.breite);
           tuerschwellen.push({ ...t, lage: { kante: k.p.id, abstand } });
         }
+        const wandanschluesse: Wandanschluss[] = [];
+        for (const w of d.wandanschluesse ?? []) {
+          const w0 = kantenPunkt(d.kontur, w.lage.kante, w.lage.abstand), w1 = kantenPunkt(d.kontur, w.lage.kante, w.lage.abstand + w.laenge);
+          const k = w0 && w1 ? randKante(w0, w1) : undefined;
+          if (!k || !w0 || !w1) continue;
+          const laenge = dist(k.p, k.q);
+          const abstand = Math.min(Math.max(0, Math.min(dist(k.p, w0), dist(k.p, w1))), laenge - w.laenge);
+          wandanschluesse.push({ ...w, lage: { kante: k.p.id, abstand } });
+        }
         const entw: Entwaesserung[] = [];
         for (const e of d.entwaesserung) {
           if (e.art === "gully" || e.art === "notablauf") { if (imTeil(r, e.position)) entw.push(e); continue; }
@@ -457,7 +603,9 @@ export function trenneDachflaeche(dachId: Id, a: Vec2, b: Vec2, breite: number =
           id: dIds[ti]!, name: `${d.name} ${String.fromCharCode(65 + ti)}`, typ: d.typ, kontur,
           aufbauten: d.aufbauten.filter((x) => inneres(x.kontur)), zonen: d.zonen.filter((x) => inneres(x.kontur)),
           vorgaben: d.vorgaben, attika, tuerschwellen, entwaesserung,
+          ...(d.wandanschluesse !== undefined ? { wandanschluesse } : {}),
           ...(d.daemmdickeTiefpunkt !== undefined ? { daemmdickeTiefpunkt: d.daemmdickeTiefpunkt } : {}),
+          ...(d.belagDicke !== undefined ? { belagDicke: d.belagDicke } : {}),
         };
       });
       const dachflaechen = [...m.dachflaechen.slice(0, idx), ...teile, ...m.dachflaechen.slice(idx + 1)];

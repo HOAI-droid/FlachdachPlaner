@@ -21,14 +21,15 @@ type MitFremden = ProjectModel & { readonly [FREMDE_IDS]?: readonly Id[] };
 /** Für `neueIds`: in anderen Varianten belegte IDs (leer bei einer Ansicht ohne Geschwister). */
 export const reservierteIds = (m: ProjectModel): readonly Id[] => (m as MitFremden)[FREMDE_IDS] ?? [];
 
-/** Alle Objekt-IDs einer Dachflächenliste (Dachflächen, Konturpunkte, Aufbauten, Zonen, Attika, Schwellen, Entwässerung). */
+/** Alle Objekt-IDs einer Dachflächenliste (Dachflächen, Konturpunkte, Aufbauten, Zonen, Attika, Schwellen, Wandanschlüsse, Entwässerung). */
 export function idsDerDachflaechen(ds: readonly Dachflaeche[]): Id[] {
   const ids: Id[] = [];
   for (const d of ds) {
     ids.push(d.id, ...d.kontur.map((p) => p.id));
     for (const a of d.aufbauten) ids.push(a.id, ...a.kontur.map((p) => p.id));
     for (const z of d.zonen) ids.push(z.id, ...z.kontur.map((p) => p.id));
-    ids.push(...d.attika.map((a) => a.id), ...d.tuerschwellen.map((t) => t.id), ...d.entwaesserung.map((e) => e.id));
+    ids.push(...d.attika.map((a) => a.id), ...d.tuerschwellen.map((t) => t.id), ...(d.wandanschluesse ?? []).map((w) => w.id));
+    ids.push(...d.entwaesserung.map((e) => e.id));
   }
   return ids;
 }

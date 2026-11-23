@@ -97,6 +97,8 @@ export interface Aufbau {
   readonly id: Id;
   readonly name: string;
   readonly kontur: Kontur;
+  /** Oberkante Aufsetzkranz z in m (seit v4), falls bekannt; ohne Wert keine Anschlussprüfung. */
+  readonly oberkante?: number;
 }
 
 /** Zone/Stufe innerhalb einer Dachfläche. */
@@ -110,6 +112,8 @@ export interface Zone {
   readonly gefaelle?: number;
   readonly begruendung?: string;
   readonly vorgaben?: Hoehenvorgaben;
+  /** Belagdicke in m (seit v4, ≥ 0); fehlt = Wert der Dachfläche. */
+  readonly belagDicke?: number;
 }
 
 export interface AttikaSegment {
@@ -131,6 +135,20 @@ export interface Tuerschwelle {
   /** Oberkante Schwelle z in m, falls bekannt. */
   readonly oberkante?: number;
   readonly barrierefrei: boolean;
+  /** Entwässerungsrinne vor der Tür (seit v4); fehlt = false. */
+  readonly rinne?: boolean;
+}
+
+/** Wandanschluss (seit v4): Teilstrecke einer Konturkante an aufgehendem Bauteil, wie die Türschwelle. */
+export interface Wandanschluss {
+  readonly id: Id;
+  readonly name: string;
+  /** Lage: Kante + Abstand des Anfangs. */
+  readonly lage: KantenPosition;
+  /** Länge in m entlang der Kante (> 0). */
+  readonly laenge: number;
+  /** Oberkante Anschluss z in m, falls bekannt. */
+  readonly oberkante?: number;
 }
 
 interface EntwaesserungBasis {
@@ -156,11 +174,15 @@ export interface Gully extends EntwaesserungBasis {
 export interface Notablauf extends EntwaesserungBasis {
   readonly art: "notablauf";
   readonly position: Vec2;
+  /** Überflutungskante in m über `z` (seit v4, ≥ 0), Nutzerwert; fehlt = Pack-Wert. */
+  readonly ueberlaufKante?: number;
 }
 export interface Dachreiter extends EntwaesserungBasis {
   readonly art: "dachreiter";
   /** Mitte des Dachreiters auf der Konturkante. */
   readonly lage: KantenPosition;
+  /** Überflutungskante in m über `z` (seit v4, ≥ 0), Nutzerwert; fehlt = Pack-Wert. */
+  readonly ueberlaufKante?: number;
 }
 export interface Linienentwaesserung extends EntwaesserungBasis {
   readonly art: "les";
@@ -184,9 +206,13 @@ export interface Dachflaeche {
   readonly vorgaben: Hoehenvorgaben;
   readonly attika: readonly AttikaSegment[];
   readonly tuerschwellen: readonly Tuerschwelle[];
+  /** Wandanschlüsse (seit v4); fehlt = keine (Zugriff über `wandanschluesseVon`). */
+  readonly wandanschluesse?: readonly Wandanschluss[];
   readonly entwaesserung: readonly Entwaesserung[];
   /** Mindestdämmdicke der Gefälledämmung am Tiefpunkt in mm (optional; sonst Standard). */
   readonly daemmdickeTiefpunkt?: number;
+  /** Belagdicke (Kies, Platten, Gründach) in m (seit v4, ≥ 0); fehlt = 0. Zonen können abweichen. */
+  readonly belagDicke?: number;
 }
 
 /** Passpunkt: Punkt in Unterlagenkoordinaten ↔ Weltkoordinate (m). */

@@ -12,6 +12,11 @@ const lade = (roh: unknown): RulePack => {
   return r.pack;
 };
 const zvdh = lade(JSON.parse(packTexte["../rulepacks/zvdh-2026/pack.json"]!));
+const zvdhOhneAnschluss = (() => {
+  const raw = JSON.parse(packTexte["../rulepacks/zvdh-2026/pack.json"]!) as { daten: { regeln: { id: string }[] } };
+  raw.daten.regeln = raw.daten.regeln.filter((r) => r.id !== "anschlusshoehe");
+  return lade(raw);
+})();
 const kopf = { version: "1.0.0", quelle: "Testregelwerk", ausgabe: "Test", gueltigAb: "2026-01-01", geprueft: true };
 const p = (wert: number, einheit: string) => ({ wert, einheit });
 const regeln = lade({
@@ -119,9 +124,9 @@ describe("Schritt 9: Regelprüfung", () => {
     expect(b[0]!.differenz).toBeCloseTo(0.05, 4);
   });
 
-  it("Regel fehlt im Pack (zvdh-2026 ohne „anschlusshoehe“) → einmaliger Befund statt Zahl", () => {
+  it("Regel fehlt im Pack (zvdh-2026 ohne „anschlusshoehe“, Regel entfernt) → einmaliger Befund statt Zahl", () => {
     const m = projekt({ attika: [{ id: "at1", kante: "k1", breite: 0.3, oberkante: 0.3 }, { id: "at2", kante: "k2", breite: 0.3, oberkante: 0.3 }] });
-    const b = pruefe(m, [zvdh]).filter((x) => x.code === "regel-fehlt");
+    const b = pruefe(m, [zvdhOhneAnschluss]).filter((x) => x.code === "regel-fehlt");
     expect(b).toHaveLength(1);
     expect(b[0]).toMatchObject({ regelId: "anschlusshoehe", objektId: null });
     expect(b[0]!.differenz).toBeUndefined();

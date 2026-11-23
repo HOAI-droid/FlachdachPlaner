@@ -6,7 +6,7 @@ import {
   istProjektGeaendert, legeVarianteAn, loesche, loescheVariante, mitModell, modellFuerVariante, neuerVerlauf, neueIds, parseProject,
   parseProjekt, projektAusModell, pruefeVariantenName, rueckgaengig, wiederholen, serializeProject, serializeProjekt, setGullyVerbindung,
   uebernehmeVorschlaegeProjekt, validateProjekt, setzeProjektangaben, istIsoDatum, PROJEKTANGABEN_FELDER, variantenListe, vorschlagVariantenName, wechsleVariante,
-  type Dachflaeche, type Entwaesserung, type Kontur, type ProjectModel, type Projekt,
+  SCHEMA_VERSION, type Dachflaeche, type Entwaesserung, type Kontur, type ProjectModel, type Projekt,
 } from "../src/core/index";
 
 const pt = (id: string, x: number, y: number) => ({ id, x, y });
@@ -56,9 +56,9 @@ describe("Migration v1/v2 → v3", () => {
       expect(r.ok).toBe(true);
       if (!r.ok) return;
       const p = r.projekt;
-      expect(p.schemaVersion).toBe(3);
+      expect(p.schemaVersion).toBe(SCHEMA_VERSION);
       expect(variantenListe(p)).toEqual([{ id: "v1", name: "Variante 1", aktiv: true }]);
-      expect(r.hinweise[0]).toMatch(/auf 3 migriert/);
+      expect(r.hinweise[0]).toMatch(new RegExp(`auf ${SCHEMA_VERSION} migriert`));
       const alt = erwartet(beispielV2());
       const ansicht = modellFuerVariante(p);
       expect({ ...ansicht, schemaVersion: 2 }).toEqual(alt);
@@ -74,7 +74,7 @@ describe("Migration v1/v2 → v3", () => {
     const r = parseProject(alsText(beispielV2(), 2));
     expect(r.ok && r.projekt.dachflaechen).toEqual(beispielV2().dachflaechen);
     const s = serializeProject(modellFuerVariante(lies(alsText(beispielV2(), 2))));
-    expect(JSON.parse(s)).toMatchObject({ schemaVersion: 3, aktiveVariante: "v1", varianten: [{ id: "v1", name: "Variante 1" }] });
+    expect(JSON.parse(s)).toMatchObject({ schemaVersion: SCHEMA_VERSION, aktiveVariante: "v1", varianten: [{ id: "v1", name: "Variante 1" }] });
     expect(JSON.parse(s)).not.toHaveProperty("dachflaechen");
   });
   it("v3-Datei in einem alten Programm (Ziel v2) → Meldung „neuere Version“", () => {
@@ -270,6 +270,7 @@ const dachArb = fc.record({
   gullys: fc.array(fc.record({ u: zahl(0.1, 0.9), v: zahl(0.1, 0.9), z: zahl(-0.05, 0.05) }), { minLength: 1, maxLength: 3 }),
   verbinden: fc.boolean(), attika: fc.array(fc.nat(3), { maxLength: 4 }), schwelle: fc.option(fc.nat(3), { nil: undefined }),
   reiter: fc.option(fc.nat(3), { nil: undefined }), aufbau: fc.boolean(),
+  wand: fc.array(fc.nat(3), { maxLength: 3 }),
 });
 const projektArb = fc.array(dachArb, { minLength: 1, maxLength: 3 }).map((ds): ProjectModel => {
   let n = 0;
@@ -285,6 +286,7 @@ const projektArb = fc.array(dachArb, { minLength: 1, maxLength: 3 }).map((ds): P
       attika: [...new Set(d.attika)].map((i) => ({ id: id("at"), kante: k[i]!.id, breite: 0.3 })),
       tuerschwellen: d.schwelle === undefined ? [] : [{ id: id("ts"), name: "T", lage: { kante: k[d.schwelle]!.id, abstand: 0.5 }, breite: 1, barrierefrei: true }],
       entwaesserung: entw,
+      ...(d.wand.length > 0 ? { wandanschluesse: d.wand.map((i) => ({ id: id("wa"), name: "W", lage: { kante: k[i]!.id, abstand: 0.5 }, laenge: 1, oberkante: 0.3 })) } : {}),
     };
   });
   return { ...createProject("P", "2026-01-01T00:00:00Z"), dachflaechen };
@@ -304,6 +306,7 @@ describe("Eigenschaftstest Duplizieren", () => {
       for (let i = 0; i < kopien; i++) p = ok(legeVarianteAn(p, vorschlagVariantenName(p, "v1"), "v1")).projekt;
       const alle = p.varianten.flatMap((v) => [v.id, ...idsDerDachflaechen(v.dachflaechen)]);
       expect(new Set(alle).size).toBe(alle.length);
+      expect(alle.filter((x) => x.startsWith("wa"))).toHaveLength(p.varianten.length * m.dachflaechen.reduce((s, d) => s + (d.wandanschluesse?.length ?? 0), 0));
       expect(validateProjekt(p)).toEqual([]);
       const orig = p.varianten[0]!;
       const kopie = p.varianten[p.varianten.length - 1]!;

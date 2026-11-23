@@ -47,7 +47,8 @@ const projektIds = (p: Projekt): Id[] => p.varianten.flatMap((v) => [v.id, ...id
 
 /**
  * Kopie der Dachflächen mit neuen IDs (`${präfix}${n}`, n oberhalb aller belegten Nummern des Präfixes,
- * deterministisch in Listenreihenfolge). Bezüge `kante`, `lage.kante` und `verbundenMit` werden umgeschrieben.
+ * deterministisch in Listenreihenfolge). Bezüge `kante`, `lage.kante` (Schwellen, Wandanschlüsse, Dachreiter)
+ * und `verbundenMit` werden umgeschrieben.
  */
 export function kopiereDachflaechen(ds: readonly Dachflaeche[], belegt: Iterable<Id>): Dachflaeche[] {
   const max = new Map<string, number>();
@@ -73,6 +74,7 @@ export function kopiereDachflaechen(ds: readonly Dachflaeche[], belegt: Iterable
       zonen: d.zonen.map((z) => { const id = neu("zo", z.id); return { ...z, id, kontur: kontur(z.kontur) }; }),
       attika: d.attika.map((a) => ({ ...a, id: neu("at", a.id) })),
       tuerschwellen: d.tuerschwellen.map((t) => ({ ...t, id: neu("ts", t.id) })),
+      ...(d.wandanschluesse ? { wandanschluesse: d.wandanschluesse.map((w) => ({ ...w, id: neu("wa", w.id) })) } : {}),
       entwaesserung: d.entwaesserung.map((e) => ({ ...e, id: neu("en", e.id) })),
     };
   });
@@ -83,6 +85,7 @@ export function kopiereDachflaechen(ds: readonly Dachflaeche[], belegt: Iterable
     ...d,
     attika: d.attika.map((a) => ({ ...a, kante: ref(a.kante) })),
     tuerschwellen: d.tuerschwellen.map((t) => ({ ...t, lage: lage(t.lage) })),
+    ...(d.wandanschluesse ? { wandanschluesse: d.wandanschluesse.map((w) => ({ ...w, lage: lage(w.lage) })) } : {}),
     entwaesserung: d.entwaesserung.map((e): Entwaesserung => {
       if (e.art === "dachreiter") return { ...e, lage: lage(e.lage) };
       if (e.art === "gully" && e.verbundenMit !== undefined) return { ...e, verbundenMit: ref(e.verbundenMit) };

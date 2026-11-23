@@ -1,7 +1,7 @@
 /** Migrationskette für Projekt-JSON. Jede Migration hebt ein Dokument von Version n auf n+1. */
 
 /** Aktuelle Schemaversion des Projektformats. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** Rohes JSON-Dokument (vor Validierung). */
 export type RohDokument = Record<string, unknown>;
@@ -61,8 +61,16 @@ export const migriereV2nachV3: Migration = (doc) => {
   return { ...rest, varianten: [{ id, name: VARIANTE_STANDARDNAME, dachflaechen }], aktiveVariante: id };
 };
 
+/**
+ * v3 → v4 (M9 Anschlusshöhen): neue Felder `wandanschluesse`, `belagDicke` (Dachfläche/Zone),
+ * `oberkante` (Aufbau), `rinne` (Türschwelle), `ueberlaufKante` (Notablauf/Dachreiter). Alle sind
+ * optional, ihr Fehlen ist der Standardwert (keine Wandanschlüsse, Belag 0, keine Rinne, Kante aus dem
+ * Pack). Die Migration ändert daher keine Daten: v3-Inhalte bleiben byte-gleich, Ergebnisse identisch.
+ */
+export const migriereV3nachV4: Migration = (doc) => doc;
+
 /** Registrierte Migrationen des Programms. */
-export const MIGRATIONS: MigrationChain = { 1: migriereV1nachV2, 2: migriereV2nachV3 };
+export const MIGRATIONS: MigrationChain = { 1: migriereV1nachV2, 2: migriereV2nachV3, 3: migriereV3nachV4 };
 
 export type MigrationResult =
   | { readonly ok: true; readonly doc: RohDokument; readonly hinweise: readonly string[] }

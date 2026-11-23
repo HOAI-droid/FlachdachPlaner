@@ -1,7 +1,7 @@
 /** Hilfsfunktionen zum Modell (rein). */
 import type { Polygon } from "../geometry/types";
 import { SCHEMA_VERSION } from "./migrate";
-import type { Dachflaeche, Kontur, KonturPunkt, ProjectModel, Projekt } from "./types";
+import type { Dachflaeche, Kontur, KonturPunkt, ProjectModel, Projekt, Wandanschluss, Zone } from "./types";
 import { projektAusModell } from "./varianten";
 
 /** Vorgabe Gefälle-Standard: 2 % (m/m). Nutzervorgabe, kein Regelgrenzwert. */
@@ -34,3 +34,9 @@ export function konturKante(k: Kontur, kante: string): readonly [KonturPunkt, Ko
   if (i < 0) return undefined;
   return [k[i]!, k[(i + 1) % k.length]!];
 }
+
+/** Wandanschlüsse einer Dachfläche (Feld seit v4 optional; fehlt = keine). */
+export const wandanschluesseVon = (d: Dachflaeche): readonly Wandanschluss[] => d.wandanschluesse ?? [];
+
+/** Wirksame Belagdicke in m: Wert der Zone, sonst der Dachfläche, sonst 0 (= OK Abdichtung). */
+export const belagDickeVon = (d: Dachflaeche, z?: Zone): number => z?.belagDicke ?? d.belagDicke ?? 0;
