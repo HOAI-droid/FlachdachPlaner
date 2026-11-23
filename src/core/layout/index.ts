@@ -1,4 +1,4 @@
 export type * from "./types";
 export { KEHLWINKEL_STANDARD, layoutInsulation } from "./layout";
 export { FLAECHEN_TOLERANZ, pruefeVerlegeplan } from "./pruefung";
-export { plattenDaemmdicke, dickeAn, type PlattenDicke } from "./kennwerte";
+export { plattenDaemmdicke, dickeAn, dickeRaster, DICKE_RASTER_MM, type PlattenDicke } from "./kennwerte";

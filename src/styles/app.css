@@ -140,3 +140,17 @@ button, input, select { font: inherit; color: inherit; }
 .abweichungen .field input, .num-klein { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-1); height: 28px; padding: 0 var(--sp-2); }
 .pruef-zaehler { padding-top: var(--sp-2); }
 .befund.klick[aria-pressed="true"], .befund.aktiv { background: var(--accent-soft); }
+
+/* Modaler Dialog (Speichern-Rückfrage, PDF-Seitenwahl) */
+.dialog-bg { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / .4); }
+.dialog-bg .dialog { max-width: min(440px, calc(100vw - var(--sp-6))); max-height: calc(100vh - var(--sp-6)); overflow: auto; box-shadow: var(--shadow-1); }
+.dialog-bg .dialog.breit { width: min(760px, calc(100vw - var(--sp-6))); max-width: none; }
+.dialog-titel { margin: 0 0 var(--sp-3); font-size: var(--fs-lg); font-weight: 600; }
+.dialog-text { margin: 0 0 var(--sp-4); color: var(--text-muted); }
+.dialog-knoepfe { justify-content: flex-end; margin-top: var(--sp-4); }
+.pdf-seiten { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--sp-3); max-height: 56vh; overflow: auto; padding: var(--sp-1); }
+.pdf-seite { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-3); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-1); color: var(--text); font: inherit; cursor: pointer; }
+.pdf-seite:hover { border-color: var(--line-strong); }
+.pdf-seite.gewaehlt { border-color: var(--accent); background: var(--accent-soft); outline: 1px solid var(--accent); }
+.pdf-seite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pdf-seite canvas { background: #fff; box-shadow: var(--shadow-1); }

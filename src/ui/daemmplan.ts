@@ -1,6 +1,6 @@
 /** 2D-Ansicht Gefälledämmplan (PLAN Schritt 26, DESIGN §11): nur Linien und Schrift, Doppelplatten gelb getönt. */
 import {
-  layoutInsulation, plattenDaemmdicke, dickeAn, type DaemmplattenPack, type DachGefaelle, type InsulationLayout,
+  layoutInsulation, plattenDaemmdicke, dickeAn, dickeRaster, type DaemmplattenPack, type DachGefaelle, type InsulationLayout,
   type ProjectModel, type SlopeResult, type Vec2, type VerlegtePlatte,
 } from "../core/index";
 import type { Viewport } from "./canvas/viewport";
@@ -105,7 +105,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     for (const q of punkte) {
       const mm = dickeAn(d.platten, q);
       if (mm === null) continue;
-      const t = zahl(mm, 0), w = textBreite(ctx, t, 12, true) + 4;
+      const t = zahl(dickeRaster(mm), 0), w = textBreite(ctx, t, 12, true) + 4;
       const ox = q.x <= mx ? 1 : -1, oy = q.y <= my ? 1 : -1; // nach innen (außen liegen Maße und Verlegestart)
       const kand: [number, number][] = [];
       for (const [fx, fy] of [[ox, oy], [ox, -oy], [-ox, oy], [-ox, -oy]] as const) {
@@ -139,7 +139,7 @@ export function zeichneDaemmplan(ctx: CanvasRenderingContext2D, vp: Viewport, m:
     const k = plattenDaemmdicke(d);
     const dach = m.dachflaechen.find((x) => x.id === d.dachflaecheId);
     if (k && dach) {
-      const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)}) · blau: Dämmdicke in mm`;
+      const zeilen = `Ø Gefälledämmung ${millimeter(k.mittel, 0)} (min ${millimeter(k.min, 0)} · max ${millimeter(k.max, 0)}) · blau: Dämmdicke in mm, auf 5 mm aufgerundet`;
       const ys = dach.kontur.map((q) => q.y), xs = dach.kontur.map((q) => q.x);
       text(ctx, vp, `${dach.name || dach.id}: ${zeilen}`, Math.min(...xs), Math.max(...ys) + 52 * px, { px: 12, mono: true, farbe: linie, halo: false });
     }

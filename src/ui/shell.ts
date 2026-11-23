@@ -13,6 +13,7 @@ const ICONS: Record<string, string> = {
   aufbau: '<path d="M3 3h10v10H3z"/><path d="M3 3l10 10M13 3L3 13"/>',
   terrasse: '<path d="M2 4h12v8H2z"/><path d="M5 8h6"/>',
   schwelle: '<path d="M2 13h12"/><path d="M5 13V7h6v6"/>',
+  trennen: '<path d="M2 2h12v12H2z"/><path d="M7 2v12M9 2v12"/>',
   undo: '<path d="M6 3L2 7l4 4"/><path d="M2 7h7a4 4 0 010 8H6"/>',
   redo: '<path d="M10 3l4 4-4 4"/><path d="M14 7H7a4 4 0 000 8h3"/>',
 };
@@ -21,6 +22,7 @@ const GROUPS: { name: string; tools: [string, string, string][] }[] = [
   { name: "Zeichnen", tools: [
     ["contour", "Dachkontur", "K"], ["attika", "Attika", "A"], ["aufbau", "Aufbau", "U"],
     ["terrasse", "Terrasse", "T"], ["schwelle", "Türschwelle", "S"],
+    ["trennen", "Dachfläche trennen", "X"],
   ] },
   { name: "Entwässerung", tools: [["gully", "Gully setzen", "G"], ["notablauf", "Notablauf setzen", "N"], ["dachreiter", "Dachreiter setzen", "R"], ["les", "Linienentwässerung (LES)", "L"]] },
   { name: "Messen", tools: [["measure", "Messen / Kalibrieren", "M"]] },
@@ -79,7 +81,7 @@ function section(title: string, body: HTMLElement): HTMLElement {
 
 export interface Shell {
   stage: HTMLElement;
-  status: { cursor: HTMLElement; scale: HTMLElement; snap: HTMLElement; unterlage: HTMLElement };
+  status: { cursor: HTMLElement; scale: HTMLElement; snap: HTMLElement; unterlage: HTMLElement; projekt: HTMLElement };
   onTool(cb: (id: string) => void): void;
   /** Planansicht: "gefaelle" (Gefälleplan) oder "daemmplan" (Gefälledämmplan). */
   onAnsicht(cb: (a: "gefaelle" | "daemmplan") => void): void;
@@ -178,14 +180,15 @@ export function mountShell(root: HTMLElement): Shell {
   const scale = el("span", "num", "1:100");
   const snap = el("span", "", "Fang: aus");
   const unterlageStatus = el("span", "num", "");
-  status.append(cursor, scale, unterlageStatus, snap, el("span", "spacer"), el("span", "", `Regelwerk ${version}`));
+  const projektStatus = el("span", "num", ""); projektStatus.dataset.k = "projekt-status";
+  status.append(cursor, scale, unterlageStatus, snap, el("span", "spacer"), projektStatus, el("span", "", `Regelwerk ${version}`));
 
   root.append(hint, head, tools, stage, check, props, status);
   // hint-bar liegt über dem Grid: nur sichtbar unter 1280 px, ohne Layout zu verschieben
   hint.style.cssText = "position:fixed;inset:0 0 auto 0;z-index:10";
 
   return {
-    stage, status: { cursor, scale, snap, unterlage: unterlageStatus }, onTool: (cb) => { toolCb = cb; }, onAnsicht: (cb) => { ansichtCb = cb; }, onModus: (cb) => { modusCb = cb; },
+    stage, status: { cursor, scale, snap, unterlage: unterlageStatus, projekt: projektStatus }, onTool: (cb) => { toolCb = cb; }, onAnsicht: (cb) => { ansichtCb = cb; }, onModus: (cb) => { modusCb = cb; },
     setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, projekt: proj, update }, undo, redo,
   };
 }

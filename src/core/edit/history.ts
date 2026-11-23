@@ -47,3 +47,6 @@ export function wiederholen(v: Verlauf): Verlauf {
     aktuell: erster.modell, zurueck: [...v.zurueck, { label: erster.label, modell: v.aktuell }], vor: v.vor.slice(1),
   };
 }
+
+/** Geändert seit dem Stand `gespeichert` (Modellreferenz beim Speichern/Öffnen/Neu)? Undo bis dorthin gilt wieder als unverändert. */
+export const istGeaendert = (v: Verlauf, gespeichert: ProjectModel): boolean => v.aktuell !== gespeichert;

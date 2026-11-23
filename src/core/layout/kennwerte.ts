@@ -49,3 +49,8 @@ export function dickeAn(platten: readonly VerlegtePlatte[], p: Vec2): number | n
   if (!best || bd > 0.02) return null;
   return (best.dicke.a * p.x + best.dicke.b * p.y + best.dicke.c) * 1000;
 }
+
+/** Dämmdicken-Anzeigeraster in mm: Angaben in 5-mm-Schritten (Baustelle, Puffer). */
+export const DICKE_RASTER_MM = 5;
+/** Rundet eine Dämmdicke (mm) auf das nächste 5-mm-Raster AUF (nie dünner als berechnet; Toleranz 0,01 mm gegen Rechenrauschen). */
+export const dickeRaster = (mm: number): number => Math.ceil(mm / DICKE_RASTER_MM - 0.002) * DICKE_RASTER_MM;

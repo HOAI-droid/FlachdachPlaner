@@ -11,12 +11,12 @@ import type { Dachflaeche, EntwaesserungsArt, Id,  ProjectModel } from "../model
 import type { SnapSegment } from "../snap";
 import {
   addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, neueIds, setAttika, setAttikaUmlaufend,
-  type Auswahl, type TypWahl,
+  trenneDachflaeche, type Auswahl, type TypWahl,
 } from "./commands";
 import type { Befehl } from "./history";
 import { pruefePolygon } from "./polygon-check";
 
-export type WerkzeugId = "select" | "contour" | "attika" | "aufbau" | "terrasse" | "schwelle" | "measure" | "gully" | "notablauf" | "dachreiter" | "les";
+export type WerkzeugId = "select" | "contour" | "attika" | "aufbau" | "terrasse" | "schwelle" | "measure" | "gully" | "notablauf" | "dachreiter" | "les" | "trennen";
 export const ENTWAESSERUNGS_WERKZEUGE: readonly WerkzeugId[] = ["gully", "notablauf", "dachreiter", "les"];
 export const POLYGON_WERKZEUGE: readonly WerkzeugId[] = ["contour", "aufbau", "terrasse"];
 
@@ -30,6 +30,8 @@ export interface WerkzeugZustand {
   readonly schwellenBreite: number;
   /** Tiefenlage z (m) neuer Abläufe (Werkzeugeinstellung). */
   readonly ablaufZ: number;
+  /** Breite des Trennstreifens in m (Werkzeug „Trennen“). */
+  readonly trennBreite: number;
   /** Letzte Meldung an den Nutzer (Hinweis, kein Befund). */
   readonly hinweis: string | null;
 }
@@ -38,7 +40,7 @@ export const STANDARD_ATTIKA_BREITE = 0.3;
 export const STANDARD_SCHWELLEN_BREITE = 1;
 
 export const neuerZustand = (tool: WerkzeugId = "select"): WerkzeugZustand =>
-  ({ tool, entwurf: [], attikaBreite: STANDARD_ATTIKA_BREITE, schwellenBreite: STANDARD_SCHWELLEN_BREITE, ablaufZ: 0, hinweis: null });
+  ({ tool, entwurf: [], attikaBreite: STANDARD_ATTIKA_BREITE, schwellenBreite: STANDARD_SCHWELLEN_BREITE, ablaufZ: 0, trennBreite: STANDARD_ATTIKA_BREITE, hinweis: null });
 
 export const waehleWerkzeug = (z: WerkzeugZustand, tool: WerkzeugId): WerkzeugZustand => ({ ...z, tool, entwurf: [], hinweis: null });
 
@@ -208,6 +210,17 @@ export function klick(z: WerkzeugZustand, m: ProjectModel, p: Vec2, tol: number,
         auswahl: { art: "entwaesserung", id: neueIds(m, "en")[0]!, dachId: d.id },
       };
     }
+    case "trennen": {
+      const e = z.entwurf;
+      if (e.length === 0) return dachAn(m, p) ? { zustand: { ...z, entwurf: [p], hinweis: null } } : ohne("Den ersten Punkt auf oder in einer Dachfläche setzen.");
+      if (dist(p, e[0]!) <= Math.max(tol, EPS)) return ohne("Das Ende muss vom Anfang abweichen.");
+      const d = dachAn(m, { x: (e[0]!.x + p.x) / 2, y: (e[0]!.y + p.y) / 2 }) ?? dachAn(m, e[0]!);
+      if (!d) return ohne("Die Trennlinie muss über eine Dachfläche verlaufen.");
+      const befehl = trenneDachflaeche(d.id, e[0]!, p, z.trennBreite);
+      if (befehl.anwenden(m) === m) return ohne("Die Linie trennt die Dachfläche nicht in zwei Teile.");
+      const id = neueIds(m, "d")[0]!;
+      return { zustand: { ...z, entwurf: [], hinweis: null }, befehl, auswahl: { art: "dach", id, dachId: id } };
+    }
     default: return ohne(null);
   }
 }
@@ -237,6 +250,7 @@ export const entfernePunkt = (z: WerkzeugZustand): WerkzeugZustand => ({ ...z, e
 /** Esc: Entwurf verwerfen. */
 export const abbrechen = (z: WerkzeugZustand): WerkzeugZustand => ({ ...z, entwurf: [], hinweis: null });
 export const setzeAttikaBreite = (z: WerkzeugZustand, b: number): WerkzeugZustand => (b > 0 ? { ...z, attikaBreite: b } : z);
+export const setzeTrennBreite = (z: WerkzeugZustand, b: number): WerkzeugZustand => (b > 0 && Number.isFinite(b) ? { ...z, trennBreite: b } : z);
 export const setzeSchwellenBreite = (z: WerkzeugZustand, b: number): WerkzeugZustand => (b > 0 ? { ...z, schwellenBreite: b } : z);
 
 /** Knopf „Umlaufend“ des Attika-Werkzeugs für die Dachfläche `dachId`. */

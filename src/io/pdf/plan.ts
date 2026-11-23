@@ -4,7 +4,7 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  attikaStreifen, dickeAn, kotenMarken, plattenDaemmdicke, polygonCentroid,
+  attikaStreifen, dickeAn, dickeRaster, kotenMarken, plattenDaemmdicke, polygonCentroid,
   type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfSeite, type Punkt } from "./pdf";
@@ -351,7 +351,7 @@ function daemmplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
     for (const q of pts) {
       const mm = dickeAn(d.platten, q);
       if (mm === null) continue;
-      const c = a.p(q), t = zahl(mm, 0), w = textBreite(t, 2.2, true);
+      const c = a.p(q), t = zahl(dickeRaster(mm), 0), w = textBreite(t, 2.2, true);
       s.kreis(c, 0.6, { fuell: "#000000", breite: 0 });
       const ox = q.x <= mx ? 1 : -1, oy = q.y <= my ? 1 : -1;
       const kand: [number, number][] = [];
@@ -423,7 +423,7 @@ function legendeDaemmplan(s: PdfSeite, y: number): number {
   y = legendeZeile(s, y, (x, yy) => s.kreis({ x, y: yy }, 1, { fuell: "#000000", breite: 0 }), "Verlegestart");
   y = legendeZeile(s, y, (x, yy) => { s.text("3", x, yy - 0.3, { groesse: 2.5, anker: "m" }); }, "Plattentyp (1 … 8, 8A), 1+1 = mit Zusatzlage");
   y = legendeZeile(s, y, (x, yy) => { s.text("K2", x, yy - 0.3, { groesse: 2.5, anker: "m" }); }, "Kehlkeil (L/R: Blick zum Ablauf)");
-  y = legendeZeile(s, y, (x, yy) => { s.text("85", x, yy - 0.3, { groesse: 2.2, anker: "m", fett: true }); }, "Dämmdicke in mm an Ecken, HP/TP");
+  y = legendeZeile(s, y, (x, yy) => { s.text("85", x, yy - 0.3, { groesse: 2.2, anker: "m", fett: true }); }, "Dämmdicke in mm (auf 5 mm aufgerundet) an Ecken, HP/TP");
   return y - 2;
 }
 

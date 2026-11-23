@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Minimale Rechte: nur das Hauptfenster, keine Plugins",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-destroy", "core:window:allow-close"]
 }

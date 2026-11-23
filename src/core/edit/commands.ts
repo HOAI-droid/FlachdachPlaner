@@ -1,13 +1,17 @@
 /** Modell-Befehle der Zeichenwerkzeuge (PLAN Schritt 17). Rein; IDs deterministisch aus dem Modell. */
-import { dist } from "../geometry/segment";
+import { CLIPPER_SCALE, difference } from "../geometry/clipper";
+import { EPS } from "../geometry/eps";
+import { pointInRing, ringArea, ringCentroid, signedArea } from "../geometry/polygon";
+import { dist, distPointSegment } from "../geometry/segment";
 import { konturKante } from "../model/model";
 import type {
-  AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Gully, Id, Koordinate, Kontur, PackRef, ProjectModel, Regenspende,
+  AttikaSegment, Dachflaeche, Entwaesserung, EntwaesserungsArt, Gully, Id, Koordinate, Kontur, KonturPunkt, PackRef, ProjectModel, Regenspende,
   Tuerschwelle, Unterlage, Zone,
 } from "../model/types";
 import type { RainData } from "../rain/rain";
-import type { Vec2 } from "../geometry/types";
+import type { Ring, Vec2 } from "../geometry/types";
 import type { Befehl } from "./history";
+import { STANDARD_ATTIKA_BREITE } from "./tools";
 
 /** ID-Präfixe: d Dachfläche, p Konturpunkt, au Aufbau, zo Zone, at Attika, ts Türschwelle, en Entwässerung. */
 export type IdPraefix = "d" | "p" | "au" | "zo" | "at" | "ts" | "en";
@@ -333,6 +337,135 @@ export function setRegenManuell(name: "r5_5" | "r5_100", wert: number | undefine
       if (wert !== undefined && !(Number.isFinite(wert) && wert > 0)) return m;
       const neu: Regenspende = wert === undefined ? { packWert: alt.packWert } : { packWert: alt.packWert, manuellWert: wert };
       return { ...m, standort: { ...m.standort, regen: { ...m.standort.regen, [name]: neu } } };
+    },
+  };
+}
+
+// ---------- Dachfläche trennen (Trennstreifen wie eine über das Dach laufende Attika) ----------
+/** Toleranz für Lagevergleiche nach der Clipper-Rasterung (10 Rasterschritte = 1 mm). */
+const TRENN_TOL = 10 / CLIPPER_SCALE;
+
+/**
+ * Trennstreifen als Rechteck um die Gerade durch a und b, Breite `breite`, beidseitig weit über die Kontur
+ * hinaus verlängert. null bei ungültiger Eingabe (a = b, Breite ≤ 0, nicht endlich).
+ */
+export function trennStreifen(d: Dachflaeche, a: Vec2, b: Vec2, breite: number): Vec2[] | null {
+  const l = dist(a, b);
+  if (![a.x, a.y, b.x, b.y, breite].every(Number.isFinite) || !(l > EPS) || !(breite > 0)) return null;
+  const u = { x: (b.x - a.x) / l, y: (b.y - a.y) / l }, n = { x: -u.y, y: u.x };
+  let r = 0;
+  for (const p of d.kontur) r = Math.max(r, dist(a, p));
+  const L = 2 * r + breite, h = breite / 2;
+  const P = (s: number, t: number): Vec2 => ({ x: a.x + u.x * s + n.x * t, y: a.y + u.y * s + n.y * t });
+  return [P(-L, -h), P(L, -h), P(L, h), P(-L, h)];
+}
+
+/** Punkt auf der Kante (Startpunkt-ID `kante`) bei `abstand`; undefined, wenn die Kante fehlt oder entartet ist. */
+function kantenPunkt(k: Kontur, kante: Id, abstand: number): Vec2 | undefined {
+  const e = konturKante(k, kante);
+  if (!e) return undefined;
+  const l = dist(e[0], e[1]);
+  if (l <= EPS) return undefined;
+  const t = abstand / l;
+  return { x: e[0].x + (e[1].x - e[0].x) * t, y: e[0].y + (e[1].y - e[0].y) * t };
+}
+
+/**
+ * Dachfläche `dachId` entlang der Geraden a–b mit einem Trennstreifen der Breite `breite` in Teilflächen
+ * zerlegen. Jeder Teil wird eigene Dachfläche; die Schnittkanten erhalten Attika der Breite breite/2
+ * (Attika liegt immer außen, beide Hälften füllen zusammen den Streifen). Aufbauten, Zonen und Abläufe
+ * gehen an den Teil, in dem sie liegen; was im Streifen liegt, entfällt. Weniger als 2 Teile: keine Änderung.
+ */
+export function trenneDachflaeche(dachId: Id, a: Vec2, b: Vec2, breite: number = STANDARD_ATTIKA_BREITE): Befehl {
+  return {
+    label: "Dachfläche trennen",
+    anwenden: (m) => {
+      const idx = m.dachflaechen.findIndex((x) => x.id === dachId);
+      const d = m.dachflaechen[idx];
+      if (!d || d.kontur.length < 3) return m;
+      const streifen = trennStreifen(d, a, b, breite);
+      if (!streifen) return m;
+      const roh = difference([{ outer: d.kontur, holes: [] }], [{ outer: streifen, holes: [] }])
+        .map((p) => p.outer).filter((r) => r.length >= 3 && ringArea(r) > TRENN_TOL * TRENN_TOL);
+      if (roh.length < 2) return m;
+
+      const l = dist(a, b), u = { x: (b.x - a.x) / l, y: (b.y - a.y) / l }, nv = { x: -u.y, y: u.x };
+      const s = (p: Vec2) => nv.x * (p.x - a.x) + nv.y * (p.y - a.y);
+      const h = breite / 2;
+      const n0 = d.kontur.length;
+      const origKanten = d.kontur.map((p, i) => [p, d.kontur[(i + 1) % n0]!] as const);
+      // Clipper-Rasterung zurücknehmen: Originalecken exakt, Schnittpunkte exakt auf Kante × Streifenrand.
+      const exakt = (v: Vec2): Vec2 => {
+        for (const p of d.kontur) if (dist(p, v) <= TRENN_TOL) return { x: p.x, y: p.y };
+        const t = s(v) >= 0 ? h : -h;
+        for (const [p, q] of origKanten) {
+          const sp = s(p), sq = s(q);
+          if (Math.abs(sq - sp) <= EPS || distPointSegment(v, p, q) > TRENN_TOL) continue;
+          const lam = (t - sp) / (sq - sp);
+          return { x: p.x + (q.x - p.x) * lam, y: p.y + (q.y - p.y) * lam };
+        }
+        return v;
+      };
+      const ccw = signedArea(d.kontur) > 0;
+      const ringe = roh.map((r) => (ccw ? r : [...r].reverse()).map(exakt))
+        .map((r) => ({ r, c: ringCentroid(r) }))
+        .sort((x, y) => s(x.c) - s(y.c) || (u.x * x.c.x + u.y * x.c.y) - (u.x * y.c.x + u.y * y.c.y))
+        .map((x) => x.r);
+
+      const dIds = neueIds(m, "d", ringe.length);
+      const pIds = neueIds(m, "p", ringe.reduce((n, r) => n + r.length, 0));
+      const atIds = neueIds(m, "at", ringe.reduce((n, r) => n + r.length, 0));
+      let pi = 0, ai = 0;
+      const imTeil = (r: Ring, p: Vec2) => pointInRing(p, r) !== "outside";
+      const kollinear = (p: Vec2, q: Vec2, k0: Vec2, k1: Vec2) =>
+        distPointSegment(p, k0, k1) <= TRENN_TOL && distPointSegment(q, k0, k1) <= TRENN_TOL;
+
+      const teile = ringe.map((r, ti): Dachflaeche => {
+        const kontur: KonturPunkt[] = r.map((p) => ({ id: pIds[pi++]!, x: p.x, y: p.y }));
+        const kanten = kontur.map((p, i) => {
+          const q = kontur[(i + 1) % kontur.length]!;
+          const sp = s(p), sq = s(q);
+          const schnitt = Math.abs(Math.abs(sp) - h) <= TRENN_TOL && Math.abs(Math.abs(sq) - h) <= TRENN_TOL && sp * sq > 0;
+          return { p, q, schnitt };
+        });
+        const attika: AttikaSegment[] = [];
+        for (const k of kanten) {
+          if (k.schnitt) { attika.push({ id: atIds[ai++]!, kante: k.p.id, breite: h }); continue; }
+          const alt = d.attika.find((x) => { const e = konturKante(d.kontur, x.kante); return !!e && kollinear(k.p, k.q, e[0], e[1]); });
+          if (alt) attika.push({ id: atIds[ai++]!, kante: k.p.id, breite: alt.breite, ...(alt.oberkante !== undefined ? { oberkante: alt.oberkante } : {}) });
+        }
+        /** Neue Randkante (keine Schnittkante), auf der die Strecke p–q liegt. */
+        const randKante = (p: Vec2, q: Vec2) => kanten.find((k) => !k.schnitt && kollinear(p, q, k.p, k.q));
+
+        const tuerschwellen: Tuerschwelle[] = [];
+        for (const t of d.tuerschwellen) {
+          const w0 = kantenPunkt(d.kontur, t.lage.kante, t.lage.abstand), w1 = kantenPunkt(d.kontur, t.lage.kante, t.lage.abstand + t.breite);
+          const k = w0 && w1 ? randKante(w0, w1) : undefined;
+          if (!k || !w0 || !w1) continue;
+          const laenge = dist(k.p, k.q);
+          const abstand = Math.min(Math.max(0, Math.min(dist(k.p, w0), dist(k.p, w1))), laenge - t.breite);
+          tuerschwellen.push({ ...t, lage: { kante: k.p.id, abstand } });
+        }
+        const entw: Entwaesserung[] = [];
+        for (const e of d.entwaesserung) {
+          if (e.art === "gully" || e.art === "notablauf") { if (imTeil(r, e.position)) entw.push(e); continue; }
+          if (e.art === "les") { if (imTeil(r, e.von) && imTeil(r, e.bis)) entw.push(e); continue; }
+          const w = kantenPunkt(d.kontur, e.lage.kante, e.lage.abstand);
+          const k = w ? randKante(w, w) : undefined;
+          if (k && w) entw.push({ ...e, lage: { kante: k.p.id, abstand: dist(k.p, w) } });
+        }
+        const ids = entw.map((e) => e.id);
+        const entwaesserung = entw.map((e) => (e.art === "gully" && e.verbundenMit !== undefined && !ids.includes(e.verbundenMit) ? ohneVerweis(e) : e));
+        const inneres = (k: Kontur) => pointInRing(ringCentroid(k), r) === "inside";
+        return {
+          id: dIds[ti]!, name: `${d.name} ${String.fromCharCode(65 + ti)}`, typ: d.typ, kontur,
+          aufbauten: d.aufbauten.filter((x) => inneres(x.kontur)), zonen: d.zonen.filter((x) => inneres(x.kontur)),
+          vorgaben: d.vorgaben, attika, tuerschwellen, entwaesserung,
+          ...(d.daemmdickeTiefpunkt !== undefined ? { daemmdickeTiefpunkt: d.daemmdickeTiefpunkt } : {}),
+        };
+      });
+      const dachflaechen = [...m.dachflaechen.slice(0, idx), ...teile, ...m.dachflaechen.slice(idx + 1)];
+      return { ...m, dachflaechen };
     },
   };
 }

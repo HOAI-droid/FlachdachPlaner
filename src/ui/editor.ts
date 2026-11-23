@@ -1,10 +1,10 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, istGeaendert, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProject, createSnapIndex, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
-  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment,
+  setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, serializeProject, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
   type Abweichung, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
   type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
@@ -24,10 +24,13 @@ import { kantenLage, zeichneEntwaesserung } from "./symbole";
 import { Belegung } from "./zeichnen";
 import type { Shell } from "./shell";
 import { dxfModell, ladeDxf, ladePdf, pdfModell, type UnterlageUI } from "./underlay";
+import { frageSpeichern } from "./dialog";
+import { waehlePdfSeite } from "./pdf-seiten";
+import { schuetzeFenster } from "./schliessen";
 import { autosaveSchreiben, base64ZuBytes, bytesZuBase64, leseProjekt, speichereDatei, waehleDatei } from "./speicher";
 
 const FANG_PX = 10;
-const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", g: "gully", n: "notablauf", r: "dachreiter", l: "les", m: "measure" };
+const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", g: "gully", n: "notablauf", r: "dachreiter", l: "les", x: "trennen", m: "measure" };
 const FANG_NAME: Record<SnapArt | "ausrichtung", string> = { ausrichtung: "Ausrichtung", endpunkt: "Endpunkt", schnittpunkt: "Schnittpunkt", mittelpunkt: "Mittelpunkt", lot: "Lot", ortho: "Ortho" };
 const HINWEIS: Record<WerkzeugId, string> = {
   select: "Objekt anklicken. Entf löscht die Auswahl.",
@@ -40,6 +43,7 @@ const HINWEIS: Record<WerkzeugId, string> = {
   notablauf: "In die Dachfläche klicken. Notablauf mit Tiefenlage z.",
   dachreiter: "Auf eine Kante der Dachkontur klicken. Der Dachreiter wird dort zentriert.",
   les: "Anfang (tiefer Punkt, z gilt dort) und Ende der Linienentwässerung klicken.",
+  trennen: "Breite eingeben, dann Anfang und Ende der Trennlinie klicken. Die Dachfläche wird wie durch eine durchlaufende Attika in zwei Flächen geteilt.",
   measure: "Mit PDF-Unterlage: zwei Punkte klicken, dann bekannte Strecke eingeben.",
 };
 
@@ -87,6 +91,9 @@ export interface Editor {
 
 export function mountEditor(shell: Shell, stage: Stage): Editor {
   let verlauf: Verlauf = neuerVerlauf(createProject("Neues Projekt", new Date().toISOString()));
+  /** Modellstand beim letzten Speichern/Öffnen/Neu (Referenzvergleich, siehe `istGeaendert`). */
+  let gespeichert: ProjectModel = verlauf.aktuell;
+  const geaendert = () => istGeaendert(verlauf, gespeichert);
   let z: WerkzeugZustand = neuerZustand();
   let auswahl: Auswahl | null = null;
   let unterlage: UnterlageUI | null = null;
@@ -216,13 +223,21 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         eintrag = pdfModell(u, zuPasspunkten(t, u.kalibrierung.breite), Math.round(nennerAusFaktor(faktor(t))));
       } else eintrag = dxfModell(u);
     }
+    if (JSON.stringify(eintrag) === JSON.stringify(verlauf.aktuell.unterlage ?? null)) return; // unverändert → nicht „geändert“
     verlauf = { ...verlauf, aktuell: { ...verlauf.aktuell, unterlage: eintrag } };
   }
-  async function ladeDatei(f: File) {
+  /** DXF laden; PDF mit mehreren Seiten erst nach Seitenwahl (Abbruch → null). `ohneDialog`: gespeicherte Seite verwenden. */
+  async function ladeUnterlageDatei(f: File, vorgabe: number | undefined, ohneDialog: boolean): Promise<UnterlageUI | null> {
+    if (!/\.pdf$/i.test(f.name)) return ladeDxf(f);
+    const seite = ohneDialog ? (vorgabe ?? 1) : await waehlePdfSeite(f, vorgabe ?? 1);
+    return seite === null ? null : ladePdf(f, seite);
+  }
+  async function ladeDatei(f: File, ohneDialog = false) {
     try {
       meldung = null;
       const bytes = await f.arrayBuffer();
-      const u = /\.pdf$/i.test(f.name) ? await ladePdf(f) : await ladeDxf(f);
+      const u = await ladeUnterlageDatei(f, offeneUnterlage?.seite, ohneDialog);
+      if (!u) { refresh(); return; }
       unterlage = u; unterlageBytes = bytes;
       const ref = offeneUnterlage; offeneUnterlage = null;
       if (ref && ref.pruefsumme.wert === u.pruefsumme) {
@@ -244,7 +259,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     try {
       const alt = unterlage?.art === "dxf" ? unterlage.segmente().map((s) => ({ a: s.a, b: s.b })) : null;
       const bytes = await f.arrayBuffer();
-      const u = /\.pdf$/i.test(f.name) ? await ladePdf(f) : await ladeDxf(f);
+      const u = await ladeUnterlageDatei(f, unterlage?.seite ?? offeneUnterlage?.seite, false);
+      if (!u) return;
       unterlage = u; unterlageBytes = bytes; offeneUnterlage = null; meldung = null; kal = {};
       unterlageInsModell(); stage.setLayer("unterlage", u.draw);
       tausch = alt && u.art === "dxf" ? { alt, belassen: new Set(), toleranz: TOLERANZ_STANDARD, pass: [0, 0, 0, 0, 0, 0, 0, 0] } : null;
@@ -327,10 +343,12 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (einbetten && m.unterlage && unterlageBytes) return { ...m, unterlage: { ...m.unterlage, eingebettet: { base64: bytesZuBase64(unterlageBytes) } } };
     return m;
   }
-  async function speichereProjekt() {
+  async function speichereProjekt(): Promise<boolean> {
     const ok = await speichereDatei(serializeProject(modellFuerDatei()), dateiname(modell().meta.name));
     projektMeldung = ok ? "Projekt gespeichert." : null;
+    if (ok) gespeichert = modell();
     refresh();
+    return ok;
   }
   async function oeffneText(text: string) {
     const r = leseProjekt(text);
@@ -338,19 +356,37 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const u = r.projekt.unterlage;
     let m = r.projekt;
     if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
-    verlauf = neuerVerlauf(m); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
+    verlauf = neuerVerlauf(m); gespeichert = m; auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
     projektMeldung = r.hinweise.length ? r.hinweise.join(" ") : "Projekt geöffnet.";
     if (u?.eingebettet) {
       const bytes = base64ZuBytes(u.eingebettet.base64);
       offeneUnterlage = u;
-      await ladeDatei(new File([bytes], u.dateiname));
+      await ladeDatei(new File([bytes], u.dateiname), true);
       einbetten = true;
+      gespeichert = verlauf.aktuell;
     } else if (u) { offeneUnterlage = u; projektMeldung += ` Unterlage „${u.dateiname}“ ist nur verknüpft: bitte Datei erneut wählen.`; }
     refresh();
   }
   async function oeffneProjekt() {
+    if (!(await darfVerwerfen("dem Öffnen"))) return;
     const f = await waehleDatei();
     if (f) await oeffneText(await f.text());
+  }
+  /** Rückfrage bei ungespeicherten Änderungen; true = weitermachen (nichts offen, gespeichert oder verworfen). */
+  async function darfVerwerfen(anlass: string): Promise<boolean> {
+    if (!geaendert()) return true;
+    const a = await frageSpeichern(modell().meta.name, anlass);
+    if (a === "abbrechen") return false;
+    if (a === "speichern") return await speichereProjekt();
+    return true;
+  }
+  async function neuesProjekt() {
+    if (!(await darfVerwerfen("dem Anlegen eines neuen Projekts"))) return;
+    const m = createProject("Neues Projekt", new Date().toISOString());
+    verlauf = neuerVerlauf(m); gespeichert = m; auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
+    einbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
+    projektMeldung = "Neues Projekt angelegt.";
+    refresh();
   }
   function exportierePdf() {
     if (!ergebnis) { projektMeldung = "PDF-Export: erst eine Dachfläche zeichnen."; refresh(); return; }
@@ -393,9 +429,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const wahl = el("input");
     wahl.type = "file"; wahl.accept = ".fdp,application/json"; wahl.id = "f-projekt"; wahl.setAttribute("aria-label", "Projektdatei öffnen");
     wahl.className = "visually-hidden"; wahl.tabIndex = -1;
-    wahl.addEventListener("change", () => { const f = wahl.files?.[0]; wahl.value = ""; if (f) void f.text().then(oeffneText); });
+    wahl.addEventListener("change", () => { const f = wahl.files?.[0]; wahl.value = ""; if (f) void darfVerwerfen("dem Öffnen").then((ok) => ok ? f.text().then(oeffneText) : undefined); });
     const zeile = el("div", "btn-row");
-    zeile.append(button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", exportierePdf), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
+    zeile.append(button("Neu", () => void neuesProjekt()), button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", exportierePdf), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if ((window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
     const lab = el("label", "check-row");
     const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten"; cb.disabled = !unterlage;
     cb.addEventListener("change", () => { einbetten = cb.checked; });
@@ -462,6 +498,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
     if (z.tool === "schwelle") {
       p.append(feld("Breite", zahl(z.schwellenBreite, 2), "schwelle-breite", (v) => { if (v > 0) { z = setzeSchwellenBreite(z, v); refresh(); } }));
+    }
+    if (z.tool === "trennen") {
+      p.append(feld("Breite", zahl(z.trennBreite, 2), "trenn-breite", (v) => { if (v > 0) { z = setzeTrennBreite(z, v); refresh(); } }));
     }
     if (z.tool === "gully" || z.tool === "notablauf" || z.tool === "dachreiter" || z.tool === "les") {
       p.append(feld("Tiefenlage z", zahl(z.ablaufZ, 3), "ablauf-z", (v) => { z = setzeAblaufZ(z, v); refresh(); }));
@@ -582,6 +621,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
       speichere();
     }
+    shell.status.projekt.textContent = geaendert() ? "ungespeichert" : "";
     berechneAbweichungen();
     panelUnterlage(); panelWerkzeug(); panelAuswahl(); panelProjekt();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
@@ -725,6 +765,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       if (z.entwurf.length >= 2) { ctx.save(); ctx.setLineDash([4 * px, 4 * px]); ctx.globalAlpha = .6; bahn(ctx, [pts[pts.length - 1]!, pts[0]!], false); ctx.stroke(); ctx.restore(); }
       for (const p of z.entwurf) { ctx.fillStyle = css("--text", "#222"); ctx.fillRect(p.x - 2.5 * px, p.y - 2.5 * px, 5 * px, 5 * px); }
     }
+    if (z.tool === "trennen" && z.entwurf.length === 1 && cursor) zeichneTrennVorschau(ctx, px, z.entwurf[0]!, treffer?.punkt ?? ausricht?.punkt ?? cursor);
     if (z.tool === "measure" && kal.p1) {
       const q = kal.p2 ?? treffer?.punkt ?? cursor;
       if (q) { ctx.strokeStyle = farbe; ctx.lineWidth = 1.5 * px; bahn(ctx, [kal.p1, q], false); ctx.stroke(); }
@@ -739,6 +780,21 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (treffer) marker(ctx, vp, treffer, refPunkt());
     zeichneSpuren(ctx, vp);
     zeichneWinkel(ctx, vp);
+  }
+
+  /** Vorschau des Trennstreifens (auf die Dachfläche begrenzt). */
+  function zeichneTrennVorschau(ctx: CanvasRenderingContext2D, px: number, a: Vec2, b: Vec2) {
+    const m = modell();
+    const d = dachAn(m, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }) ?? dachAn(m, a);
+    const s = d && trennStreifen(d, a, b, z.trennBreite);
+    if (!d || !s) return;
+    ctx.save();
+    ctx.fillStyle = css("--accent", "#0B6E99"); ctx.strokeStyle = css("--accent", "#0B6E99"); ctx.lineWidth = 1.5 * px;
+    for (const q of intersection([{ outer: d.kontur, holes: [] }], [{ outer: s, holes: [] }])) {
+      ctx.globalAlpha = .3; bahn(ctx, q.outer); ctx.fill();
+      ctx.globalAlpha = .9; bahn(ctx, q.outer); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** Erfasste Punkte (Kreuz) und Hilfslinien der wirkenden Ausrichtung. */
@@ -843,6 +899,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (e.target instanceof HTMLElement && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && e.target.getAttribute("type") !== "checkbox") return;
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
+      if (k === "n" && !e.shiftKey) { e.preventDefault(); void neuesProjekt(); return; }
       if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); } else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
       return;
     }
@@ -858,10 +915,11 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   standortPanel = mountStandort(shell.panels.standort, { modell, ausfuehre: ausfuehreBefehl });
   setzeWerkzeug("select");
   refresh();
+  void schuetzeFenster(geaendert, () => darfVerwerfen("dem Schließen"));
   Object.defineProperties(api, {
     ausfuehre: { value: ausfuehreBefehl },
     modell: { get: () => modell() },
-    lade: { value: (m: ProjectModel) => { verlauf = neuerVerlauf(m); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
+    lade: { value: (m: ProjectModel) => { verlauf = neuerVerlauf(m); gespeichert = m; auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
   });
   return api;
 }

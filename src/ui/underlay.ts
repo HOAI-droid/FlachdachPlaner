@@ -21,6 +21,8 @@ export interface UnterlageUI {
   /** Nur PDF: Abbildung Seite (pt, y nach oben) → Welt (m). */
   /** Nur DXF: Ausrichtung der Zeichnung (Zwei-Punkt-Zuordnung, Schritt 22a). */
   readonly ausrichtung?: { get(): Aehnlichkeit; set(t: Aehnlichkeit): void };
+  /** Nur PDF: gewählte Seite (1-basiert). */
+  readonly seite?: number;
   readonly kalibrierung?: {
     get(): Aehnlichkeit;
     set(t: Aehnlichkeit): void;
@@ -96,7 +98,8 @@ export async function ladePdf(file: File, seite = 1): Promise<UnterlageUI> {
   const buf = await file.arrayBuffer();
   const pruefsumme = await sha256(buf);
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
-  const page = await doc.getPage(Math.min(Math.max(1, seite), doc.numPages));
+  const seiteNr = Math.min(Math.max(1, Math.round(seite)), doc.numPages);
+  const page = await doc.getPage(seiteNr);
   const base = page.getViewport({ scale: 1 });
   const rs = Math.min(4, PDF_MAX_PX / Math.max(base.width, base.height));
   const vpR = page.getViewport({ scale: rs });
@@ -110,7 +113,7 @@ export async function ladePdf(file: File, seite = 1): Promise<UnterlageUI> {
   let t: Aehnlichkeit = ausNenner(PDF_STANDARD_NENNER)!;
   const W = base.width, H = base.height;
   return {
-    art: "pdf", name: file.name, pruefsumme, layer: [], sichtbar: new Set(), einheitUnbekannt: false,
+    art: "pdf", name: file.name, pruefsumme, seite: seiteNr, layer: [], sichtbar: new Set(), einheitUnbekannt: false,
     setLayer() {}, segmente: () => [],
     bounds() {
       const c = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H }].map((p) => anwenden(t, p));
@@ -129,7 +132,7 @@ export async function ladePdf(file: File, seite = 1): Promise<UnterlageUI> {
 /** Modell-Eintrag (PDF): Passpunkte aus der aktuellen Abbildung, optional Maßstabsnenner. */
 export function pdfModell(u: UnterlageUI, passpunkte: Unterlage["passpunkte"], massstab?: number): Unterlage {
   return {
-    dateiname: u.name, art: "pdf", pruefsumme: { algorithmus: "sha-256", wert: u.pruefsumme }, seite: 1,
+    dateiname: u.name, art: "pdf", pruefsumme: { algorithmus: "sha-256", wert: u.pruefsumme }, seite: u.seite ?? 1,
     ...(massstab ? { massstab } : {}), passpunkte,
   };
 }
