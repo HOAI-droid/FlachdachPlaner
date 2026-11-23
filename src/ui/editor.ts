@@ -116,6 +116,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let gespeichertEinbetten = false;
   const markiereGespeichert = () => { gespeichertSchluessel = schluessel(); gespeichertStand = verlauf.aktuell; gespeichertEinbetten = einbetten; };
   const geaendert = () => einbetten !== gespeichertEinbetten || (gespeichertStand !== null && !istProjektGeaendert(verlauf, gespeichertStand) ? false : schluessel() !== gespeichertSchluessel);
+  /** Billige Variante für die Statuszeile (pro Refresh, auch beim Ziehen): Referenzvergleich statt JSON.stringify; genau nur bei Rückfrage/Schließen. */
+  const geaendertSchnell = () => einbetten !== gespeichertEinbetten || (gespeichertStand !== null ? istProjektGeaendert(verlauf, gespeichertStand) : schluessel() !== gespeichertSchluessel);
   let z: WerkzeugZustand = neuerZustand();
   let auswahl: Auswahl | null = null;
   let unterlage: UnterlageUI | null = null;
@@ -800,7 +802,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
       speichere();
     }
-    shell.status.projekt.textContent = [variantenListe(aktuellesProjekt()).length > 1 ? `Variante: ${variantenListe(aktuellesProjekt()).find((x) => x.aktiv)?.name ?? ""}` : "", geaendert() ? "ungespeichert" : ""].filter(Boolean).join(" · ");
+    shell.status.projekt.textContent = [variantenListe(aktuellesProjekt()).length > 1 ? `Variante: ${variantenListe(aktuellesProjekt()).find((x) => x.aktiv)?.name ?? ""}` : "", geaendertSchnell() ? "ungespeichert" : ""].filter(Boolean).join(" · ");
     berechneAbweichungen();
     panelUnterlage(); panelWerkzeug(); panelAuswahl(); panelProjekt();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
