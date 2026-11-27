@@ -3,25 +3,29 @@
  * Koordinaten wie im Projektmodell (y nach oben). Reine Funktion; Sonderzeichen in Texten als \U+XXXX.
  */
 import {
-  attikaStreifen, konturKante, plattenDaemmdicke,
-  type Dachflaeche, type InsulationLayout, type ProjectModel, type SlopeResult, type Vec2,
+  anschlussLabel, attikaStreifen, konturKante, notLabel, plattenDaemmdicke,
+  type Anschluss, type Dachflaeche, type InsulationLayout, type Notwasserstand, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 
 export const DXF_LAYER = {
   kontur: "FDP_KONTUR", aufbau: "FDP_AUFBAUTEN", zone: "FDP_ZONEN", attika: "FDP_ATTIKA", tuer: "FDP_TUERSCHWELLE",
   ablauf: "FDP_ENTWAESSERUNG", falt: "FDP_GRAT_KEHLE", platte: "FDP_DAEMM_PLATTEN", zusatz: "FDP_DAEMM_ZUSATZLAGE",
   pfeil: "FDP_VERLEGERICHTUNG", start: "FDP_VERLEGESTART", textPlatte: "FDP_TEXT_PLATTEN", textKote: "FDP_TEXT_KOTEN", textName: "FDP_TEXT_NAMEN",
+  anschluss: "ANSCHLUSS", notwasser: "NOTENTWAESSERUNG",
 } as const;
 
 const FARBE: Readonly<Record<string, number>> = {
   FDP_KONTUR: 7, FDP_AUFBAUTEN: 8, FDP_ZONEN: 5, FDP_ATTIKA: 6, FDP_TUERSCHWELLE: 3, FDP_ENTWAESSERUNG: 1, FDP_GRAT_KEHLE: 4,
-  FDP_DAEMM_PLATTEN: 8, FDP_DAEMM_ZUSATZLAGE: 2, FDP_VERLEGERICHTUNG: 7, FDP_VERLEGESTART: 1, FDP_TEXT_PLATTEN: 7, FDP_TEXT_KOTEN: 7, FDP_TEXT_NAMEN: 7,
+  FDP_DAEMM_PLATTEN: 8, FDP_DAEMM_ZUSATZLAGE: 2, FDP_VERLEGERICHTUNG: 7, FDP_VERLEGESTART: 1, FDP_TEXT_PLATTEN: 7, FDP_TEXT_KOTEN: 7, FDP_TEXT_NAMEN: 7, ANSCHLUSS: 3, NOTENTWAESSERUNG: 5,
 };
 
 export interface DxfExportEingabe {
   readonly modell: ProjectModel;
   readonly slope: SlopeResult;
   readonly plan: InsulationLayout | null;
+  /** Anschlusshöhen und Notentwässerung (M9); optional. */
+  readonly anschluesse?: readonly Anschluss[];
+  readonly notstaende?: readonly Notwasserstand[];
 }
 
 const n = (v: number): string => (Math.round(v * 10000) / 10000).toString();
@@ -132,6 +136,14 @@ export function baueProjektDxf(e: DxfExportEingabe): string {
       const dk = plattenDaemmdicke(d);
       if (d.n0) { kreis(w, DXF_LAYER.start, d.n0.position, 0.06); beschriftung(w, DXF_LAYER.textName, `N0 z=${n(d.n0.kote)}${dk ? ` Ø ${Math.round(dk.mittel)} mm` : ""}`, d.n0.position, 0.12); }
     }
+  }
+  for (const a of e.anschluesse ?? []) {
+    if (a.linie.length >= 2) ring(w, DXF_LAYER.anschluss, a.linie, false); else linie(w, DXF_LAYER.anschluss, a.von, a.bis);
+    beschriftung(w, DXF_LAYER.anschluss, anschlussLabel(a.vorhanden, a.soll), { x: a.ort.x, y: a.ort.y + 0.15 }, 0.12);
+  }
+  for (const nw of e.notstaende ?? []) {
+    kreis(w, DXF_LAYER.notwasser, nw.ort, 0.2);
+    beschriftung(w, DXF_LAYER.notwasser, `${notLabel(nw.kante, nw.wasserstand)} (${nw.vermerk})`, { x: nw.ort.x, y: nw.ort.y - 0.35 }, 0.12);
   }
   w.g(0, "ENDSEC");
   w.g(0, "EOF");

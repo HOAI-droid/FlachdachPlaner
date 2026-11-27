@@ -4,8 +4,8 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  attikaStreifen, dickeAn, dickeRaster, kotenMarken, pfeilLage, plattenDaemmdicke, polygonCentroid,
-  type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type ProjectModel, type SlopeResult, type Vec2,
+  anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, pfeilLage, plattenDaemmdicke, polygonCentroid,
+  type Anschluss, type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type Notwasserstand, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfSeite, type Punkt } from "./pdf";
 
@@ -24,6 +24,9 @@ export interface PlanEingabe {
   readonly regelwerk: string;
   /** Variantenname (erscheint im Schriftfeld hinter dem Planinhalt). */
   readonly variante?: string;
+  /** Anschlusshöhen und Notentwässerung (M9); ohne Einträge entfällt das zusätzliche Blatt. */
+  readonly anschluesse?: readonly Anschluss[];
+  readonly notstaende?: readonly Notwasserstand[];
 }
 
 export interface PlanErgebnis {
@@ -474,6 +477,36 @@ function legendeDaemmplan(s: PdfSeite, y: number): number {
   return y - 2;
 }
 
+const AN_ART = { attika: "Attika", wand: "Wandanschluss", tuer: "Türschwelle", aufbau: "Aufbau" } as const;
+const AN_STATUS = { ok: "ok", niedrig: "zu niedrig", unbekannt: "unbekannt" } as const;
+const NOT_ART = { notablauf: "Notablauf", speier: "Speier" } as const;
+const mmOhne = (m: number | null) => (m === null ? "–" : zahl(m * 1000, 0));
+const koteOpt = (m: number | null) => (m === null ? "–" : kote(m));
+
+/** Zusatzblatt: Tabellen „Anschlusshöhen“ und „Notentwässerung“ (PLAN M9 Schritt 47). */
+function anschlussBlatt(s: PdfSeite, e: PlanEingabe): void {
+  let y = PLAN.y1 - 4;
+  const an = e.anschluesse ?? [], nt = e.notstaende ?? [];
+  s.text("Anschlusshöhen und Notentwässerung", PLAN.x0, y, { groesse: T.gross, fett: true });
+  y -= 10;
+  const zeilenAn = an.map((a) => [
+    `${AN_ART[a.art]} ${a.objektId}`, koteOpt(a.oberkante), kote(a.okFertigMax), mmOhne(a.vorhanden), mmOhne(a.soll), koteOpt(a.erforderlicheOberkante),
+    AN_STATUS[anschlussStatus(a.vorhanden, a.soll)], anschlussLabel(a.vorhanden, a.soll),
+  ]);
+  y = tabelle(s, PLAN.x0, y, "Anschlusshöhen", [
+    { t: "Objekt", w: 44 }, { t: "OK Anschluss [m]", w: 30, r: true }, { t: "OK fertig max [m]", w: 32, r: true }, { t: "vorhanden [mm]", w: 28, r: true },
+    { t: "soll [mm]", w: 22, r: true }, { t: "erf. OK [m]", w: 26, r: true }, { t: "Status", w: 24 }, { t: "Label", w: 50 },
+  ], zeilenAn.length ? zeilenAn : [["–", "", "", "", "", "", "", ""]]) - 8;
+  const zeilenNt = nt.map((n) => [
+    `${NOT_ART[n.art]} ${n.objektId}`, koteOpt(n.kante) + (n.kanteQuelle ? (n.kanteQuelle === "pack" ? " (Pack)" : " (Nutzer)") : ""),
+    mmOhne(n.ueberfallhoehe), koteOpt(n.wasserstand), n.vermerk, `ÜK ${koteOpt(n.kante)} · NW ${koteOpt(n.wasserstand)}`,
+  ]);
+  tabelle(s, PLAN.x0, y, "Notentwässerung", [
+    { t: "Element", w: 44 }, { t: "Kante [m]", w: 40, r: true }, { t: "h_ü [mm]", w: 24, r: true }, { t: "Notwasserstand [m]", w: 36, r: true },
+    { t: "Vermerk", w: 28 }, { t: "Label", w: 50 },
+  ], zeilenNt.length ? zeilenNt : [["–", "", "", "", "", ""]]);
+}
+
 /** Eine Variante für den Mehrvarianten-Export. */
 export interface VariantenPlan { readonly eingabe: PlanEingabe }
 
@@ -481,7 +514,8 @@ export interface VariantenPlan { readonly eingabe: PlanEingabe }
 export function baueVariantenPdf(vs: readonly VariantenPlan[], titel?: string): PlanErgebnis & { readonly massstaebe: readonly number[] } {
   if (vs.length === 0) throw new Error("Keine Variante für den PDF-Export gewählt.");
   const dok = new PdfDokument(titel ?? `${vs[0]!.eingabe.modell.meta.name || "Projekt"} – Planunterlagen`);
-  const gesamt = vs.reduce((n, v) => n + (v.eingabe.plan ? 2 : 1), 0);
+  const hatAn = (e: PlanEingabe) => (e.anschluesse?.length ?? 0) + (e.notstaende?.length ?? 0) > 0;
+  const gesamt = vs.reduce((n, v) => n + (v.eingabe.plan ? 2 : 1) + (hatAn(v.eingabe) ? 1 : 0), 0);
   let nr = 0;
   const massstaebe: number[] = [];
   for (const { eingabe: e } of vs) {
@@ -502,6 +536,13 @@ export function baueVariantenPdf(vs: readonly VariantenPlan[], titel?: string): 
       const y = b.legende(s, PLAN.y1 - 4);
       tabellen(s, e, y - 4);
       schriftfeld(s, e, b.titel, a.massstab, `${nr}/${gesamt}`);
+    }
+    if (hatAn(e)) {
+      const s = dok.seite(BLATT.b, BLATT.h);
+      nr++;
+      rahmen(s);
+      anschlussBlatt(s, e);
+      schriftfeld(s, e, "Anschlusshöhen", a.massstab, `${nr}/${gesamt}`);
     }
   }
   return { bytes: dok.bytes(), massstab: massstaebe[0]!, massstaebe };

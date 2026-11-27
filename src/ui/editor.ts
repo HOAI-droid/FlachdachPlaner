@@ -463,12 +463,16 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
   }
+  function anschlussDaten(m: ProjectModel, slope: Parameters<typeof computeAnschluesse>[1], notfall: Parameters<typeof computeNotwasserstaende>[2]) {
+    try { return { anschluesse: computeAnschluesse(m, slope, packs), notstaende: computeNotwasserstaende(m, slope, notfall, packs) }; } catch { return { anschluesse: [], notstaende: [] }; }
+  }
   function baueExportEingabe(m: ProjectModel, name: string, datum: string, regelwerk: string, mitName: boolean) {
     const erg = m.dachflaechen.length ? berechne(m) : null;
     if (!erg) return null;
     let pl = null;
     try { pl = berechnePlan(m, erg.slope); } catch { /* ohne Dämmplan */ }
-    return { eingabe: { modell: m, slope: erg.slope, catchments: erg.catchments, eids: erg.eids, plan: pl, farbe: (i: number) => farbe(i)[0], datum, regelwerk, ...(mitName ? { variante: name } : {}) } };
+    const { anschluesse, notstaende } = anschlussDaten(m, erg.slope, erg.notfall);
+    return { eingabe: { modell: m, slope: erg.slope, catchments: erg.catchments, eids: erg.eids, plan: pl, anschluesse, notstaende, farbe: (i: number) => farbe(i)[0], datum, regelwerk, ...(mitName ? { variante: name } : {}) } };
   }
   /** Fragt bei mehreren Varianten, welche exportiert werden (Standard: die aktive); null = abgebrochen. */
   async function waehleExportVarianten(): Promise<string[] | null> {
@@ -539,7 +543,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     try {
       let p = null;
       try { p = berechnePlan(modell(), ergebnis.slope); } catch { /* ohne Dämmplan */ }
-      const text = baueProjektDxf({ modell: modell(), slope: ergebnis.slope, plan: p });
+      const text = baueProjektDxf({ modell: modell(), slope: ergebnis.slope, plan: p, ...anschlussDaten(modell(), ergebnis.slope, ergebnis.notfall) });
       void gibDateiAus(text, { name: `${dateiname(modell().meta.name)}-Plan.dxf`, mime: "application/dxf", endung: "dxf", beschreibung: "DXF" }).then((ok) => { projektMeldung = ok ? "DXF erstellt (Meter, Layer FDP_*)." : "DXF-Export abgebrochen."; refresh(); }, (e) => { projektMeldung = `DXF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); });
       projektMeldung = "DXF wird erstellt …";
     } catch (e) { projektMeldung = `DXF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; }

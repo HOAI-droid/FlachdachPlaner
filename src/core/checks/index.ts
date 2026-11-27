@@ -8,6 +8,7 @@ export {
   computeAnschluesse, okFertigAm,
   type Anschluss, type AnschlussArt, type SollRegel,
 } from "./anschluesse";
+export { anschlussLabel, anschlussStatus, notLabel, type AnschlussStatus } from "./anschluss-label";
 export {
   VERMERK_SCHAETZUNG, computeNotwasserstaende, poleniUeberfallhoehe,
   type NotelementArt, type Notwasserstand,
