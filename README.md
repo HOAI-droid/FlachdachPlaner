@@ -55,7 +55,7 @@ Die Prüfliste ist nach Schwere sortiert; ein Klick springt zum betroffenen Obje
 
 ### Ansichten und Export
 - **2D** mit Koten, Pfeilen, Einzugsflächen, Ablauf-Koten, Ø Gefälledämmung je Dachfläche und Dämmplan inkl. Maßketten.
-- **3D** aus dem Höhenfeld mit wählbarer Überhöhung (1/5/10×) mit Gefällepfeilen; der Dämmplan als nach Dicke getönte Plattenblöcke mit Fugen quer zum Gefälle (Umschalter Gefälle/Dämmplan in der Kopfzeile).
+- **3D** aus dem Höhenfeld mit wählbarer Überhöhung (1/5/10×) mit Gefällepfeilen; der Dämmplan zeigt dieselbe Dachfläche zusätzlich mit den Plattenfugen quer zum Gefälle (Umschalter Gefälle/Dämmplan in der Kopfzeile).
 - **PDF-Export** (maßstäblich, Vektor) mit Schriftfeld, Legende, Nordpfeil und Maßstabsbalken sowie Tabelle der Ablauf-Koten und der mittleren Gefälledämmung.
 - **DXF-Export** mit Layern je Objektart.
 
