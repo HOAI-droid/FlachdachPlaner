@@ -74,7 +74,7 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
   const baeume = basis.quellen.map((x) => taschenBaum(x, d.kontur));
   let facettenHaupt: Facette[] = [];
   if (haupt.length > 0) ({ feld, facetten: facettenHaupt } = geodaetisch(basis, baeume, d.kontur, haupt, box, ""));
-  const linien = haupt.flatMap((t) => berechneFaltlinien(t, box, feld));
+  const linien = ergaenzeKnicke(haupt.flatMap((t) => berechneFaltlinien(t, box, feld)), facettenHaupt, dach);
   const koten = haupt.length > 0 ? berechneKoten(haupt, feld, linien, facettenHaupt) : [];
   const hpHaupt = extrem(koten, 1), tpHaupt = extrem(koten, -1);
   const daemmungHaupt = tpHaupt && hpHaupt && facettenHaupt.length > 0
@@ -137,7 +137,7 @@ function zonenGefaelle(
     let roh: Facette[];
     ({ feld, facetten: roh } = geodaetisch(feld, baeume, d.kontur, polygone, box, `${zone.id}:`));
     facetten = roh.map((f) => ({ ...f, zoneId: zone.id }));
-    linien = polygone.flatMap((t) => berechneFaltlinien(t, box, feld));
+    linien = ergaenzeKnicke(polygone.flatMap((t) => berechneFaltlinien(t, box, feld)), facetten, { outer: [], holes: [] });
     koten = berechneKoten(polygone, feld, linien, facetten);
   } else {
     // 0-%-Zone: waagerecht auf der Kote des tiefsten Ablaufs (+ Versatz); dem tiefsten Ablauf zugeordnet.
@@ -618,6 +618,45 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
   // Linien, die im Rahmen der Lagetoleranz auf einer Konturkante liegen, sind keine eigene Faltlinie.
   const kanten = [dach.outer, ...dach.holes].flatMap((r) => r.map((p, i) => [p, r[(i + 1) % r.length]!] as const));
   return out.filter((l) => !kanten.some(([p, q]) => distPointSegment(l.von, p, q) <= LAGE_TOL && distPointSegment(l.bis, p, q) <= LAGE_TOL));
+}
+
+/**
+ * Jede Facettenkante zwischen zwei verschieden geneigten Facetten ist ein Knick. Fehlt sie in den abgetasteten
+ * Faltlinien (z. B. Kehlen einer Punktquelle neben einer zweiten Quelle), wird sie ergänzt, damit 2D-Linien,
+ * Koten und 3D-Netz dieselben Knicke zeigen.
+ */
+function ergaenzeKnicke(linien: Faltlinie[], facetten: readonly Facette[], dach: Polygon): Faltlinie[] {
+  if (facetten.length < 2) return linien;
+  const gleichEbene = (a: Facette, b: Facette) => Math.abs(a.ebene.a - b.ebene.a) <= 1e-9 && Math.abs(a.ebene.b - b.ebene.b) <= 1e-9 && Math.abs(a.ebene.c - b.ebene.c) <= 1e-9;
+  const auf = (q: Vec2, p: Vec2, r: Vec2) => distPointSegment(q, p, r) <= LAGE_TOL;
+  const kontur = [dach.outer, ...dach.holes].flatMap((r) => r.map((p, i) => [p, r[(i + 1) % r.length]!] as const));
+  const out = [...linien];
+  // Schmale Streifen (Lagetoleranz-Reste, Höhenversatz im mm-Bereich) sind keine eigenen Knicke.
+  const breit = (f: Facette) => {
+    const r = f.polygon.outer; let a = 0, u = 0;
+    r.forEach((p, i) => { const q = r[(i + 1) % r.length]!; a += p.x * q.y - q.x * p.y; u += Math.hypot(q.x - p.x, q.y - p.y); });
+    return u > 0 && Math.abs(a) / u > 0.1; // 2·Fläche/Umfang = Inkreis-Näherung
+  };
+  // Mit Streifen (Toleranz-Scheinlinien, vgl. Scheinkehlen-Tests) entscheidet allein die Abtastung.
+  if (facetten.some((f) => !breit(f))) return linien;
+  const randPunkt = (f: Facette, q: Vec2) => [f.polygon.outer, ...f.polygon.holes].some((r) => r.some((p, i) => auf(q, p, r[(i + 1) % r.length]!)));
+  for (const f of facetten) {
+    for (const r of [f.polygon.outer, ...f.polygon.holes]) {
+      for (let i = 0; i < r.length; i++) {
+        const von = r[i]!, bis = r[(i + 1) % r.length]!;
+        if (Math.hypot(bis.x - von.x, bis.y - von.y) <= LAGE_TOL) continue;
+        const m = { x: (von.x + bis.x) / 2, y: (von.y + bis.y) / 2 };
+        const nachbarn = facetten.filter((o) => o !== f && randPunkt(o, m));
+        if (nachbarn.length === 0 || nachbarn.every((o) => gleichEbene(o, f))) continue; // Kontur oder kein Knick
+        if (kontur.some(([p, q]) => auf(von, p, q) && auf(bis, p, q))) continue;
+        if (out.some((l) => auf(m, l.von, l.bis))) continue;
+        // Nur Kehlen derselben Quelle: Grate/Teilungen zwischen Abläufen entscheidet die Abtastung (Scheinlinien-Tests).
+        const o = !breit(f) ? undefined : nachbarn.find((n) => breit(n) && n.ablaufId === f.ablaufId && Math.hypot(n.ebene.a - f.ebene.a, n.ebene.b - f.ebene.b) > 1e-3 * (Math.hypot(f.ebene.a, f.ebene.b) || 1));
+        if (o) out.push({ art: "kehle", von, bis, ablaufIds: [f.ablaufId, o.ablaufId] });
+      }
+    }
+  }
+  return out;
 }
 
 // ---------- Koten, HP/TP ----------
