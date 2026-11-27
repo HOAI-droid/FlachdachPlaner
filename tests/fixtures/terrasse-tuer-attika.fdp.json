@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 4,
+  "aktiveVariante": "v1",
+  "gefaelleStandard": 0.02,
+  "meta": {
+    "erstelltAm": "2026-01-01T00:00:00Z",
+    "geaendertAm": "2026-01-01T00:00:00Z",
+    "name": "Terrasse mit Tür und Attika"
+  },
+  "packVersionen": {},
+  "standort": {
+    "koordinate": null,
+    "regen": {
+      "r5_100": {
+        "packWert": null
+      },
+      "r5_5": {
+        "packWert": null
+      }
+    }
+  },
+  "unterlage": null,
+  "varianten": [
+    {
+      "dachflaechen": [
+        {
+          "attika": [
+            {
+              "breite": 0.3,
+              "id": "at1",
+              "kante": "k3",
+              "oberkante": 0.45
+            }
+          ],
+          "aufbauten": [],
+          "entwaesserung": [
+            {
+              "art": "gully",
+              "id": "g1",
+              "name": "G1",
+              "position": {
+                "x": 10,
+                "y": 5
+              },
+              "typ": null,
+              "z": 0
+            },
+            {
+              "art": "notablauf",
+              "id": "n1",
+              "name": "N1",
+              "position": {
+                "x": 4,
+                "y": 4
+              },
+              "typ": null,
+              "ueberlaufKante": 0.085,
+              "z": 0.04
+            },
+            {
+              "art": "dachreiter",
+              "id": "s1",
+              "lage": {
+                "abstand": 5,
+                "kante": "k4"
+              },
+              "name": "Speier",
+              "typ": null,
+              "ueberlaufKante": 0.085,
+              "z": 0.05
+            }
+          ],
+          "id": "d1",
+          "kontur": [
+            {
+              "id": "k1",
+              "x": 0,
+              "y": 0
+            },
+            {
+              "id": "k2",
+              "x": 20,
+              "y": 0
+            },
+            {
+              "id": "k3",
+              "x": 20,
+              "y": 10
+            },
+            {
+              "id": "k4",
+              "x": 0,
+              "y": 10
+            }
+          ],
+          "name": "Dach",
+          "tuerschwellen": [
+            {
+              "barrierefrei": false,
+              "breite": 1.2,
+              "id": "t1",
+              "lage": {
+                "abstand": 9,
+                "kante": "k1"
+              },
+              "name": "Tür mit Rinne",
+              "oberkante": 0.1,
+              "rinne": true
+            },
+            {
+              "barrierefrei": false,
+              "breite": 1.2,
+              "id": "t2",
+              "lage": {
+                "abstand": 11,
+                "kante": "k1"
+              },
+              "name": "Tür ohne Rinne",
+              "oberkante": 0.1
+            }
+          ],
+          "typ": "dach",
+          "vorgaben": {},
+          "zonen": [
+            {
+              "belagDicke": 0.04,
+              "hoehenversatz": -0.1,
+              "id": "z1",
+              "kontur": [
+                {
+                  "id": "zp1",
+                  "x": 8,
+                  "y": 0
+                },
+                {
+                  "id": "zp2",
+                  "x": 14,
+                  "y": 0
+                },
+                {
+                  "id": "zp3",
+                  "x": 14,
+                  "y": 3
+                },
+                {
+                  "id": "zp4",
+                  "x": 8,
+                  "y": 3
+                }
+              ],
+              "name": "Terrasse"
+            }
+          ]
+        }
+      ],
+      "id": "v1",
+      "name": "Variante 1"
+    }
+  ]
+}
