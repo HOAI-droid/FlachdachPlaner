@@ -192,3 +192,5 @@ button, input, select { font: inherit; color: inherit; }
 .befund .stufe { margin: 0; }
 .befund .objekt, .befund .quelle { color: var(--text-muted); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .befund .objekt { font-family: var(--font-mono); }
+.check-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.panel .check-row { padding-inline: var(--sp-4); }

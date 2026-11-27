@@ -795,7 +795,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
           feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { fuehreAus(setTuerschwelleBreite(d.id, x.id, v)); refresh(); } }),
           row("Abstand", meter(x.lage.abstand, 2), "abstand"),
           feldOpt("OK Schwelle", x.oberkante, "oberkante", (v) => { fuehreAus(setTuerschwelleOberkante(d.id, x.id, v)); refresh(); }, "nicht gesetzt"));
-        { const f = el("label", "field check"), c = el("input"); c.type = "checkbox"; c.checked = !!x.rinne; c.dataset.k = "rinne"; c.id = "f-rinne";
+        { const f = el("label", "check-row"), c = el("input"); c.type = "checkbox"; c.checked = !!x.rinne; c.dataset.k = "rinne"; c.id = "f-rinne";
           c.addEventListener("change", () => { fuehreAus(setTuerschwelleRinne(d.id, x.id, c.checked)); refresh(); });
           f.append(c, document.createTextNode(" Rinne vor Tür")); p.append(f); }
         anschlussZeilen(p, x.id);
@@ -806,7 +806,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         p.append(row("Art", x.name, "art"),
           feld("Länge", zahl(x.laenge, 2), "laenge", (v) => { if (v > 0) { fuehreAus(setWandanschlussLaenge(d.id, x.id, v)); refresh(); } }),
           row("Abstand", meter(x.lage.abstand, 2), "abstand"),
-          feldOpt("OK Wandanschluss", x.oberkante, "oberkante", (v) => { fuehreAus(setWandanschlussOberkante(d.id, x.id, v)); refresh(); }, "nicht gesetzt"));
+          feldOpt("OK Anschluss", x.oberkante, "oberkante", (v) => { fuehreAus(setWandanschlussOberkante(d.id, x.id, v)); refresh(); }, "nicht gesetzt"));
         anschlussZeilen(p, x.id);
         break;
       }
@@ -817,7 +817,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         p.append(row("Art", eid ? `${art} (${eid})` : art, "art"),
           feld("Tiefenlage z", zahl(x.z, 3), "z", (v) => { fuehreAus(setEntwaesserungZ(d.id, x.id, v)); refresh(); }));
         if (x.art === "notablauf" || x.art === "dachreiter") {
-          p.append(feldOpt("Überlaufkante (über z)", x.ueberlaufKante, "ueberlauf-kante", (v) => { fuehreAus(setUeberlaufKante(d.id, x.id, v)); refresh(); }, "Pack-Wert"));
+          p.append(feldOpt("Überlaufkante", x.ueberlaufKante, "ueberlauf-kante", (v) => { fuehreAus(setUeberlaufKante(d.id, x.id, v)); refresh(); }, "Pack-Wert"));
           notZeilen(p, x.id);
         }
         const opt = typOptionen(x.art);
