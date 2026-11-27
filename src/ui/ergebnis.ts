@@ -384,22 +384,29 @@ export function zeichneAnschluesse(
 ): void {
   const px = 1 / vp.scale, belegung = geteilteBelegung(vp);
   const farbe = { ok: css("--ok", "#2E6B3A"), niedrig: css("--error", "#B3261E"), unbekannt: css("--text-muted", "#666") };
-  const kand = [8, 26, 44, -14, -32];
+  const dys = [6, -18, 24, -36, 42, -54];
+  /** Erste freie Lage (dx, dy in px) neben dem Punkt: erst mittig über/unter der Linie, dann seitlich versetzt. */
+  const frei = (p: Vec2, w: number, dyListe: readonly number[]): [number, number] | null => {
+    for (const dx of [0, w / 2 + 10, -(w / 2 + 10)]) for (const dy of dyListe) {
+      if (belegung.belege(p, dx - w / 2 - 4, dy - 4, w + 8, 22)) return [dx, dy];
+    }
+    return null;
+  };
   ctx.save(); ctx.setLineDash([]); ctx.lineCap = "round"; ctx.lineJoin = "round";
   for (const a of anschluesse) {
     const st = anschlussStatus(a.vorhanden, a.soll), f = farbe[st];
-    ctx.strokeStyle = f; ctx.lineWidth = 3 * px; ctx.globalAlpha = 0.85;
-    if (st === "unbekannt") ctx.setLineDash([6 * px, 4 * px]);
+    ctx.strokeStyle = f; ctx.lineWidth = 3 * px; ctx.globalAlpha = 0.9;
+    if (st === "unbekannt") ctx.setLineDash([3 * px, 3 * px]);
     bahn(ctx, a.linie, a.art === "aufbau"); ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha = 1;
     const s = anschlussLabel(a.vorhanden, a.soll), w = textBreite(ctx, s, 11, true);
-    const dy = kand.find((d) => belegung.belege(a.ort, -w / 2 - 2, d - 2, w + 4, 18));
-    if (dy !== undefined) text(ctx, vp, s, a.ort.x - (w / 2) * px, a.ort.y + dy * px, { px: 11, mono: true, farbe: f });
+    const l = frei(a.ort, w, dys);
+    if (l) text(ctx, vp, s, a.ort.x + (l[0] - w / 2) * px, a.ort.y + l[1] * px, { px: 11, mono: true, farbe: f });
   }
   for (const n of notstaende) {
     const s = notLabel(n.kante, n.wasserstand), w = textBreite(ctx, s, 11, true);
-    const dy = [-22, -40, 22, 40].find((d) => belegung.belege(n.ort, -w / 2 - 2, d - 2, w + 4, 18));
-    if (dy !== undefined) text(ctx, vp, s, n.ort.x - (w / 2) * px, n.ort.y + dy * px, { px: 11, mono: true, farbe: css("--text", "#222") });
+    const l = frei(n.ort, w, [-22, -40, 22, 40]);
+    if (l) text(ctx, vp, s, n.ort.x + (l[0] - w / 2) * px, n.ort.y + l[1] * px, { px: 11, mono: true, farbe: css("--text", "#222") });
   }
   ctx.restore();
 }
