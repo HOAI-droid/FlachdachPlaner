@@ -110,14 +110,15 @@ export class Ansicht3D {
       else if (f.art === "platte") {
         if (f.zusatzlagen) basis = dk ? [214, 176, 40] : [244, 208, 63];
         else {
-          const t = f.dicke !== undefined && dmax > dmin ? (f.dicke - dmin) / (dmax - dmin) : 0.5; // dünn hell → dick dunkel
-          basis = dk ? [150 - 70 * t, 154 - 70 * t, 160 - 66 * t] : [240 - 70 * t, 236 - 66 * t, 226 - 56 * t];
+          const t = f.dicke !== undefined && dmax > dmin ? Math.round(((f.dicke - dmin) / (dmax - dmin)) * 5) / 5 : 0.5; // dünn hell → dick dunkel
+          basis = dk ? [170 - 110 * t, 174 - 110 * t, 182 - 106 * t] : [246 - 110 * t, 242 - 106 * t, 232 - 96 * t];
         }
       }
       else basis = mischen(dk ? "#6E7076" : "#C9C4B8", 0, 0);
       ctx.beginPath();
       for (const ring of [pts, ...f.holes.map((r) => r.map(bild))]) { ring.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y))); ctx.closePath(); }
       ctx.fillStyle = rgb(basis, f.art === "seite" ? licht * 0.85 : licht); ctx.fill("evenodd");
+      if (f.art !== "dach") { ctx.strokeStyle = ctx.fillStyle; ctx.globalAlpha = 1; ctx.lineWidth = 1; ctx.lineJoin = "round"; ctx.stroke(); } // Nähte (Antialiasing) zwischen Nachbarflächen schließen
       ctx.strokeStyle = f.art === "platte" ? css("--text-muted", "#777") : linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : f.art === "platte" ? 0.9 : 0.25; ctx.lineWidth = f.art === "platte" ? 1 : 1;
       if (f.art === "platte") {
         // Plattenstreifen: nur Fugen quer zur Gefällerichtung (Gefälle abstrahiert, bessere Lesbarkeit)
