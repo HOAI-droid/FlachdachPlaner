@@ -367,6 +367,68 @@ export function setEntwaesserungTyp(dachId: Id, id: Id, typ: TypWahl | null): Be
   };
 }
 
+/** Griff beim Verschieben einer LES: ein Endpunkt oder die ganze Strecke (Mitte → Ziel). */
+export type LesGriff = "von" | "bis" | "mitte";
+
+/** Punkt liegt auf der Dachfläche: in der Kontur (Rand zählt) und nicht im Inneren eines Aufbaus. */
+const aufDach = (d: Dachflaeche, p: Vec2): boolean =>
+  Number.isFinite(p.x) && Number.isFinite(p.y) && pointInRing(p, d.kontur) !== "outside"
+  && d.aufbauten.every((a) => pointInRing(p, a.kontur) !== "inside");
+
+/**
+ * Ablauf verschieben (PLAN Schritt 49, ein Undo-Schritt je Aufruf):
+ * Gully/Notablauf → Position `ziel`; Dachreiter → auf den nächstliegenden Kantenpunkt der Kontur projiziert
+ * (Kante kann wechseln); LES → Endpunkt (`griff` "von"/"bis") bzw. ganze Strecke mit Mitte auf `ziel`.
+ * Ungültige Lage (außerhalb der Kontur, im Aufbau, nicht endlich, LES-Länge 0) → Modell unverändert (abgelehnt).
+ */
+export function verschiebeEntwaesserung(dachId: Id, id: Id, ziel: Vec2, griff: LesGriff = "mitte"): Befehl {
+  return {
+    label: "Ablauf verschieben",
+    anwenden: (m) => {
+      const d = m.dachflaechen.find((x) => x.id === dachId);
+      if (!d || !Number.isFinite(ziel.x) || !Number.isFinite(ziel.y)) return m;
+      return mapEntw(m, dachId, id, (e) => {
+        const p = { x: ziel.x, y: ziel.y };
+        switch (e.art) {
+          case "gully":
+          case "notablauf":
+            if (!aufDach(d, p) || (e.position.x === p.x && e.position.y === p.y)) return e;
+            return { ...e, position: p };
+          case "dachreiter": {
+            let best: { kante: Id; abstand: number; distanz: number } | null = null;
+            for (let i = 0; i < d.kontur.length; i++) {
+              const a = d.kontur[i]!;
+              const b = d.kontur[(i + 1) % d.kontur.length]!;
+              const l = dist(a, b);
+              if (!(l > EPS)) continue;
+              const t = Math.min(1, Math.max(0, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (l * l)));
+              const distanz = distPointSegment(p, a, b);
+              if (!best || distanz < best.distanz - EPS) best = { kante: a.id, abstand: t * l, distanz };
+            }
+            if (!best || (e.lage.kante === best.kante && e.lage.abstand === best.abstand)) return e;
+            return { ...e, lage: { kante: best.kante, abstand: best.abstand } };
+          }
+          case "les": {
+            let von = e.von;
+            let bis = e.bis;
+            if (griff === "von") von = p;
+            else if (griff === "bis") bis = p;
+            else {
+              const dx = p.x - (e.von.x + e.bis.x) / 2;
+              const dy = p.y - (e.von.y + e.bis.y) / 2;
+              von = { x: e.von.x + dx, y: e.von.y + dy };
+              bis = { x: e.bis.x + dx, y: e.bis.y + dy };
+            }
+            if (!aufDach(d, von) || !aufDach(d, bis) || !(dist(von, bis) > EPS)) return e;
+            if (von.x === e.von.x && von.y === e.von.y && bis.x === e.bis.x && bis.y === e.bis.y) return e;
+            return { ...e, von, bis };
+          }
+        }
+      });
+    },
+  };
+}
+
 /** Gully ohne Feld `verbundenMit` (Feld entfällt ganz, alte Dateien bleiben byte-gleich). */
 function ohneVerweis(e: Gully): Gully {
   const r: { -readonly [K in keyof Gully]: Gully[K] } = { ...e };

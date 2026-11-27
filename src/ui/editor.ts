@@ -1,7 +1,7 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, istProjektGeaendert, wechsleVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, verschiebeEntwaesserung, type LesGriff, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, istProjektGeaendert, wechsleVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
@@ -1045,8 +1045,53 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   stage.setLayer("auswahl", zeichneAuswahl);
   stage.setLayer("fang", zeichneFang);
 
+  // ---------- Ablauf ziehen (Schritt 49) ----------
+  /** Aktiver Ziehvorgang: `basis` ist der Verlauf davor, jede Bewegung ersetzt den einen Undo-Schritt. */
+  let ziehen: { basis: typeof verlauf; dachId: string; id: string; griff: LesGriff; versatz: Vec2 } | null = null;
+  function ziehTreffer(w: Vec2): { griff: LesGriff; versatz: Vec2 } | null {
+    const a = auswahl;
+    if (!a || a.art !== "entwaesserung" || z.tool !== "select") return null;
+    const d = modell().dachflaechen.find((x) => x.id === a.dachId);
+    const e = d?.entwaesserung.find((x) => x.id === a.id);
+    if (!d || !e) return null;
+    const [p0, p1] = entwSegment(d, e);
+    const nah = (p: Vec2 | null) => !!p && Math.hypot(p.x - w.x, p.y - w.y) <= Math.max(tol(), 12 / stage.viewport.scale);
+    if (e.art === "les" && p0 && p1) {
+      for (const [g, p] of [["von", p0], ["bis", p1]] as const) if (nah(p)) return { griff: g, versatz: { x: p.x - w.x, y: p.y - w.y } };
+      const m = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+      if (nah(m)) return { griff: "mitte", versatz: { x: m.x - w.x, y: m.y - w.y } };
+      return null;
+    }
+    if (nah(p0)) return { griff: "mitte", versatz: { x: p0!.x - w.x, y: p0!.y - w.y } };
+    return null;
+  }
+  function ziehAnwenden(w: Vec2) {
+    const zi = ziehen;
+    if (!zi) return;
+    const roh = { x: w.x + zi.versatz.x, y: w.y + zi.versatz.y };
+    const p = fangAuswerten(roh);
+    treffer = p.treffer; ausricht = p.ausricht;
+    const neu = ausfuehren(zi.basis, aufVariante(verschiebeEntwaesserung(zi.dachId, zi.id, p.punkt, zi.griff)));
+    if (neu !== zi.basis) { verlauf = neu; z = { ...z, hinweis: null }; }
+    refresh();
+  }
+  function ziehAbbrechen() {
+    if (!ziehen) return false;
+    verlauf = ziehen.basis; ziehen = null; treffer = null; ausricht = null; refresh();
+    return true;
+  }
+
   // ---------- Eingaben ----------
   stage.onPointer({
+    ziehStart(w) {
+      const p = { x: w[0], y: w[1] }, t = ziehTreffer(p);
+      if (!t || !auswahl) return false;
+      ziehen = { basis: verlauf, dachId: auswahl.dachId, id: auswahl.id, griff: t.griff, versatz: t.versatz };
+      stage.setCursor("grabbing");
+      return true;
+    },
+    ziehBewegt(w) { ziehAnwenden({ x: w[0], y: w[1] }); },
+    ziehEnde(w) { if (ziehen) { ziehAnwenden({ x: w[0], y: w[1] }); ziehen = null; treffer = null; ausricht = null; stage.setCursor(""); refresh(); } },
     move(w) {
       cursor = { x: w[0], y: w[1] };
       treffer = null; kante = null; ausricht = null;
@@ -1091,7 +1136,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
     if (e.altKey) return;
     if (k === "enter") { if (z.entwurf.length) { e.preventDefault(); wende(abschliessen(z, modell())); } }
-    else if (k === "escape") { if (z.entwurf.length || kal.p1 || erfasst.length) { z = abbrechen(z); kal = {}; vergissErfasste(); refresh(); } else if (z.tool !== "select") setzeWerkzeug("select"); else setzeAuswahl(null); }
+    else if (k === "escape") { if (ziehAbbrechen()) return; if (z.entwurf.length || kal.p1 || erfasst.length) { z = abbrechen(z); kal = {}; vergissErfasste(); refresh(); } else if (z.tool !== "select") setzeWerkzeug("select"); else setzeAuswahl(null); }
     else if (k === "backspace") { if (z.entwurf.length) { e.preventDefault(); z = entfernePunkt(z); refresh(); } }
     else if (k === "delete") loescheAuswahl();
     else if (TASTEN[k]) setzeWerkzeug(TASTEN[k]!);

@@ -6,7 +6,7 @@ export {
   addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, addWandanschluss, loesche, neueIds, setAttika, setAttikaBreite,
   setAttikaOberkante, setAufbauOberkante, setBelagDicke, setTuerschwelleOberkante, setTuerschwelleRinne, setUeberlaufKante, setWandanschlussLaenge,
   setWandanschlussOberkante,
-  setAttikaUmlaufend, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, setRegenManuell, setStandort, setTuerschwelleBreite, setUnterlage, trenneDachflaeche, trennStreifen, type Auswahl, type IdPraefix, type TypWahl,
+  setAttikaUmlaufend, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, setRegenManuell, setStandort, setTuerschwelleBreite, setUnterlage, trenneDachflaeche, trennStreifen, verschiebeEntwaesserung, type Auswahl, type IdPraefix, type LesGriff, type TypWahl,
 } from "./commands";
 export { pruefePolygon } from "./polygon-check";
 export {

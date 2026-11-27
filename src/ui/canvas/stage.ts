@@ -14,6 +14,10 @@ export interface PointerHandlers {
   click?(w: [number, number]): void;
   dblclick?(w: [number, number]): void;
   leave?(): void;
+  /** Ziehen eines Objekts: `ziehStart` liefert true, wenn es das Ziehen übernimmt (dann kein Klick, kein Pan). */
+  ziehStart?(w: [number, number]): boolean;
+  ziehBewegt?(w: [number, number]): void;
+  ziehEnde?(w: [number, number]): void;
 }
 
 export interface Stage {
@@ -98,7 +102,18 @@ export function mountStage(host: HTMLElement): Stage {
   let idleCursor = "";
   let drag: { x: number; y: number } | null = null;
   let space = false;
+  let ziehen = false;
+  let klickUnterdrueckt = false;
   canvas.addEventListener("pointerdown", (e) => {
+    if (e.button === 0 && !space && ph.ziehStart) {
+      const [sx, sy] = pos(e);
+      if (ph.ziehStart(screenToWorld(vp, sx, sy))) {
+        ziehen = true; klickUnterdrueckt = true;
+        canvas.setPointerCapture(e.pointerId);
+        e.preventDefault();
+        return;
+      }
+    }
     if (e.button === 1 || (e.button === 0 && space)) {
       drag = { x: e.clientX, y: e.clientY };
       canvas.setPointerCapture(e.pointerId);
@@ -114,9 +129,11 @@ export function mountStage(host: HTMLElement): Stage {
     }
     cursor = screenToWorld(vp, sx, sy);
     changed();
+    if (ziehen) { ph.ziehBewegt?.(cursor); return; }
     if (!drag) ph.move?.(cursor);
   });
   canvas.addEventListener("click", (e) => {
+    if (klickUnterdrueckt) { klickUnterdrueckt = false; return; }
     if (space || e.button !== 0) return;
     const [sx, sy] = pos(e);
     ph.click?.(screenToWorld(vp, sx, sy));
@@ -127,6 +144,13 @@ export function mountStage(host: HTMLElement): Stage {
     ph.dblclick?.(screenToWorld(vp, sx, sy));
   });
   const end = (e: PointerEvent) => {
+    if (ziehen) {
+      ziehen = false;
+      canvas.releasePointerCapture(e.pointerId);
+      const [sx, sy] = pos(e);
+      ph.ziehEnde?.(screenToWorld(vp, sx, sy));
+      return;
+    }
     if (drag) { drag = null; canvas.releasePointerCapture(e.pointerId); canvas.style.cursor = space ? "grab" : idleCursor; }
   };
   canvas.addEventListener("pointerup", end);
