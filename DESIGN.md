@@ -156,6 +156,6 @@ Immer hell, Papierweiß `#FFFFFF`, Linien Schwarz `#000000`; Strichstärken ISO 
 ## 11. Gefälledämmplan (Verlegeplan) – Referenz docs/referenz/gefaelledaemmplan-*.{jpg,webp}
 Eigene Planansicht und eigener Export (2D und 3D), Nutzerwunsch: Aufbau wie die Referenzbilder.
 - 2D: Dachkontur stark (0,70 mm), Bemaßung außen, Verlegestart-Markierung + N0-Ursprung, Plattenraster als dünne Linien, je Platte Typ-Beschriftung (1…8, 8A, Kehlkeile K1…Kn), Verlegerichtungspfeil je Plattenreihe, Kehl- und Gratlinien diagonal. Nur Linien und Schrift, keine Schraffur, Flächen weiß; Hervorhebung nur durch Tint (z. B. Doppelplatten gelb).
-- 3D: Dämmkörper als Block mit Plattengrenzen, Plattentyp-Beschriftung (rot), Keil-Detail als Aufzieh-Callout; Farbe nur zur Unterscheidung von Lagen (gelb = zusätzliche Platte).
+- 3D: reduziert gegenüber 2D (Hauptinformationen stehen im 2D-Plan): Dämmkörper als Block, nach Dicke getönt (6 Stufen, dünn hell → dick dunkel), nur Fugen quer zur Gefällerichtung, keine Beschriftung; Gefälle-Modus mit Gefällepfeilen. Im 2D-Plan weiterhin: Plattengrenzen, Plattentyp-Beschriftung (rot), Keil-Detail als Aufzieh-Callout; Farbe nur zur Unterscheidung von Lagen (gelb = zusätzliche Platte).
 - Im Plan angegeben: **Ø Gefälledämmung** je Dachfläche (mm), Ablauf-Koten `z`.
 - Keine Stückliste (Nutzerentscheid).
