@@ -138,7 +138,7 @@ export function baueProjektDxf(e: DxfExportEingabe): string {
     }
   }
   for (const a of e.anschluesse ?? []) {
-    if (a.linie.length >= 2) ring(w, DXF_LAYER.anschluss, a.linie, false); else linie(w, DXF_LAYER.anschluss, a.von, a.bis);
+    if (a.linie.length >= 2) ring(w, DXF_LAYER.anschluss, a.linie, a.art === "aufbau"); else linie(w, DXF_LAYER.anschluss, a.von, a.bis);
     beschriftung(w, DXF_LAYER.anschluss, anschlussLabel(a.vorhanden, a.soll), { x: a.ort.x, y: a.ort.y + 0.15 }, 0.12);
   }
   for (const nw of e.notstaende ?? []) {

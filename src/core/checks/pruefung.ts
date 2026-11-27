@@ -267,11 +267,11 @@ function pruefeAnschluesse(d: Dachflaeche, an: readonly Anschluss[], regelFehlt:
 interface Strecke { readonly a: Vec2; readonly b: Vec2 }
 
 /** Hauptentwässerung (Gully, LES, Dachreiter mit Pack-Art ≠ „not“) als Strecken samt Kote z. */
-function hauptAblaeufe(d: Dachflaeche, g: DachGefaelle): (Strecke & { readonly z: number })[] {
-  const out: (Strecke & { z: number })[] = [];
+function hauptAblaeufe(d: Dachflaeche, g: DachGefaelle): (Strecke & { readonly z: number; readonly zHoch?: number })[] {
+  const out: (Strecke & { z: number; zHoch?: number })[] = [];
   for (const e of d.entwaesserung) {
     if (e.art === "gully") out.push({ a: e.position, b: e.position, z: e.z });
-    else if (e.art === "les") out.push({ a: e.von, b: e.bis, z: e.z });
+    else if (e.art === "les") out.push({ a: e.von, b: e.bis, z: e.z, zHoch: e.z + (g.les.find((k) => k.ablaufId === e.id)?.gefaelleLaengs ?? 0) * Math.hypot(e.bis.x - e.von.x, e.bis.y - e.von.y) });
     else if (e.art === "dachreiter") {
       const lage = g.dachreiter.find((x) => x.ablaufId === e.id);
       if (lage && lage.masse?.art !== "not") out.push({ a: lage.von, b: lage.bis, z: e.z });
@@ -353,7 +353,7 @@ function pruefeNotentwaesserung(d: Dachflaeche, g: DachGefaelle, an: readonly An
   if (bekannt.length === 0) return;
   const haupt = hauptAblaeufe(d, g);
   if (haupt.length > 0) {
-    const zMax = Math.max(...haupt.map((h) => h.z)), zTp = Math.min(...haupt.map((h) => h.z));
+    const zMax = Math.max(...haupt.map((h) => h.zHoch ?? h.z)), zTp = Math.min(...haupt.map((h) => h.z));
     // Kante ≤ höchste Kote der Hauptabläufe: Notentwässerung springt vor der Hauptentwässerung an
     for (const n of bekannt) {
       if (n.kante > zMax + EPS) continue;

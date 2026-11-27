@@ -37,6 +37,11 @@ const ok = (c, msg) => { if (!c) { fails++; console.error("FAIL:", msg); } else 
   await pg.keyboard.press("Escape"); await pg.mouse.up(); await pg.waitForTimeout(100);
   p = await pos();
   ok(Math.abs(p.x - 5) < 1e-9 && Math.abs(p.y - 4) < 1e-9, "Esc: Ziehen abgebrochen, Position unverändert");
+  // Hin und zurück: Startposition wird wiederhergestellt
+  await pg.mouse.click(sx, sy); await pg.waitForTimeout(100);
+  await pg.mouse.move(sx, sy); await pg.mouse.down(); await pg.mouse.move(tx, ty, { steps: 6 }); await pg.mouse.move(sx, sy, { steps: 6 }); await pg.mouse.up(); await pg.waitForTimeout(100);
+  p = await pos();
+  ok(Math.abs(p.x - 5) < 0.05 && Math.abs(p.y - 4) < 0.05, `Hin und zurück: ~(5|4), ist (${p.x.toFixed(2)}|${p.y.toFixed(2)})`);
   // Außerhalb der Kontur: letzte gültige Lage bleibt
   const [ox, oy] = await scr(15, 4);
   await pg.mouse.click(sx, sy); await pg.waitForTimeout(100);

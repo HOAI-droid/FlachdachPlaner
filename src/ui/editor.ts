@@ -463,6 +463,12 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
   }
+  let anschlussCache: { schluessel: object; m: ProjectModel; daten: ReturnType<typeof anschlussDaten> } | null = null;
+  /** Je Berechnungsergebnis nur einmal rechnen (Neuzeichnen bei Pan/Zoom, Panel). */
+  function anschlussDatenCached(m: ProjectModel, erg: NonNullable<typeof ergebnis>) {
+    if (!anschlussCache || anschlussCache.schluessel !== erg || anschlussCache.m !== m) anschlussCache = { schluessel: erg, m, daten: anschlussDaten(m, erg.slope, erg.notfall) };
+    return anschlussCache.daten;
+  }
   function anschlussDaten(m: ProjectModel, slope: Parameters<typeof computeAnschluesse>[1], notfall: Parameters<typeof computeNotwasserstaende>[2]) {
     try { return { anschluesse: computeAnschluesse(m, slope, packs), notstaende: computeNotwasserstaende(m, slope, notfall, packs) }; } catch { return { anschluesse: [], notstaende: [] }; }
   }
@@ -732,8 +738,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   /** Live: vorhanden / soll / erforderliche OK je Anschluss (Schritt 45), aus computeAnschluesse. */
   function anschlussZeilen(p: HTMLElement, objektId: string) {
     if (!ergebnis) return;
-    let liste: ReturnType<typeof computeAnschluesse> = [];
-    try { liste = computeAnschluesse(modell(), ergebnis.slope, packs); } catch { return; }
+    const liste = anschlussDatenCached(modell(), ergebnis).anschluesse;
     const x = liste.find((q) => q.objektId === objektId);
     if (!x) return;
     p.append(row("OK fertig max", `${zahl(x.okFertigMax, 3)} m`, "ok-fertig"),
@@ -745,8 +750,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   function notZeilen(p: HTMLElement, objektId: string) {
     if (!ergebnis) return;
-    let liste: ReturnType<typeof computeNotwasserstaende> = [];
-    try { liste = computeNotwasserstaende(modell(), ergebnis.slope, ergebnis.notfall, packs); } catch { return; }
+    const liste = anschlussDatenCached(modell(), ergebnis).notstaende;
     const x = liste.find((q) => q.objektId === objektId);
     if (!x) return;
     p.append(row("Kante (Pack)", x.kantePack === null ? "–" : `${zahl(x.kantePack, 3)} m`, "not-kante-pack"),
@@ -821,7 +825,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         p.append(row("Art", eid ? `${art} (${eid})` : art, "art"),
           feld("Tiefenlage z", zahl(x.z, 3), "z", (v) => { fuehreAus(setEntwaesserungZ(d.id, x.id, v)); refresh(); }));
         if (x.art === "notablauf" || x.art === "dachreiter") {
-          p.append(feldOpt("Überlaufkante", x.ueberlaufKante, "ueberlauf-kante", (v) => { fuehreAus(setUeberlaufKante(d.id, x.id, v)); refresh(); }, "Pack-Wert"));
+          p.append(feldOpt("Überlaufkante über z [m]", x.ueberlaufKante, "ueberlauf-kante", (v) => { fuehreAus(setUeberlaufKante(d.id, x.id, v)); refresh(); }, "Pack-Wert"));
           notZeilen(p, x.id);
         }
         const opt = typOptionen(x.art);
@@ -1126,7 +1130,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (!ergebnis || ansicht !== "gefaelle") return;
     zeichneKoten(ctx, vp, ergebnis);
     if (!zeigeAnschluesse) return;
-    try { zeichneAnschluesse(ctx, vp, computeAnschluesse(modell(), ergebnis.slope, packs), computeNotwasserstaende(modell(), ergebnis.slope, ergebnis.notfall, packs)); } catch { /* Berechnung fehlgeschlagen: Ebene entfällt */ }
+    const ad = anschlussDatenCached(modell(), ergebnis);
+    try { zeichneAnschluesse(ctx, vp, ad.anschluesse, ad.notstaende); } catch { /* Zeichnen fehlgeschlagen: Ebene entfällt */ }
   });
   stage.setLayer("symbole", zeichneSymbole);
   stage.setLayer("auswahl", zeichneAuswahl);
@@ -1134,7 +1139,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
 
   // ---------- Ablauf ziehen (Schritt 49) ----------
   /** Aktiver Ziehvorgang: `basis` ist der Verlauf davor, jede Bewegung ersetzt den einen Undo-Schritt. */
-  let ziehen: { basis: typeof verlauf; dachId: string; id: string; griff: LesGriff; versatz: Vec2 } | null = null;
+  let ziehen: { basis: typeof verlauf; dachId: string; id: string; griff: LesGriff; versatz: Vec2; start: Vec2 } | null = null;
   function ziehTreffer(w: Vec2): { griff: LesGriff; versatz: Vec2 } | null {
     const a = auswahl;
     if (!a || a.art !== "entwaesserung" || z.tool !== "select") return null;
@@ -1159,7 +1164,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const p = fangAuswerten(roh);
     treffer = p.treffer; ausricht = p.ausricht;
     const neu = ausfuehren(zi.basis, aufVariante(verschiebeEntwaesserung(zi.dachId, zi.id, p.punkt, zi.griff)));
+    // Unverändert = Ausgangslage (zurückgezogen) oder ungültige Lage (letzte gültige bleibt stehen)
     if (neu !== zi.basis) { verlauf = neu; z = { ...z, hinweis: null }; }
+    else if (Math.hypot(p.punkt.x - zi.start.x, p.punkt.y - zi.start.y) < 0.02) verlauf = neu;
     refresh();
   }
   function ziehAbbrechen() {
@@ -1173,7 +1180,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     ziehStart(w) {
       const p = { x: w[0], y: w[1] }, t = ziehTreffer(p);
       if (!t || !auswahl) return false;
-      ziehen = { basis: verlauf, dachId: auswahl.dachId, id: auswahl.id, griff: t.griff, versatz: t.versatz };
+      ziehen = { basis: verlauf, dachId: auswahl.dachId, id: auswahl.id, griff: t.griff, versatz: t.versatz, start: { x: p.x + t.versatz.x, y: p.y + t.versatz.y } };
       stage.setCursor("grabbing");
       return true;
     },
