@@ -392,6 +392,13 @@ export function zeichneAnschluesse(
     }
     return null;
   };
+  /** Dünne Leitlinie vom Anschlusspunkt zum Label, wenn dieses nicht unmittelbar daneben steht. */
+  const leitlinie = (p: Vec2, l: [number, number], f: string) => {
+    if (l[0] === 0 && Math.abs(l[1]) <= 24) return;
+    ctx.save(); ctx.strokeStyle = f; ctx.lineWidth = px; ctx.globalAlpha = 0.7; ctx.setLineDash([]);
+    bahn(ctx, [p, { x: p.x + l[0] * px, y: p.y + (l[1] > 0 ? l[1] : l[1] + 14) * px }], false); ctx.stroke();
+    ctx.restore();
+  };
   ctx.save(); ctx.setLineDash([]); ctx.lineCap = "round"; ctx.lineJoin = "round";
   for (const a of anschluesse) {
     const st = anschlussStatus(a.vorhanden, a.soll), f = farbe[st];
@@ -401,12 +408,12 @@ export function zeichneAnschluesse(
     ctx.setLineDash([]); ctx.globalAlpha = 1;
     const s = anschlussLabel(a.vorhanden, a.soll), w = textBreite(ctx, s, 11, true);
     const l = frei(a.ort, w, dys);
-    if (l) text(ctx, vp, s, a.ort.x + (l[0] - w / 2) * px, a.ort.y + l[1] * px, { px: 11, mono: true, farbe: f });
+    if (l) { leitlinie(a.ort, l, f); text(ctx, vp, s, a.ort.x + (l[0] - w / 2) * px, a.ort.y + l[1] * px, { px: 11, mono: true, farbe: f }); }
   }
   for (const n of notstaende) {
     const s = notLabel(n.kante, n.wasserstand), w = textBreite(ctx, s, 11, true);
     const l = frei(n.ort, w, [-22, -40, 22, 40]);
-    if (l) text(ctx, vp, s, n.ort.x + (l[0] - w / 2) * px, n.ort.y + l[1] * px, { px: 11, mono: true, farbe: css("--text", "#222") });
+    if (l) { leitlinie(n.ort, l, css("--text-muted", "#666")); text(ctx, vp, s, n.ort.x + (l[0] - w / 2) * px, n.ort.y + l[1] * px, { px: 11, mono: true, farbe: css("--text", "#222") }); }
   }
   ctx.restore();
 }
