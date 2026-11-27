@@ -1,7 +1,7 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, verschiebeEntwaesserung, type LesGriff, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, istProjektGeaendert, wechsleVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, verschiebeEntwaesserung, computeAnschluesse, computeNotwasserstaende, setAttikaOberkante, setTuerschwelleOberkante, setTuerschwelleRinne, setWandanschlussOberkante, setWandanschlussLaenge, setAufbauOberkante, setBelagDicke, setUeberlaufKante, type LesGriff, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, istProjektGeaendert, wechsleVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
@@ -33,7 +33,7 @@ import { hoereAufMenue, waehleProjektText } from "./datei-ausgabe";
 import { autosaveSchreiben, base64ZuBytes, bytesZuBase64, leseProjekt, speichereDatei, waehleDatei } from "./speicher";
 
 const FANG_PX = 10;
-const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", g: "gully", n: "notablauf", r: "dachreiter", l: "les", x: "trennen", m: "measure" };
+const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", w: "wandanschluss", g: "gully", n: "notablauf", r: "dachreiter", l: "les", x: "trennen", m: "measure" };
 const FANG_NAME: Record<SnapArt | "ausrichtung", string> = { ausrichtung: "Ausrichtung", endpunkt: "Endpunkt", schnittpunkt: "Schnittpunkt", mittelpunkt: "Mittelpunkt", lot: "Lot", ortho: "Ortho" };
 const HINWEIS: Record<WerkzeugId, string> = {
   select: "Objekt anklicken. Entf löscht die Auswahl.",
@@ -42,6 +42,7 @@ const HINWEIS: Record<WerkzeugId, string> = {
   aufbau: "Punkte innerhalb einer Dachfläche klicken. Enter oder Doppelklick schließt.",
   terrasse: "Punkte innerhalb einer Dachfläche klicken. Enter oder Doppelklick schließt.",
   schwelle: "Auf eine Kante der Dachkontur klicken. Die Schwelle wird dort zentriert.",
+  wandanschluss: "Länge eingeben, dann auf eine Kante der Dachkontur klicken. Der Wandanschluss wird dort zentriert.",
   gully: "In die Dachfläche klicken. Tiefenlage z des Ablaufs unten eingeben.",
   notablauf: "In die Dachfläche klicken. Notablauf mit Tiefenlage z.",
   dachreiter: "Auf eine Kante der Dachkontur klicken. Der Dachreiter wird dort zentriert.",
@@ -75,6 +76,18 @@ function feld(label: string, wert: string, key: string, commit: (v: number) => v
   f.append(l, i);
   return f;
 }
+/** Optionale Höhe (m): leeres Feld = nicht gesetzt (undefined). */
+function feldOpt(label: string, wert: number | undefined, key: string, commit: (v: number | undefined) => void, platzhalter = ""): HTMLElement {
+  const f = feld(label, wert === undefined ? "" : zahl(wert, 3), key, () => undefined);
+  const i = f.querySelector("input")!;
+  i.placeholder = platzhalter;
+  const neu = i.cloneNode(true) as HTMLInputElement; // Handler von feld() entfernen
+  neu.addEventListener("change", () => { const t = neu.value.trim(); if (t === "") commit(undefined); else { const v = num(t); if (Number.isFinite(v)) commit(v); } });
+  neu.addEventListener("keydown", (e) => { if (e.key === "Enter") neu.blur(); });
+  i.replaceWith(neu);
+  return f;
+}
+const mm = (v: number | null) => (v === null ? "–" : `${Math.round(v * 1000)} mm`);
 function button(text: string, onClick: () => void, cls = "btn"): HTMLButtonElement {
   const b = el("button", cls, text);
   b.type = "button";
@@ -88,6 +101,8 @@ export interface Editor {
   /** Ganzes Projekt (alle Varianten) laden. */
   ladeProjekt(p: Projekt): void;
   readonly projekt: Projekt;
+  /** Auswahl setzen (Tests/E2E). */
+  waehle(a: Auswahl | null): void;
   /** Befehl ausführen (Undo-fähig), z. B. aus dem Standort-Panel. */
   ausfuehre(b: Befehl): void;
   /** Wird nach jeder Aktualisierung aufgerufen (z. B. Update-Panel). */
@@ -202,7 +217,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     return { treffer: t, ausricht: null, punkt: t ? t.punkt : w };
   }
   function gefangen(w: Vec2): Vec2 {
-    if (!zeichnetMitFang() || z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") return w;
+    if (!zeichnetMitFang() || z.tool === "attika" || z.tool === "schwelle" || z.tool === "wandanschluss" || z.tool === "dachreiter") return w;
     return fangAuswerten(w).punkt;
   }
   function verweilen(t: SnapTreffer | null) {
@@ -257,6 +272,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       (auswahl.art === "zone" && d.zonen.some((x) => x.id === auswahl!.id)) ||
       (auswahl.art === "attika" && d.attika.some((x) => x.id === auswahl!.id)) ||
       (auswahl.art === "tuerschwelle" && d.tuerschwellen.some((x) => x.id === auswahl!.id)) ||
+      (auswahl.art === "wandanschluss" && (d.wandanschluesse ?? []).some((x) => x.id === auswahl!.id)) ||
       (auswahl.art === "entwaesserung" && d.entwaesserung.some((x) => x.id === auswahl!.id)));
     if (!ok) auswahl = null;
   }
@@ -680,6 +696,9 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (z.tool === "schwelle") {
       p.append(feld("Breite", zahl(z.schwellenBreite, 2), "schwelle-breite", (v) => { if (v > 0) { z = setzeSchwellenBreite(z, v); refresh(); } }));
     }
+    if (z.tool === "wandanschluss") {
+      p.append(feld("Länge", zahl(z.schwellenBreite, 2), "wand-laenge", (v) => { if (v > 0) { z = setzeSchwellenBreite(z, v); refresh(); } }));
+    }
     if (z.tool === "trennen") {
       p.append(feld("Breite", zahl(z.trennBreite, 2), "trenn-breite", (v) => { if (v > 0) { z = setzeTrennBreite(z, v); refresh(); } }));
     }
@@ -706,6 +725,31 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     ausfuehreBefehl(ablaeufeHinzufuegen(r.ablaeufe, standardTyp("gully")));
   }
 
+  /** Live: vorhanden / soll / erforderliche OK je Anschluss (Schritt 45), aus computeAnschluesse. */
+  function anschlussZeilen(p: HTMLElement, objektId: string) {
+    if (!ergebnis) return;
+    let liste: ReturnType<typeof computeAnschluesse> = [];
+    try { liste = computeAnschluesse(modell(), ergebnis.slope, packs); } catch { return; }
+    const x = liste.find((q) => q.objektId === objektId);
+    if (!x) return;
+    p.append(row("OK fertig max", `${zahl(x.okFertigMax, 3)} m`, "ok-fertig"),
+      row("Anschlusshöhe vorhanden", mm(x.vorhanden), "ah-vorhanden"),
+      row("Anschlusshöhe soll", mm(x.soll), "ah-soll"),
+      row("Erforderliche OK", x.erforderlicheOberkante === null ? "–" : `${zahl(x.erforderlicheOberkante, 3)} m`, "ah-erforderlich"));
+    if (x.soll === null) p.append(el("div", "note warn", "Regel „anschlusshoehe“ fehlt im Pack."));
+    else if (x.vorhanden !== null && x.vorhanden < x.soll - 1e-9) p.append(el("div", "note warn", `Zu niedrig: ${mm(x.vorhanden)} statt ${mm(x.soll)}.`));
+  }
+  function notZeilen(p: HTMLElement, objektId: string) {
+    if (!ergebnis) return;
+    let liste: ReturnType<typeof computeNotwasserstaende> = [];
+    try { liste = computeNotwasserstaende(modell(), ergebnis.slope, ergebnis.notfall, packs); } catch { return; }
+    const x = liste.find((q) => q.objektId === objektId);
+    if (!x) return;
+    p.append(row("Kante (Pack)", x.kantePack === null ? "–" : `${zahl(x.kantePack, 3)} m`, "not-kante-pack"),
+      row("Kante wirksam", x.kante === null ? "–" : `${zahl(x.kante, 3)} m${x.kanteQuelle === "nutzer" ? " (Nutzer)" : ""}`, "not-kante"),
+      row("Überfallhöhe (Schätzung)", mm(x.ueberfallhoehe), "not-ueberfall"),
+      row("Notwasserstand (Schätzung)", x.wasserstand === null ? "–" : `${zahl(x.wasserstand, 3)} m`, "not-wasser"));
+  }
   function panelAuswahl() {
     const p = shell.panels.auswahl;
     p.replaceChildren();
@@ -720,30 +764,50 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
           row("Umfang", meter(konturUmfang(d.kontur), 2), "umfang"),
           row("Attika Länge", meter(attikaGesamtLaenge(d), 2), "attika-laenge"),
           row("Attika Fläche", quadratmeter(attikaGesamtFlaeche(d), 2), "attika-flaeche"));
+        p.append(feldOpt("Belagdicke", d.belagDicke, "belag-dicke", (v) => { fuehreAus(setBelagDicke(d.id, null, v)); refresh(); }, "0"));
         { const b = el("div", "pad"); b.append(button("Abläufe vorschlagen", () => schlageVor(d.id))); p.append(b); }
         break;
       case "aufbau": {
         const x = d.aufbauten.find((q) => q.id === a.id)!;
-        p.append(row("Art", "Aufbau", "art"), row("Fläche", quadratmeter(aufbauFlaeche(x), 2), "flaeche"));
+        p.append(row("Art", "Aufbau", "art"), row("Fläche", quadratmeter(aufbauFlaeche(x), 2), "flaeche"),
+          feldOpt("OK Aufsetzkranz", x.oberkante, "oberkante", (v) => { fuehreAus(setAufbauOberkante(d.id, x.id, v)); refresh(); }, "nicht gesetzt"));
+        anschlussZeilen(p, x.id);
         break;
       }
       case "zone": {
         const x = d.zonen.find((q) => q.id === a.id)!;
-        p.append(row("Art", x.name, "art"), row("Fläche", quadratmeter(zonenFlaeche(x), 2), "flaeche"));
+        p.append(row("Art", x.name, "art"), row("Fläche", quadratmeter(zonenFlaeche(x), 2), "flaeche"),
+          feldOpt("Belagdicke", x.belagDicke, "belag-dicke", (v) => { fuehreAus(setBelagDicke(d.id, x.id, v)); refresh(); }, d.belagDicke === undefined ? "0" : zahl(d.belagDicke, 3)));
         break;
       }
       case "attika": {
         const x = d.attika.find((q) => q.id === a.id)!;
         p.append(row("Art", "Attika", "art"), row("Länge", meter(attikaLaenge(d, x), 2), "laenge"),
           feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { fuehreAus(setAttikaBreite(d.id, x.id, v)); refresh(); } }),
-          row("Fläche", quadratmeter(attikaSegmentFlaeche(d, x), 2), "flaeche"));
+          row("Fläche", quadratmeter(attikaSegmentFlaeche(d, x), 2), "flaeche"),
+          feldOpt("OK Attika", x.oberkante, "oberkante", (v) => { fuehreAus(setAttikaOberkante(d.id, x.id, v)); refresh(); }, "nicht gesetzt"));
+        anschlussZeilen(p, x.id);
         break;
       }
       case "tuerschwelle": {
         const x = d.tuerschwellen.find((q) => q.id === a.id)!;
         p.append(row("Art", "Türschwelle", "art"),
           feld("Breite", zahl(x.breite, 2), "breite", (v) => { if (v > 0) { fuehreAus(setTuerschwelleBreite(d.id, x.id, v)); refresh(); } }),
-          row("Abstand", meter(x.lage.abstand, 2), "abstand"));
+          row("Abstand", meter(x.lage.abstand, 2), "abstand"),
+          feldOpt("OK Schwelle", x.oberkante, "oberkante", (v) => { fuehreAus(setTuerschwelleOberkante(d.id, x.id, v)); refresh(); }, "nicht gesetzt"));
+        { const f = el("label", "field check"), c = el("input"); c.type = "checkbox"; c.checked = !!x.rinne; c.dataset.k = "rinne"; c.id = "f-rinne";
+          c.addEventListener("change", () => { fuehreAus(setTuerschwelleRinne(d.id, x.id, c.checked)); refresh(); });
+          f.append(c, document.createTextNode(" Rinne vor Tür")); p.append(f); }
+        anschlussZeilen(p, x.id);
+        break;
+      }
+      case "wandanschluss": {
+        const x = (d.wandanschluesse ?? []).find((q) => q.id === a.id)!;
+        p.append(row("Art", x.name, "art"),
+          feld("Länge", zahl(x.laenge, 2), "laenge", (v) => { if (v > 0) { fuehreAus(setWandanschlussLaenge(d.id, x.id, v)); refresh(); } }),
+          row("Abstand", meter(x.lage.abstand, 2), "abstand"),
+          feldOpt("OK Wandanschluss", x.oberkante, "oberkante", (v) => { fuehreAus(setWandanschlussOberkante(d.id, x.id, v)); refresh(); }, "nicht gesetzt"));
+        anschlussZeilen(p, x.id);
         break;
       }
       case "entwaesserung": {
@@ -752,6 +816,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
         const eid = ergebnis?.eids.get(`${d.id}/${x.id}`);
         p.append(row("Art", eid ? `${art} (${eid})` : art, "art"),
           feld("Tiefenlage z", zahl(x.z, 3), "z", (v) => { fuehreAus(setEntwaesserungZ(d.id, x.id, v)); refresh(); }));
+        if (x.art === "notablauf" || x.art === "dachreiter") {
+          p.append(feldOpt("Überlaufkante (über z)", x.ueberlaufKante, "ueberlauf-kante", (v) => { fuehreAus(setUeberlaufKante(d.id, x.id, v)); refresh(); }, "Pack-Wert"));
+          notZeilen(p, x.id);
+        }
         const opt = typOptionen(x.art);
         if (opt.length) {
           const f = el("div", "field"), l = el("label", "", "Produkt"), sel = el("select");
@@ -867,7 +935,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const belegung = geteilteBelegung(vp);
     for (const d of modell().dachflaechen) {
       for (const e of d.entwaesserung) zeichneEntwaesserung(ctx, vp, d, e, belegung, ergebnis?.eids.get(`${d.id}/${e.id}`), ansicht === "gefaelle");
-      for (const t of d.tuerschwellen) {
+      for (const t of [...d.tuerschwellen.map((x) => ({ lage: x.lage, breite: x.breite })), ...(d.wandanschluesse ?? []).map((x) => ({ lage: x.lage, breite: x.laenge }))]) {
         const i = d.kontur.findIndex((q) => q.id === t.lage.kante);
         if (i < 0) continue;
         const a = d.kontur[i]!, b = d.kontur[(i + 1) % d.kontur.length]!;
@@ -905,7 +973,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       ctx.beginPath();
       if (p1) { ctx.moveTo(pt.x, pt.y); ctx.lineTo(p1.x, p1.y); ctx.lineWidth = 4 * px; } else ctx.arc(pt.x, pt.y, 11 * px, 0, Math.PI * 2);
     } else {
-      const t = d.tuerschwellen.find((x) => x.id === a.id);
+      const ts = d.tuerschwellen.find((x) => x.id === a.id), wa = (d.wandanschluesse ?? []).find((x) => x.id === a.id);
+      const t = ts ? { lage: ts.lage, breite: ts.breite } : wa ? { lage: wa.lage, breite: wa.laenge } : undefined;
       const i = d.kontur.findIndex((q) => q.id === t?.lage.kante);
       if (!t || i < 0) return;
       const p = d.kontur[i]!, q = d.kontur[(i + 1) % d.kontur.length]!;
@@ -953,7 +1022,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       const q = kal.p2 ?? treffer?.punkt ?? cursor;
       if (q) { ctx.strokeStyle = farbe; ctx.lineWidth = 1.5 * px; bahn(ctx, [kal.p1, q], false); ctx.stroke(); }
     }
-    if (kante && (z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter")) {
+    if (kante && (z.tool === "attika" || z.tool === "schwelle" || z.tool === "wandanschluss" || z.tool === "dachreiter")) {
       const d = modell().dachflaechen.find((x) => x.id === kante!.dachId)!;
       const i = d.kontur.findIndex((q) => q.id === kante!.kante);
       ctx.strokeStyle = farbe; ctx.lineWidth = 3 * px; ctx.globalAlpha = .7;
@@ -1097,7 +1166,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       stage.setCursor(ziehTreffer(cursor) ? "grab" : "");
       treffer = null; kante = null; ausricht = null;
       if (zeichnetMitFang()) {
-        if (z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") kante = kantenTreffer(modell(), cursor, tol());
+        if (z.tool === "attika" || z.tool === "schwelle" || z.tool === "wandanschluss" || z.tool === "dachreiter") kante = kantenTreffer(modell(), cursor, tol());
         else {
           const f = fangAuswerten(cursor);
           treffer = f.treffer; ausricht = f.ausricht;
@@ -1155,6 +1224,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     lade: { value: (m: ProjectModel) => { einbetten = false; verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
     ladeProjekt: { value: (pr: Projekt) => { einbetten = false; verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
     projekt: { get: () => aktuellesProjekt() },
+    waehle: { value: setzeAuswahl },
   });
   return api;
 }

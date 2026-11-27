@@ -10,13 +10,13 @@ import { dachPolygon, konturKante } from "../model/model";
 import type { Dachflaeche, EntwaesserungsArt, Id,  ProjectModel } from "../model/types";
 import type { SnapSegment } from "../snap";
 import {
-  addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, neueIds, setAttika, setAttikaUmlaufend,
+  addAufbau, addDachflaeche, addDachreiter, addLes, addPunktablauf, addTerrasse, addTuerschwelle, addWandanschluss, neueIds, setAttika, setAttikaUmlaufend,
   trenneDachflaeche, type Auswahl, type TypWahl,
 } from "./commands";
 import type { Befehl } from "./history";
 import { pruefePolygon } from "./polygon-check";
 
-export type WerkzeugId = "select" | "contour" | "attika" | "aufbau" | "terrasse" | "schwelle" | "measure" | "gully" | "notablauf" | "dachreiter" | "les" | "trennen";
+export type WerkzeugId = "select" | "contour" | "attika" | "aufbau" | "terrasse" | "schwelle" | "wandanschluss" | "measure" | "gully" | "notablauf" | "dachreiter" | "les" | "trennen";
 export const ENTWAESSERUNGS_WERKZEUGE: readonly WerkzeugId[] = ["gully", "notablauf", "dachreiter", "les"];
 export const POLYGON_WERKZEUGE: readonly WerkzeugId[] = ["contour", "aufbau", "terrasse"];
 
@@ -124,6 +124,16 @@ export function waehle(m: ProjectModel, p: Vec2, tol: number): Auswahl | null {
       const b = { x: a.x + u.x * t.breite, y: a.y + u.y * t.breite };
       if (distPointSegment(p, a, b) <= tol) return { art: "tuerschwelle", id: t.id, dachId: d.id };
     }
+    for (const w of d.wandanschluesse ?? []) {
+      const k = konturKante(d.kontur, w.lage.kante);
+      if (!k) continue;
+      const l = dist(k[0], k[1]);
+      if (l <= EPS) continue;
+      const u = { x: (k[1].x - k[0].x) / l, y: (k[1].y - k[0].y) / l };
+      const a = { x: k[0].x + u.x * w.lage.abstand, y: k[0].y + u.y * w.lage.abstand };
+      const b = { x: a.x + u.x * w.laenge, y: a.y + u.y * w.laenge };
+      if (distPointSegment(p, a, b) <= tol) return { art: "wandanschluss", id: w.id, dachId: d.id };
+    }
     for (const a of d.attika) {
       const k = konturKante(d.kontur, a.kante);
       if (k && distPointSegment(p, k[0], k[1]) <= tol) return { art: "attika", id: a.id, dachId: d.id };
@@ -179,6 +189,16 @@ export function klick(z: WerkzeugZustand, m: ProjectModel, p: Vec2, tol: number,
         zustand: { ...z, hinweis: null },
         befehl: addTuerschwelle(t.dachId, t.kante, t.abstand - z.schwellenBreite / 2, z.schwellenBreite),
         auswahl: { art: "tuerschwelle", id: neueIds(m, "ts")[0]!, dachId: t.dachId },
+      };
+    }
+    case "wandanschluss": {
+      const t = kantenTreffer(m, p, tol);
+      if (!t) return ohne("Auf eine Dachkontur klicken.");
+      if (z.schwellenBreite > t.laenge) return ohne("Der Wandanschluss ist länger als die Kante.");
+      return {
+        zustand: { ...z, hinweis: null },
+        befehl: addWandanschluss(t.dachId, t.kante, t.abstand - z.schwellenBreite / 2, z.schwellenBreite),
+        auswahl: { art: "wandanschluss", id: neueIds(m, "wa")[0]!, dachId: t.dachId },
       };
     }
     case "gully": case "notablauf": {

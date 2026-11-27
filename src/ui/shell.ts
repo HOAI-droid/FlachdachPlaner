@@ -13,6 +13,7 @@ const ICONS: Record<string, string> = {
   aufbau: '<path d="M3 3h10v10H3z"/><path d="M3 3l10 10M13 3L3 13"/>',
   terrasse: '<path d="M2 4h12v8H2z"/><path d="M5 8h6"/>',
   schwelle: '<path d="M2 13h12"/><path d="M5 13V7h6v6"/>',
+  wandanschluss: '<path d="M2 13h12"/><path d="M2 3v10M5 3v10"/>',
   trennen: '<path d="M2 2h12v12H2z"/><path d="M7 2v12M9 2v12"/>',
   undo: '<path d="M6 3L2 7l4 4"/><path d="M2 7h7a4 4 0 010 8H6"/>',
   redo: '<path d="M10 3l4 4-4 4"/><path d="M14 7H7a4 4 0 000 8h3"/>',
@@ -21,7 +22,7 @@ const GROUPS: { name: string; tools: [string, string, string][] }[] = [
   { name: "Auswahl", tools: [["select", "Auswählen", "V"]] },
   { name: "Zeichnen", tools: [
     ["contour", "Dachkontur", "K"], ["attika", "Attika", "A"], ["aufbau", "Aufbau", "U"],
-    ["terrasse", "Terrasse", "T"], ["schwelle", "Türschwelle", "S"],
+    ["terrasse", "Terrasse", "T"], ["schwelle", "Türschwelle", "S"], ["wandanschluss", "Wandanschluss", "W"],
     ["trennen", "Dachfläche trennen", "X"],
   ] },
   { name: "Entwässerung", tools: [["gully", "Gully setzen", "G"], ["notablauf", "Notablauf setzen", "N"], ["dachreiter", "Dachreiter setzen", "R"], ["les", "Linienentwässerung (LES)", "L"]] },

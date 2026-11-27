@@ -331,6 +331,8 @@ export function befundZiel(m: ProjectModel, b: Befund): BefundZiel {
       const i = d.kontur.findIndex((q) => q.id === at.kante), a = d.kontur[i], c = d.kontur[(i + 1) % d.kontur.length];
       return { auswahl: { art: "attika", id, dachId: d.id }, mitte: b.ort ?? (a && c ? { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 } : mittel(d.kontur)) };
     }
+    const wa = (d.wandanschluesse ?? []).find((x) => x.id === id);
+    if (wa) return { auswahl: { art: "wandanschluss", id, dachId: d.id }, mitte: b.ort ?? kantenLage(d, wa.lage.kante, wa.lage.abstand)?.p ?? mittel(d.kontur) };
     const ts = d.tuerschwellen.find((x) => x.id === id);
     if (ts) return { auswahl: { art: "tuerschwelle", id, dachId: d.id }, mitte: b.ort ?? kantenLage(d, ts.lage.kante, ts.lage.abstand)?.p ?? mittel(d.kontur) };
   }
