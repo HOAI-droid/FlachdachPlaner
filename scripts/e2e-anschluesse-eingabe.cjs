@@ -26,6 +26,14 @@ const ok = (c, msg) => { if (!c) { fails++; console.error("FAIL:", msg); } else 
   ok((await txt("ah-soll")) !== null, "Attika: Zeile Anschlusshöhe soll sichtbar: " + await txt("ah-soll"));
   await pg.keyboard.press("Control+z"); await pg.waitForTimeout(150);
   ok((await modell()).attika[0].oberkante === undefined, "Undo: Attika OK wieder leer");
+  // Gully-z +0,05 -> Anschlusshöhe sinkt um 50 mm
+  await pg.fill("#f-oberkante", "0.30"); await pg.keyboard.press("Enter"); await pg.waitForTimeout(200);
+  const mmVal = async () => parseFloat((await txt("ah-vorhanden")).replace(/[^\d,.-]/g, "").replace(",", "."));
+  await sel("attika", "at1"); const v0 = await mmVal();
+  await sel("entwaesserung", "g1");
+  await pg.fill("#f-z", "0.05"); await pg.keyboard.press("Enter"); await pg.waitForTimeout(250);
+  await sel("attika", "at1"); const v1 = await mmVal();
+  ok(Math.abs((v0 - v1) - 50) < 1, `Gully-z +0,05: Anschlusshöhe ${v0} -> ${v1} mm (−50)`);
   // Tür: Rinne
   await sel("tuerschwelle", "t1");
   await pg.check("#f-rinne"); await pg.waitForTimeout(150);
