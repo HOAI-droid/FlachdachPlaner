@@ -15,7 +15,7 @@ import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
 import { baueVariantenPdf } from "../io/pdf/plan";
 import { dateiname } from "../io/dateiname";
 import { baueProjektDxf } from "../io/dxf/export";
-import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneFaltlinien, zeichneFlaechenLabels, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
+import { berechne, farbe, fuelleErgebnis, fuellePruefliste, zeichneEinzugsflaechen, zeichneFaltlinien, zeichneFlaechenLabels, zeichneAnschluesse, zeichneKoten, zeichneNotbereich, zeichnePfeile, type Ergebnis } from "./ergebnis";
 import { meter, quadratmeter, zahl } from "./format";
 import { aktiveVersionen, daemmStandard, packs, standardTyp, typOptionen } from "./packs";
 import { mountStandort } from "./standort";
@@ -849,6 +849,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
 
   let ansicht: "gefaelle" | "daemmplan" = "gefaelle";
+  let zeigeAnschluesse = true;
   let plan: InsulationLayout | null = null, planFuer: Ergebnis | null = null;
   shell.onAnsicht((a) => { ansicht = a; stage.invalidate(); });
   const ansicht3d = new Ansicht3D(shell.stage);
@@ -860,6 +861,14 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   shell.onModus((m) => { ist3d = m === "3d"; ansicht3d.zeigen(ist3d); aktualisiere3d(); });
   const api: Editor = { beiAenderung: null } as unknown as Editor;
+  /** Schalter der Ebene „Anschlüsse“ am Ende des Ergebnis-Panels. */
+  function ebenenSchalter() {
+    const lab = el("label", "check-row"), cb = el("input");
+    cb.type = "checkbox"; cb.checked = zeigeAnschluesse; cb.id = "ebene-anschluesse"; cb.dataset.k = "ebene-anschluesse";
+    cb.addEventListener("change", () => { zeigeAnschluesse = cb.checked; stage.invalidate(); });
+    lab.append(cb, el("span", "", "Ebene „Anschlüsse“"));
+    shell.panels.ergebnis.append(lab);
+  }
   function refresh() {
     queueMicrotask(() => api.beiAenderung?.());
     shell.undo.disabled = !kannRueckgaengig(verlauf);
@@ -875,7 +884,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     panelUnterlage(); panelWerkzeug(); panelAuswahl(); panelProjekt();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
     if (ergebnisFehler) { shell.panels.pruefliste.replaceChildren(el("div", "note error", `Berechnung fehlgeschlagen: ${ergebnisFehler}`)); shell.panels.ergebnis.replaceChildren(); }
-    else { fuellePruefliste(shell.panels.pruefliste, modell(), ergebnis, (z) => { if (z.auswahl) { auswahl = z.auswahl; } if (z.mitte) stage.centerOn(z.mitte.x, z.mitte.y); refresh(); }); fuelleErgebnis(shell.panels.ergebnis, modell(), ergebnis ?? leeresErgebnis); }
+    else { fuellePruefliste(shell.panels.pruefliste, modell(), ergebnis, (z) => { if (z.auswahl) { auswahl = z.auswahl; } if (z.mitte) stage.centerOn(z.mitte.x, z.mitte.y); refresh(); }); fuelleErgebnis(shell.panels.ergebnis, modell(), ergebnis ?? leeresErgebnis); ebenenSchalter(); }
     shell.status.snap.textContent = treffer ? `Fang: ${FANG_NAME[treffer.art]}` : zeichnetMitFang() ? "Fang: bereit" : "Fang: aus";
     stage.invalidate();
     aktualisiere3d();
@@ -1109,7 +1118,12 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     zeichneDaemmplan(ctx, vp, modell(), ergebnis.slope, plan);
   });
   stage.setLayer("pfeile", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") { zeichneFaltlinien(ctx, vp, ergebnis); zeichneFlaechenLabels(ctx, vp, modell(), ergebnis); zeichneNotbereich(ctx, vp, modell(), ergebnis); zeichnePfeile(ctx, vp, ergebnis); } });
-  stage.setLayer("koten", (ctx, vp) => { if (ergebnis && ansicht === "gefaelle") zeichneKoten(ctx, vp, ergebnis); });
+  stage.setLayer("koten", (ctx, vp) => {
+    if (!ergebnis || ansicht !== "gefaelle") return;
+    zeichneKoten(ctx, vp, ergebnis);
+    if (!zeigeAnschluesse) return;
+    try { zeichneAnschluesse(ctx, vp, computeAnschluesse(modell(), ergebnis.slope, packs), computeNotwasserstaende(modell(), ergebnis.slope, ergebnis.notfall, packs)); } catch { /* Berechnung fehlgeschlagen: Ebene entfällt */ }
+  });
   stage.setLayer("symbole", zeichneSymbole);
   stage.setLayer("auswahl", zeichneAuswahl);
   stage.setLayer("fang", zeichneFang);

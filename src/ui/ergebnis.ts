@@ -2,11 +2,12 @@
 import {
   attikaStreifen, computeCatchments, computeSlope, estimateEmergency, kotenMarken, pfeilLage, pointInPolygon, polygonCentroid, runChecks,
   type Befund, type CatchmentResult, type Dachflaeche, type EmergencyEstimate, type Einzugsflaeche, type ProjectModel,
-  type Auswahl, type KotenMarke, type SlopeResult, type Vec2,
+  type Anschluss, type Notwasserstand, type Auswahl, type KotenMarke, type SlopeResult, type Vec2,
 } from "../core/index";
 import type { Viewport } from "./canvas/viewport";
 import { kote, millimeter, prozent, quadratmeter, zahl } from "./format";
 import { kantenLage } from "./symbole";
+import { anschlussLabel, anschlussStatus, notLabel } from "./anschluss-label";
 import { daemmStandard, packs } from "./packs";
 import { badge, bahn, css, dunkel, geteilteBelegung, text, textBreite } from "./zeichnen";
 
@@ -375,4 +376,30 @@ export function fuellePruefliste(p: HTMLElement, m: ProjectModel, e: Ergebnis | 
   for (const h of e.hinweise) { const li = el("li", "befund hinweis"); li.dataset.code = "berechnung"; li.append(el("span", "stufe", "Hinweis"), el("span", "meldung", h), el("span", "objekt", "–"), el("span", "quelle", "–")); liste.append(li); }
   if (liste.childElementCount <= 1) p.append(el("div", "ok", "Keine Befunde."));
   else p.append(liste);
+}
+
+/** Ebene „Anschlüsse“ (M9 Schritt 46): Anschlusslinien in Statusfarbe mit Label `AH … (soll …)`, Notelemente mit `ÜK · NW`. */
+export function zeichneAnschluesse(
+  ctx: CanvasRenderingContext2D, vp: Viewport, anschluesse: readonly Anschluss[], notstaende: readonly Notwasserstand[],
+): void {
+  const px = 1 / vp.scale, belegung = geteilteBelegung(vp);
+  const farbe = { ok: css("--ok", "#2E6B3A"), niedrig: css("--error", "#B3261E"), unbekannt: css("--text-muted", "#666") };
+  const kand = [8, 26, 44, -14, -32];
+  ctx.save(); ctx.setLineDash([]); ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (const a of anschluesse) {
+    const st = anschlussStatus(a.vorhanden, a.soll), f = farbe[st];
+    ctx.strokeStyle = f; ctx.lineWidth = 3 * px; ctx.globalAlpha = 0.85;
+    if (st === "unbekannt") ctx.setLineDash([6 * px, 4 * px]);
+    bahn(ctx, a.linie, a.art === "aufbau"); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    const s = anschlussLabel(a.vorhanden, a.soll), w = textBreite(ctx, s, 11, true);
+    const dy = kand.find((d) => belegung.belege(a.ort, -w / 2 - 2, d - 2, w + 4, 18));
+    if (dy !== undefined) text(ctx, vp, s, a.ort.x - (w / 2) * px, a.ort.y + dy * px, { px: 11, mono: true, farbe: f });
+  }
+  for (const n of notstaende) {
+    const s = notLabel(n.kante, n.wasserstand), w = textBreite(ctx, s, 11, true);
+    const dy = [-22, -40, 22, 40].find((d) => belegung.belege(n.ort, -w / 2 - 2, d - 2, w + 4, 18));
+    if (dy !== undefined) text(ctx, vp, s, n.ort.x - (w / 2) * px, n.ort.y + dy * px, { px: 11, mono: true, farbe: css("--text", "#222") });
+  }
+  ctx.restore();
 }
