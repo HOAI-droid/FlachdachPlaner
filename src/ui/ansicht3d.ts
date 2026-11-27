@@ -118,7 +118,7 @@ export class Ansicht3D {
       ctx.beginPath();
       for (const ring of [pts, ...f.holes.map((r) => r.map(bild))]) { ring.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y))); ctx.closePath(); }
       ctx.fillStyle = rgb(basis, f.art === "seite" ? licht * 0.85 : licht); ctx.fill("evenodd");
-      if (f.art !== "dach") { ctx.strokeStyle = ctx.fillStyle; ctx.globalAlpha = 1; ctx.lineWidth = 1; ctx.lineJoin = "round"; ctx.stroke(); } // Nähte (Antialiasing) zwischen Nachbarflächen schließen
+      if (f.art !== "dach") { ctx.strokeStyle = ctx.fillStyle; ctx.globalAlpha = 1; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke(); } // Nähte (Antialiasing) zwischen Nachbarflächen schließen
       ctx.strokeStyle = f.art === "platte" ? css("--text-muted", "#777") : linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : f.art === "platte" ? 0.9 : 0.25; ctx.lineWidth = f.art === "platte" ? 1 : 1;
       if (f.art === "platte") {
         // Plattenstreifen: nur Fugen quer zur Gefällerichtung (Gefälle abstrahiert, bessere Lesbarkeit)
