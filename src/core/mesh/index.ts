@@ -18,6 +18,8 @@ export interface Flaeche3 {
   /** Nur Platten: Bezeichnung und Zusatzlagen. */
   readonly bezeichnung?: string;
   readonly zusatzlagen?: number;
+  /** Nur Platten: Dämmdicke in der Plattenmitte (Einheit wie im Plan) – für die Tönung. */
+  readonly dicke?: number;
   /** Nur Dach: je Kante des Außenrings true, wenn dahinter eine Facette derselben Ebene liegt (kein Knick, keine Linie). */
   readonly stumm?: readonly boolean[];
 }
@@ -59,6 +61,11 @@ export function daemmBasis(g: DachGefaelle, plan: InsulationLayout["dachflaechen
   return n > 0 ? s / n : 0;
 }
 
+function dickeMitte(p: { polygon: Polygon; dicke: { a: number; b: number; c: number } }): number {
+  const o = p.polygon.outer, x = o.reduce((a, v) => a + v.x, 0) / o.length, y = o.reduce((a, v) => a + v.y, 0) / o.length;
+  return p.dicke.a * x + p.dicke.b * y + p.dicke.c;
+}
+
 /** Dämmplatten als Blöcke: Oberseite in der Dickenebene, Seitenflächen bis zur flachen Basis. */
 export function meshDaemmung(slope: SlopeResult, plan: InsulationLayout, ueberhoehung = 1): Flaeche3[] {
   const out: Flaeche3[] = [];
@@ -69,7 +76,7 @@ export function meshDaemmung(slope: SlopeResult, plan: InsulationLayout, ueberho
     for (const p of d.platten) {
       const top = (v: Vec2) => basis + p.dicke.a * v.x + p.dicke.b * v.y + p.dicke.c;
       const r = ringe(p.polygon, top, ueberhoehung, z0);
-      const meta = { dachflaecheId: d.dachflaecheId, gruppe: -1, bezeichnung: p.bezeichnung, zusatzlagen: p.zusatzlagen };
+      const meta = { dachflaecheId: d.dachflaecheId, gruppe: -1, bezeichnung: p.bezeichnung, zusatzlagen: p.zusatzlagen, dicke: dickeMitte(p) };
       out.push({ art: "platte", ...r, ...meta });
       for (const ring of [p.polygon.outer, ...p.polygon.holes]) {
         for (let i = 0; i < ring.length; i++) {

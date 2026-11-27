@@ -100,12 +100,20 @@ export class Ansicht3D {
       const pts = f.outer.map(bild);
       return { f, pts, tiefe: pts.reduce((a, q) => a + q.t, 0) / pts.length };
     }).sort((a, b) => b.tiefe - a.tiefe);
+    const dicken = this.netz.filter((f) => f.art === "platte" && f.dicke !== undefined).map((f) => f.dicke!);
+    const dmin = Math.min(...dicken), dmax = Math.max(...dicken);
     for (const { f, pts } of faces) {
       const n = normale(f.outer);
       const licht = 0.72 + 0.28 * Math.max(0, n.x * LICHT[0] + n.y * LICHT[1] + n.z * LICHT[2]);
       let basis: [number, number, number];
       if (f.art === "dach") basis = mischen(farbe(f.gruppe)[dk ? 1 : 0], dk ? 0 : 255, dk ? 0 : 0.15);
-      else if (f.art === "platte") basis = f.zusatzlagen ? (dk ? [214, 176, 40] : [244, 208, 63]) : (dk ? [110, 112, 118] : [232, 228, 218]);
+      else if (f.art === "platte") {
+        if (f.zusatzlagen) basis = dk ? [214, 176, 40] : [244, 208, 63];
+        else {
+          const t = f.dicke !== undefined && dmax > dmin ? (f.dicke - dmin) / (dmax - dmin) : 0.5; // dünn hell → dick dunkel
+          basis = dk ? [150 - 70 * t, 154 - 70 * t, 160 - 66 * t] : [240 - 70 * t, 236 - 66 * t, 226 - 56 * t];
+        }
+      }
       else basis = mischen(dk ? "#6E7076" : "#C9C4B8", 0, 0);
       ctx.beginPath();
       for (const ring of [pts, ...f.holes.map((r) => r.map(bild))]) { ring.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y))); ctx.closePath(); }
@@ -145,20 +153,6 @@ export class Ansicht3D {
           ctx.beginPath(); ctx.moveTo(v.x, v.y); ctx.lineTo(b.x, b.y); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(h1.x, h1.y); ctx.lineTo(h2.x, h2.y); ctx.closePath(); ctx.fill();
         }
-      }
-    }
-    // Typ-Labels auf den Oberseiten (nur wenn Platz)
-    if (this.modus === "daemmplan") {
-      ctx.font = "11px 'IBM Plex Sans Condensed', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = linie;
-      const belegt: { x: number; y: number; w: number }[] = [];
-      for (const { f, pts } of faces.slice().reverse()) {
-        if (f.art !== "platte" || !f.bezeichnung) continue;
-        const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y), bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
-        if (bw < ctx.measureText(f.bezeichnung).width + 6 || bh < 12) continue;
-        const tx = (Math.min(...xs) + Math.max(...xs)) / 2, ty = (Math.min(...ys) + Math.max(...ys)) / 2, tw = ctx.measureText(f.bezeichnung).width + 4;
-        if (belegt.some((r) => Math.abs(r.x - tx) < (r.w + tw) / 2 && Math.abs(r.y - ty) < 12)) continue;
-        belegt.push({ x: tx, y: ty, w: tw });
-        ctx.fillText(f.bezeichnung, tx, ty);
       }
     }
     // Überhöhung + Kompass/Achsenkreuz (unten links, 48 px)
