@@ -55,12 +55,13 @@ export class Ansicht3D {
       return w;
     };
     l.append(
-      gruppe<Modus3>("3D-Modus", [["flaeche", "Fläche"], ["daemmplan", "Dämmplan"]], "flaeche", (v) => { this.modus = v; this.baue(); this.zeichne(); }),
       gruppe<string>("Überhöhung", [["1", "1×"], ["5", "5×"], ["10", "10×"]], "5", (v) => { this.ue = Number(v); this.baue(); this.zeichne(); }),
     );
     return l;
   }
 
+  /** Modus folgt dem Umschalter Gefälle/Dämmplan der Kopfzeile. */
+  setzeModus(m: Modus3): void { if (m === this.modus) return; this.modus = m; this.baue(); if (this.bereit) this.zeichne(); }
   zeigen(an: boolean): void { this.wurzel.style.display = an ? "block" : "none"; this.bereit = an; if (an) this.zeichne(); }
   daten(slope: SlopeResult | null, plan: InsulationLayout | null): void { this.slope = slope; this.plan = plan; this.baue(); if (this.bereit) this.zeichne(); }
 
@@ -109,8 +110,20 @@ export class Ansicht3D {
       ctx.beginPath();
       for (const ring of [pts, ...f.holes.map((r) => r.map(bild))]) { ring.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y))); ctx.closePath(); }
       ctx.fillStyle = rgb(basis, f.art === "seite" ? licht * 0.85 : licht); ctx.fill("evenodd");
-      ctx.strokeStyle = f.art === "platte" ? css("--text-muted", "#777") : linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : f.art === "platte" ? 0.9 : 0.25; ctx.lineWidth = f.art === "platte" ? 0.8 : 1;
-      if (f.stumm) {
+      ctx.strokeStyle = f.art === "platte" ? css("--text-muted", "#777") : linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : f.art === "platte" ? 0.9 : 0.25; ctx.lineWidth = f.art === "platte" ? 1 : 1;
+      if (f.art === "platte") {
+        // Plattenstreifen: nur Fugen quer zur Gefällerichtung (Gefälle abstrahiert, bessere Lesbarkeit)
+        const nq = n.x * n.x + n.y * n.y > 1e-6 ? Math.hypot(n.x, n.y) : 0;
+        ctx.beginPath();
+        f.outer.forEach((a, i) => {
+          const b = f.outer[(i + 1) % f.outer.length]!, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy);
+          if (nq === 0 || l < 1e-6 || Math.abs((dx * n.x + dy * n.y) / (l * nq)) > 0.1) return;
+          ctx.moveTo(pts[i]!.x, pts[i]!.y); ctx.lineTo(pts[(i + 1) % pts.length]!.x, pts[(i + 1) % pts.length]!.y);
+        });
+        ctx.stroke();
+      } else if (f.art === "seite") {
+        // keine Kontur an Seitenflächen
+      } else if (f.stumm) {
         ctx.beginPath();
         pts.forEach((q, i) => { const r = pts[(i + 1) % pts.length]!; if (!f.stumm![i]) { ctx.moveTo(q.x, q.y); ctx.lineTo(r.x, r.y); } });
         ctx.stroke();

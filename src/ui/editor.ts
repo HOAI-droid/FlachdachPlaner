@@ -864,8 +864,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let ansicht: "gefaelle" | "daemmplan" = "gefaelle";
   let zeigeAnschluesse = true;
   let plan: InsulationLayout | null = null, planFuer: Ergebnis | null = null;
-  shell.onAnsicht((a) => { ansicht = a; stage.invalidate(); });
   const ansicht3d = new Ansicht3D(shell.stage);
+  shell.onAnsicht((a) => { ansicht = a; ansicht3d.setzeModus(a === "daemmplan" ? "daemmplan" : "flaeche"); stage.invalidate(); });
   let ist3d = false;
   function aktualisiere3d() {
     if (!ist3d) return;
