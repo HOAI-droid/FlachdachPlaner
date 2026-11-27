@@ -13,6 +13,7 @@ Architekten und Zeichner im Büro, die Flachdächer (meist Warmdach mit Gründac
 
 ### Unterlage und Zeichnen
 - **PDF- und DXF-Unterlagen** laden und darüberzeichnen (DWG ist ausdrücklich nicht vorgesehen).
+- **Deckkraft-Regler** im Panel Unterlage (5–100 %).
 - **Maßstab/Kalibrierung:** Eingabe 1:n oder Zwei-Punkt-Kalibrierung über eine bekannte Strecke; der Maßstab steht in der Statusleiste.
 - **Punktfang:** Endpunkt, Mittelpunkt, Schnittpunkt, Lot, Ortho – auch auf den Linien der Unterlage.
 - **Zeichenwerkzeuge:** Dachkontur (Rechteck, L, U und freie Formen), Attika, Aufbauten (Lichtkuppel, Lüfter, Aufzug …), Dachterrassen, Türschwellen; Undo/Redo.

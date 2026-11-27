@@ -119,14 +119,14 @@ export class Ansicht3D {
     }
     // Gefällepfeile wie in 2D (nur Flächenmodus): 0,8 m lang, Spitze bergab, auf der Facettenebene
     if (this.modus === "flaeche" && this.slope) {
-      ctx.strokeStyle = css("--text-muted", "#555"); ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 1.2; ctx.lineCap = "round";
+      ctx.strokeStyle = dk ? "#E8E6E0" : css("--text", "#222"); ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 1.4; ctx.lineCap = "round";
       for (const g of this.slope.dachflaechen) {
         const z0 = g.tiefpunkt?.kote ?? 0;
         for (const a of g.pfeile) {
           const f = g.facetten.find((x) => x.id === a.facetteId);
           if (!f) continue;
           const e = f.ebene, pt = (x: number, y: number) => bild({ x, y, z: z0 + (e.a * x + e.b * y + e.c - z0) * this.ue });
-          const L = 0.4, k = 0.15, r = a.richtung, s0 = a.start;
+          const L = 0.52, k = 0.2, r = a.richtung, s0 = a.start;
           const v = pt(s0.x - r.x * L, s0.y - r.y * L), b = pt(s0.x + r.x * L, s0.y + r.y * L);
           const h1 = pt(s0.x + r.x * (L - k) - r.y * k * 0.6, s0.y + r.y * (L - k) + r.x * k * 0.6), h2 = pt(s0.x + r.x * (L - k) + r.y * k * 0.6, s0.y + r.y * (L - k) - r.x * k * 0.6);
           ctx.beginPath(); ctx.moveTo(v.x, v.y); ctx.lineTo(b.x, b.y); ctx.stroke();
