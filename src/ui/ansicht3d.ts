@@ -109,13 +109,30 @@ export class Ansicht3D {
       ctx.beginPath();
       for (const ring of [pts, ...f.holes.map((r) => r.map(bild))]) { ring.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y))); ctx.closePath(); }
       ctx.fillStyle = rgb(basis, f.art === "seite" ? licht * 0.85 : licht); ctx.fill("evenodd");
-      ctx.strokeStyle = linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : 0.4; ctx.lineWidth = f.art === "platte" ? 0.6 : 1;
+      ctx.strokeStyle = f.art === "platte" ? css("--text-muted", "#777") : linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : f.art === "platte" ? 0.9 : 0.25; ctx.lineWidth = f.art === "platte" ? 0.8 : 1;
       if (f.stumm) {
         ctx.beginPath();
         pts.forEach((q, i) => { const r = pts[(i + 1) % pts.length]!; if (!f.stumm![i]) { ctx.moveTo(q.x, q.y); ctx.lineTo(r.x, r.y); } });
         ctx.stroke();
       } else ctx.stroke();
       ctx.globalAlpha = 1;
+    }
+    // Gefällepfeile wie in 2D (nur Flächenmodus): 0,8 m lang, Spitze bergab, auf der Facettenebene
+    if (this.modus === "flaeche" && this.slope) {
+      ctx.strokeStyle = css("--text-muted", "#555"); ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 1.2; ctx.lineCap = "round";
+      for (const g of this.slope.dachflaechen) {
+        const z0 = g.tiefpunkt?.kote ?? 0;
+        for (const a of g.pfeile) {
+          const f = g.facetten.find((x) => x.id === a.facetteId);
+          if (!f) continue;
+          const e = f.ebene, pt = (x: number, y: number) => bild({ x, y, z: z0 + (e.a * x + e.b * y + e.c - z0) * this.ue });
+          const L = 0.4, k = 0.15, r = a.richtung, s0 = a.start;
+          const v = pt(s0.x - r.x * L, s0.y - r.y * L), b = pt(s0.x + r.x * L, s0.y + r.y * L);
+          const h1 = pt(s0.x + r.x * (L - k) - r.y * k * 0.6, s0.y + r.y * (L - k) + r.x * k * 0.6), h2 = pt(s0.x + r.x * (L - k) + r.y * k * 0.6, s0.y + r.y * (L - k) - r.x * k * 0.6);
+          ctx.beginPath(); ctx.moveTo(v.x, v.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(h1.x, h1.y); ctx.lineTo(h2.x, h2.y); ctx.closePath(); ctx.fill();
+        }
+      }
     }
     // Typ-Labels auf den Oberseiten (nur wenn Platz)
     if (this.modus === "daemmplan") {

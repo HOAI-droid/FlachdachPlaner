@@ -23,7 +23,7 @@ import { mountStandort } from "./standort";
 import { kantenLage, zeichneEntwaesserung } from "./symbole";
 import { geteilteBelegung, neuerDurchgang } from "./zeichnen";
 import type { Shell } from "./shell";
-import { dxfModell, ladeDxf, ladePdf, pdfModell, type UnterlageUI } from "./underlay";
+import { deckkraft, dxfModell, ladeDxf, ladePdf, pdfModell, setzeDeckkraft, type UnterlageUI } from "./underlay";
 import { frageSpeichern, oeffneDialog } from "./dialog";
 import { gibDateiAus } from "./datei-ausgabe";
 import { oeffneAngabenDialog } from "./angaben";
@@ -677,6 +677,11 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       } else if (u.kalibrierung) {
         p.append(feld("Maßstab 1 :", String(Math.round(nennerAusFaktor(faktor(u.kalibrierung.get())))), "massstab", setzeMassstab, "n"));
       }
+      const rl = el("label", "check-row pad"); const rg = el("input"); rg.type = "range"; rg.min = "5"; rg.max = "100"; rg.step = "5"; rg.id = "u-deckkraft";
+      rg.value = String(Math.round(deckkraft() * 100)); rg.setAttribute("aria-label", "Transparenz der Unterlage (Deckkraft in Prozent)");
+      const rw = el("span", "", `Deckkraft ${rg.value} %`);
+      rg.addEventListener("input", () => { setzeDeckkraft(Number(rg.value) / 100); rw.textContent = `Deckkraft ${rg.value} %`; stage.invalidate(); });
+      rl.append(rw, rg); p.append(rl);
       const tw = el("input"); tw.type = "file"; tw.accept = ".dxf,.pdf,application/pdf"; tw.id = "f-tausch"; tw.className = "visually-hidden"; tw.tabIndex = -1;
       tw.addEventListener("change", () => { const f = tw.files?.[0]; tw.value = ""; if (f) void tauscheUnterlage(f); });
       const b = el("div", "pad btn-row"); b.append(button("Unterlage austauschen …", () => tw.click()), button("Unterlage entfernen", entferneUnterlage), tw); p.append(b);

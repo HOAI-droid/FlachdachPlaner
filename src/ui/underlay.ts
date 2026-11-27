@@ -3,6 +3,11 @@ import { ausNenner, anwenden, zuPasspunkten, type Aehnlichkeit, type SnapSegment
 import { flatten, parseDxf, type DxfDokument } from "../io/dxf";
 import type { LayerDraw } from "./canvas/stage";
 
+let deckkraftWert: number | null = null;
+/** Deckkraft der Unterlage (0,05–1); Standard aus dem Token, Nutzerwert hat Vorrang. */
+export function deckkraft(): number { return deckkraftWert ?? (Number(css("--underlay-opacity", "0.45")) || 0.45); }
+export function setzeDeckkraft(v: number): void { deckkraftWert = Math.max(0.05, Math.min(1, v)); }
+
 export interface UnterlageUI {
   readonly art: "dxf" | "pdf";
   readonly name: string;
@@ -71,7 +76,7 @@ export async function ladeDxf(file: File): Promise<UnterlageUI> {
     bounds() { cache ??= bauen(); return cache.bounds; },
     draw(ctx, vp) {
       cache ??= bauen();
-      ctx.globalAlpha = Number(css("--underlay-opacity", "0.45"));
+      ctx.globalAlpha = deckkraft();
       ctx.strokeStyle = css("--text-muted", "#888");
       ctx.lineWidth = 1 / vp.scale;
       ctx.stroke(cache.pfad);
@@ -121,7 +126,7 @@ export async function ladePdf(file: File, seite = 1): Promise<UnterlageUI> {
     },
     kalibrierung: { get: () => t, set: (n) => { t = n; }, breite: W, hoehe: H },
     draw(ctx) {
-      ctx.globalAlpha = Number(css("--underlay-opacity", "0.45"));
+      ctx.globalAlpha = deckkraft();
       ctx.transform(t.a, t.b, -t.b, t.a, t.tx, t.ty);          // Seite (pt, y oben) → Welt
       ctx.transform(1 / rs, 0, 0, -1 / rs, 0, H);               // Bitmap-px → Seite
       ctx.drawImage(bitmap, 0, 0);
