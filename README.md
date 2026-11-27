@@ -21,6 +21,7 @@ Architekten und Zeichner im Büro, die Flachdächer (meist Warmdach mit Gründac
 ### Entwässerung
 - **Modus B (V1):** Der Nutzer setzt Entwässerungspunkte, die Software berechnet und prüft.
   - Gully, Notablauf, **Dachreiter** (mit exakten Herstellermaßen) und **Linienentwässerung (LES)** (z. B. Bauder: Gefälle längs 1 %, quer 4 %, diagonal 3,5 %, Keil 6,00 m × 1,50 m je Seite, 10 → 70 mm).
+  - Abläufe lassen sich nach dem Markieren mit der Maus ziehen (Fang wie beim Zeichnen, ein Undo-Schritt, Esc bricht ab).
   - Herstellerdaten stammen aus Datenpaketen, nicht aus dem Code. Es gibt keine LES-Sets.
 - **Modus C (V1.1):** Die Software schlägt Anzahl und Position der Abläufe sowie die Gefälleaufteilung vor.
 
@@ -37,7 +38,8 @@ Architekten und Zeichner im Büro, die Flachdächer (meist Warmdach mit Gründac
 Jeder Befund nennt Stufe, Objekt, **Regel-ID und Quelle**. Geprüft werden unter anderem:
 - Mindestgefälle und stehendes Wasser (Pfützen, Tiefpunkte)
 - Fläche je Ablauf: Hinweis ab 300 m², Fehler über 350 m² (Werte aus dem Regelwerk-Paket)
-- Anschlusshöhen an Attika und Türschwelle
+- Anschlusshöhen an Attika, Wandanschluss, Türschwelle (mit/ohne Rinne) und Aufbauten: Anschlusshöhe = OK Anschluss − OK fertige Oberfläche (über OK Belag) an der ungünstigsten Stelle; Sollwerte nur aus dem Regelwerk-Paket (ungeprüft)
+- Notentwässerung: Überflutungskante, Überfallhöhe und Notwasserstand als **Schätzung** (Pack-Wert oder Nutzerwert; ohne Produktdaten nur die Kante); Befund bei Kante unter der Hauptentwässerung
 - Barrierefreie Schwellen (Abstand ≤ 10,0 m, Überflutungskante ≥ 5 cm tiefer)
 - Hinweise „Regelwerk ungeprüft“ und „Regenspende manuell überschrieben“
 
@@ -126,6 +128,7 @@ bash scripts/check.sh   # alles zusammen (Definition of Done je Schritt)
 | M3 | Auswertung in der UI, Standort/Regenspende, Prüfliste, Speichern/Laden, Planaktualisierung, Updates |
 | M4 | Gefälledämmplan (Kern und 2D) |
 | M5 | 3D und PDF/DXF-Export → **V1** |
+| M9 | Anschlusshöhen und Notentwässerungshöhen (Prüfregeln, 2D-Label und Ebene „Anschlüsse“, PDF-Tabellen, DXF-Layer, Ablauf ziehen) |
 | M6/M7 | Modus C (V1.1), Tauri-Desktop |
 
 Den aktuellen Stand und die Abnahmekriterien je Schritt findet man in [`PLAN.md`](PLAN.md), das Gestaltungskonzept in [`DESIGN.md`](DESIGN.md).
