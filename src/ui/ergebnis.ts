@@ -394,8 +394,8 @@ export function zeichneAnschluesse(
   };
   /** Dünne Leitlinie vom Anschlusspunkt zum Label, wenn dieses nicht unmittelbar daneben steht. */
   const leitlinie = (p: Vec2, l: [number, number], f: string) => {
-    if (l[0] === 0 && Math.abs(l[1]) <= 24) return;
-    ctx.save(); ctx.strokeStyle = f; ctx.lineWidth = px; ctx.globalAlpha = 0.7; ctx.setLineDash([]);
+    if (l[0] === 0 && (l[1] === 6 || l[1] === -18 || l[1] === -22)) return;
+    ctx.save(); ctx.strokeStyle = f; ctx.lineWidth = px; ctx.globalAlpha = 0.5; ctx.setLineDash([]);
     bahn(ctx, [p, { x: p.x + l[0] * px, y: p.y + (l[1] > 0 ? l[1] : l[1] + 14) * px }], false); ctx.stroke();
     ctx.restore();
   };
