@@ -27,6 +27,25 @@ export interface Hoehenfeld {
   readonly gefaelle: number;
   readonly achse: Vec2;
   readonly quellen: readonly Hoehenquelle[];
+  /**
+   * PLAN R5 (geodätischer Abstand, nur Dächer mit reflexen Konturecken): Gültigkeitsbereich je Quelle
+   * (Index wie `quellen`), dort gilt d(x, E_i) direkt; null/fehlend = überall. Außerhalb gelten `umwege`.
+   */
+  readonly bereiche?: readonly (readonly Polygon[] | null)[];
+  /** Umwege um reflexe Konturecken: d(x, E_i) = weg + d(x, Ecke) innerhalb `bereich`. */
+  readonly umwege?: readonly Umweg[];
+}
+
+/**
+ * Teilquelle des geodätischen Abstands (PLAN R5): Punkte, die von Quelle `quelle` nur um die reflexe
+ * Konturecke `ecke` herum (innerhalb der Kontur) erreichbar sind. Abstandsmaß wie die Quelle (Maximumsnorm
+ * in deren Achse), `weg` = geodätischer Abstand Ecke–Quelle in m (Kote der Ecke = z + s · weg).
+ */
+export interface Umweg {
+  readonly quelle: number;
+  readonly ecke: Vec2;
+  readonly weg: number;
+  readonly bereich: readonly Polygon[];
 }
 
 /** Eine Seite des LES-Keils: Dreieck (an Dachfläche geschnitten) mit linearer Keildicke. */

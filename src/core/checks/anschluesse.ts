@@ -18,7 +18,7 @@ import { belagDickeVon, konturKante, wandanschluesseVon } from "../model/model";
 import type { Dachflaeche, Id, ProjectModel, Zone } from "../model/types";
 import { findeRegelParameter, type RegelWert } from "../rules/regeln";
 import type { RulePack } from "../rules/types";
-import { quellLaenge } from "../slope/hoehenfeld";
+import { bereichsRaender, quellLaenge, teilquellenAm } from "../slope/hoehenfeld";
 import { hoeheDachflaeche } from "../slope/slope";
 import type { DachGefaelle, Ebene, Hoehenfeld, SlopeResult } from "../slope/types";
 
@@ -157,7 +157,11 @@ class Strecken {
   constructor(d: Dachflaeche, private readonly g: DachGefaelle) {
     this.zonen = g.zonen.map((zg) => ({ zg, belag: belagDickeVon(d, d.zonen.find((z: Zone) => z.id === zg.zoneId)) }));
     this.belagDach = belagDickeVon(d);
-    this.raender = [...g.zonen.flatMap((z) => z.polygone), ...g.les.flatMap((k) => k.seiten.flatMap((s) => s.flaechen))];
+    this.raender = [
+      ...g.zonen.flatMap((z) => z.polygone), ...g.les.flatMap((k) => k.seiten.flatMap((s) => s.flaechen)),
+      // R5: Gültigkeitsbereiche geodätischer Umwege (leer ohne Umwege)
+      ...bereichsRaender(g.feld), ...g.zonen.flatMap((z) => bereichsRaender(z.feld)),
+    ];
   }
 
   maximum(a: Vec2, b: Vec2): { h: number; ort: Vec2 } {
@@ -182,7 +186,8 @@ class Strecken {
         }
         if (wahl) { za += wert(wahl, a); zb += wahl.a * e.x + wahl.b * e.y; }
       }
-      const x = feldMaximum(feld, a, e, t0, t1);
+      // Im Teilstück geltende Teilquellen (R5: Umwege um reflexe Ecken; ohne Umwege alle Quellen)
+      const x = feldMaximum({ gefaelle: feld.gefaelle, achse: feld.achse, quellen: teilquellenAm(feld, mitte).map((t) => t.q) }, a, e, t0, t1);
       // Zusatz ist linear: Kandidaten genügen, Endpunkte sind darin enthalten
       for (const t of x) {
         const h = x.wert(t) + za + zb * t;

@@ -10,7 +10,7 @@
  * mit kleinerem Index. Grate/Kehlen werden exakt (ohne Clipper-Raster) auf den Schnittgeraden der
  * Ebenen bestimmt. Rein und deterministisch.
  */
-import { difference, intersection, union } from "../geometry/clipper";
+import { difference, intersection, offset, union } from "../geometry/clipper";
 import { EPS } from "../geometry/eps";
 import { pointInPolygon, polygonArea, polygonCentroid } from "../geometry/polygon";
 import { distPointSegment } from "../geometry/segment";
@@ -18,12 +18,14 @@ import type { Polygon, Ring, Vec2 } from "../geometry/types";
 import { dachPolygon } from "../model/model";
 import type { Dachflaeche, ProjectModel, Zone } from "../model/types";
 import {
-  LAGE_TOL, SEITEN, achseEingerastet, aktiveEbene, auswerten, dachachse, differenz, ebeneVon, hoeheAm, quellLaenge, quellenAngeglichen, seitenRichtung,
+  LAGE_TOL, SEITEN, achseEingerastet, aktiveEbene, auswerten, dachachse, differenz, ebeneDer, hoeheAm, quellAbstand, quellLaenge, quellenAngeglichen,
+  seitenRichtung, teilquellen, type Teilquelle,
 } from "./hoehenfeld";
+import { taschenBaum, teilbaum, type Tasche } from "./geodaetisch";
 import { istSplitter, quellenAus } from "./quellen";
 import type {
   DachGefaelle, Ebene, Extrempunkt, Facette, Faltlinie, Gefaelledaemmung, Gefaellepfeil,
-  Hoehenfeld, Kote, KotenArt, LesKeil, SlopeHinweis, SlopeOptionen, SlopeResult, ZonenGefaelle,
+  Hoehenfeld, Hoehenquelle, Kote, KotenArt, LesKeil, SlopeHinweis, SlopeOptionen, SlopeResult, Umweg, ZonenGefaelle,
 } from "./types";
 
 /** Umrechnung m → mm (Einheit, kein Grenzwert). */
@@ -45,21 +47,22 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
   // Lagetoleranz (LAGE_TOL): Achse einrasten, fast fluchtende Punktabläufe angleichen (gegen Scheinkehlen).
   const achse = achseEingerastet(d.kontur, dachachse(d.kontur));
   const q = quellenAus(d, dach, achse, opt.packs ?? [], (h) => hinweise.push({ ...h, dachflaecheId: d.id }));
-  const feld: Hoehenfeld = { gefaelle: s, achse, quellen: quellenAngeglichen(q.quellen, achse) };
-  const leer: DachGefaelle = {
+  const basis: Hoehenfeld = { gefaelle: s, achse, quellen: quellenAngeglichen(q.quellen, achse) };
+  let feld = basis;
+  const leer = (): DachGefaelle => ({
     dachflaecheId: d.id, feld, facetten: [], linien: [], koten: [], hochpunkt: null, tiefpunkt: null, pfeile: [], daemmung: null,
     daemmungHaupt: null, zonen: [], les: q.les, dachreiter: q.dachreiter,
-  };
+  });
   if (q.quellen.length === 0) {
     const nurNot = d.entwaesserung.length > 0 && d.entwaesserung.every((e) => e.art === "notablauf");
     hinweise.push({ code: "keine-ablaeufe", dachflaecheId: d.id, meldung: nurNot
       ? "Dachfläche hat nur Notabläufe (zählen nicht für das Gefälle); kein Gefälle berechnet."
       : "Dachfläche hat keinen Ablauf; kein Gefälle berechnet." });
-    return leer;
+    return leer();
   }
   if (!(s > 0)) {
     hinweise.push({ code: "gefaelle-null", dachflaecheId: d.id, meldung: "Gefälle ist 0; kein Gefälleplan berechnet." });
-    return leer;
+    return leer();
   }
 
   const box = huelle(dach.outer);
@@ -67,14 +70,17 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
   const haupt = zonenTeile.length > 0
     ? difference([dach], zonenTeile.flatMap((z) => z.polygone)).filter((p) => !istSplitter(p))
     : [dach];
-  const facettenHaupt = haupt.length > 0 ? berechneFacetten(haupt, box, feld, "") : [];
+  // R5: Taschen hinter reflexen Konturecken je Punktquelle (leer bei konvexer Kontur).
+  const baeume = basis.quellen.map((x) => taschenBaum(x, d.kontur));
+  let facettenHaupt: Facette[] = [];
+  if (haupt.length > 0) ({ feld, facetten: facettenHaupt } = geodaetisch(basis, baeume, d.kontur, haupt, box, ""));
   const linien = haupt.flatMap((t) => berechneFaltlinien(t, box, feld));
   const koten = haupt.length > 0 ? berechneKoten(haupt, feld, linien, facettenHaupt) : [];
   const hpHaupt = extrem(koten, 1), tpHaupt = extrem(koten, -1);
   const daemmungHaupt = tpHaupt && hpHaupt && facettenHaupt.length > 0
     ? mittlereDaemmung(facettenHaupt, q.les, tpHaupt.kote, hpHaupt.kote, d.daemmdickeTiefpunkt, opt.daemmdickeTiefpunktStandard)
     : null;
-  const zonen = zonenTeile.map((z) => zonenGefaelle(z.zone, z.polygone, box, feld, d, opt));
+  const zonen = zonenTeile.map((z) => zonenGefaelle(z.zone, z.polygone, box, basis, baeume, d, opt));
 
   const facetten = [...facettenHaupt, ...zonen.flatMap((z) => z.facetten)];
   const alleKoten = [...koten, ...zonen.flatMap((z) => z.koten)];
@@ -83,7 +89,7 @@ function dachGefaelle(d: Dachflaeche, s: number, opt: SlopeOptionen, hinweise: S
   }));
   const daemmung = gewichtet([daemmungHaupt, ...zonen.map((z) => z.daemmung)]);
   return {
-    ...leer, facetten, linien, koten, hochpunkt: extrem(alleKoten, 1), tiefpunkt: extrem(alleKoten, -1), pfeile,
+    ...leer(), facetten, linien, koten, hochpunkt: extrem(alleKoten, 1), tiefpunkt: extrem(alleKoten, -1), pfeile,
     daemmung, daemmungHaupt, zonen,
   };
 }
@@ -118,15 +124,19 @@ function zonenPolygone(d: Dachflaeche, dach: Polygon, hinweise: SlopeHinweis[]):
 
 const summe = (ps: readonly Polygon[]) => ps.reduce((a, p) => a + polygonArea(p), 0);
 
-function zonenGefaelle(zone: Zone, polygone: Polygon[], box: Vec2[], haupt: Hoehenfeld, d: Dachflaeche, opt: SlopeOptionen): ZonenGefaelle {
-  const feld: Hoehenfeld = {
+function zonenGefaelle(
+  zone: Zone, polygone: Polygon[], box: Vec2[], haupt: Hoehenfeld, baeume: readonly Tasche[][], d: Dachflaeche, opt: SlopeOptionen,
+): ZonenGefaelle {
+  let feld: Hoehenfeld = {
     gefaelle: zone.gefaelle ?? haupt.gefaelle, achse: haupt.achse,
     quellen: haupt.quellen.map((q) => ({ ...q, z: q.z + zone.hoehenversatz })),
   };
   const flaeche = summe(polygone);
   let facetten: Facette[], linien: Faltlinie[], koten: Kote[];
   if (feld.gefaelle > EPS) {
-    facetten = berechneFacetten(polygone, box, feld, `${zone.id}:`).map((f) => ({ ...f, zoneId: zone.id }));
+    let roh: Facette[];
+    ({ feld, facetten: roh } = geodaetisch(feld, baeume, d.kontur, polygone, box, `${zone.id}:`));
+    facetten = roh.map((f) => ({ ...f, zoneId: zone.id }));
     linien = polygone.flatMap((t) => berechneFaltlinien(t, box, feld));
     koten = berechneKoten(polygone, feld, linien, facetten);
   } else {
@@ -199,46 +209,126 @@ function halbebene(poly: readonly Vec2[], e: Ebene): Vec2[] {
   return out;
 }
 
-function berechneFacetten(dach: readonly Polygon[], box: Vec2[], f: Hoehenfeld, prefix: string): Facette[] {
-  const out: Facette[] = [];
-  f.quellen.forEach((quelle, i) => {
+/** Facetten je Teilquelle (ohne Umwege genau die Quellen, R5: Umwege um reflexe Ecken als eigene Pyramiden). */
+function facettenMitTeil(dach: readonly Polygon[], box: Vec2[], f: Hoehenfeld, prefix: string): { facette: Facette; teil: Teilquelle }[] {
+  const out: { facette: Facette; teil: Teilquelle }[] = [];
+  const teile_ = teilquellen(f);
+  for (const t of teile_) {
+    const quelle = t.q;
     for (const k of SEITEN) {
-      const L = ebeneVon(f, i, k);
+      const L = ebeneDer(f.gefaelle, quelle, k);
       let keil: Vec2[] = box;
-      for (const k2 of SEITEN) if (k2 !== k) keil = halbebene(keil, differenz(L, ebeneVon(f, i, k2)));
+      for (const k2 of SEITEN) if (k2 !== k) keil = halbebene(keil, differenz(L, ebeneDer(f.gefaelle, quelle, k2)));
       if (keil.length < 3) continue;
       let teile = intersection(dach, [{ outer: keil, holes: [] }]);
+      if (t.bereich && teile.length > 0) teile = intersection(teile, t.bereich);
       const tiefer: Polygon[] = [];
-      f.quellen.forEach((_, j) => {
-        if (j === i) return;
+      const geteilt: Polygon[][] = f.quellen.map(() => []);
+      for (const u of teile_) {
+        // Teilquellen derselben Quelle haben getrennte Bereiche.
+        if (u.i === t.i) continue;
         let c: Vec2[] = box;
         for (const k2 of SEITEN) {
-          const dlt = differenz(L, ebeneVon(f, j, k2));
+          const dlt = differenz(L, ebeneDer(f.gefaelle, u.q, k2));
           if (parallel(dlt)) {
             // Parallele Ebenen: konstanter Abstand dlt.c. Koplanar → Gleichstand an den kleineren Index.
             if (dlt.c > EPS) continue;
             if (dlt.c < -EPS) { c = []; break; }
             // Gleichstand koplanarer Seiten: j nimmt, was ihm (Luftlinie) näher liegt; bei gleicher Lage entscheidet der Index.
-            const pi = quelle.position, pj = f.quellen[j]!.position;
+            const pi = quelle.position, pj = u.q.position;
             const bis = { a: 2 * (pj.x - pi.x), b: 2 * (pj.y - pi.y), c: pi.x * pi.x + pi.y * pi.y - pj.x * pj.x - pj.y * pj.y };
-            if (parallel(bis)) { if (j < i) continue; c = []; break; }
+            if (parallel(bis)) { if (u.nr < t.nr) continue; c = []; break; }
             c = halbebene(c, bis);
           } else c = halbebene(c, dlt);
           if (c.length < 3) break;
         }
-        if (c.length >= 3) tiefer.push({ outer: c, holes: [] });
-      });
+        if (c.length < 3) continue;
+        const gebiet: Polygon = { outer: c, holes: [] };
+        if (u.bereich) geteilt[u.i]!.push(...intersection([gebiet], u.bereich));
+        else tiefer.push(gebiet);
+      }
+      // Stücke einer Quelle aus mehreren Bereichen: Haarrisse an den Fenstern (Clipper-Raster) schließen.
+      for (const g of geteilt) if (g.length > 0) tiefer.push(...schliessen(g));
       if (tiefer.length > 0 && teile.length > 0) teile = difference(teile, tiefer);
       const g = seitenRichtung(quelle.achse, k);
+      const kennung = t.umweg < 0 ? `${k}/` : `${k}/u${t.umweg}.`;
       teile.filter((p) => !istSplitter(p)).forEach((polygon, n) => {
-        out.push({
-          id: `${prefix}${quelle.ablaufId}/${k}/${n}`, ablaufId: quelle.ablaufId, seite: k, polygon,
+        out.push({ teil: t, facette: {
+          id: `${prefix}${quelle.ablaufId}/${kennung}${n}`, ablaufId: quelle.ablaufId, seite: k, polygon,
           flaeche: polygonArea(polygon), ebene: L, gefaelle: f.gefaelle, fallrichtung: { x: -g.x, y: -g.y },
-        });
+        } });
       });
     }
-  });
+  }
   return out;
+}
+
+// ---------- Geodätischer Abstand (R5) ----------
+
+/** Rissbreite (m), die beim Zusammenfügen von Bereichsstücken geschlossen wird (wenige Clipper-Rasterschritte). */
+const RISS = 3e-4;
+
+/** Vereinigung mit morphologischem Schließen (Haarrisse < 2·RISS verschwinden, Außenform bleibt). */
+function schliessen(ps: readonly Polygon[]): Polygon[] {
+  return offset(offset(union(ps), RISS, { join: "miter" }), -RISS, { join: "miter" });
+}
+
+/** Höhenabweichung (m), ab der eine Tasche das Feld ändert (darunter: Rundung, Feld bleibt unverändert). */
+const TASCHEN_TOL = 1e-4;
+
+/**
+ * Feld und Facetten mit geodätischem Abstand um reflexe Konturecken (PLAN R5). Eine Tasche wird nur
+ * zugeschaltet, wenn ihre Quelle dort tatsächlich die Höhe bestimmt und der Umweg höher liegt als die
+ * Luftlinie; sonst bleibt das Feld (und jedes Ergebnis) identisch zum bisherigen Modell. Iteriert, bis keine
+ * Tasche mehr hinzukommt (ein Umweg kann Fläche an eine andere Quelle abgeben, deren Tasche dann zählt).
+ */
+function geodaetisch(
+  basis: Hoehenfeld, baeume: readonly (readonly Tasche[])[], kontur: Ring, flaechen: readonly Polygon[], box: Vec2[], prefix: string,
+): { feld: Hoehenfeld; facetten: Facette[] } {
+  let feld = basis;
+  let fac = facettenMitTeil(flaechen, box, feld, prefix);
+  if (baeume.every((b) => b.length === 0)) return { feld, facetten: fac.map((x) => x.facette) };
+  const aktiv = baeume.map((b) => b.map(() => false));
+  for (let runde = 0; runde <= baeume.flat().length; runde++) {
+    let neu = false;
+    for (const { facette, teil } of fac) {
+      if (teil.umweg >= 0) continue; // Umwege tragen ihren ganzen Teilbaum schon
+      const q = teil.q;
+      baeume[teil.i]!.forEach((T, n) => {
+        if (aktiv[teil.i]![n] || !teilbaum(T).some((N) => hoeher(facette, N, q, feld.gefaelle))) return;
+        aktiv[teil.i]![n] = true;
+        neu = true;
+      });
+    }
+    if (!neu) break;
+    feld = mitTaschen(basis, baeume, aktiv, kontur);
+    fac = facettenMitTeil(flaechen, box, feld, prefix);
+  }
+  return { feld, facetten: fac.map((x) => x.facette) };
+}
+
+/** Liegt der Umweg über die Ecke von N irgendwo in Facette ∩ Sicht(N) höher als die Facette? (konvex → Ecken genügen) */
+function hoeher(f: Facette, N: Tasche, q: Hoehenquelle, s: number): boolean {
+  const ecke: Hoehenquelle = { ...q, position: N.ecke, bis: N.ecke };
+  for (const stueck of intersection([f.polygon], N.sicht)) {
+    if (istSplitter(stueck)) continue;
+    for (const r of [stueck.outer, ...stueck.holes]) {
+      for (const v of r) if (q.z + s * (N.weg + quellAbstand(ecke, v)) - auswerten(f.ebene, v) > TASCHEN_TOL) return true;
+    }
+  }
+  return false;
+}
+
+/** Feld mit den aktiven Taschen: Quelle gilt in Kontur ohne ihre Taschen, jede Tasche als Umweg über ihre Ecke. */
+function mitTaschen(basis: Hoehenfeld, baeume: readonly (readonly Tasche[])[], aktiv: readonly boolean[][], kontur: Ring): Hoehenfeld {
+  const umwege: Umweg[] = [];
+  const bereiche = baeume.map((b, i) => {
+    const an = b.filter((_, n) => aktiv[i]![n]);
+    if (an.length === 0) return null;
+    for (const T of an) for (const N of teilbaum(T)) umwege.push({ quelle: i, ecke: N.ecke, weg: N.weg, bereich: N.sicht });
+    return difference([{ outer: kontur, holes: [] }], an.flatMap((T) => T.flaeche)).filter((p) => !istSplitter(p));
+  });
+  return { ...basis, bereiche, umwege };
 }
 
 // ---------- Grate und Kehlen (exakt auf den Schnittgeraden) ----------
@@ -295,6 +385,61 @@ function ohne(iv: Intervalle, lo: number, hi: number): Intervalle {
     if (Math.max(a, hi) < b) r.push([Math.max(a, hi), b]);
     return r;
   });
+}
+
+/** Entfernt wie ohneWoAllePositiv, aber nur innerhalb `nur` (Gültigkeitsbereich der dritten Teilquelle, R5). */
+function ohneWoAllePositivIn(iv: Intervalle, fs: readonly (Lin1 | number)[], nur: Intervalle): Intervalle {
+  const weg = nur.flatMap(([a, b]) => ohne([[a, b]], ...grenzen(ohneWoAllePositiv([[a, b]], fs), a, b)));
+  let out = iv;
+  for (const [a, b] of weg) out = ohne(out, a, b);
+  return out;
+}
+
+/** Entfernter Teil (lo, hi) von [a, b], wenn ohneWoAllePositiv genau eine Lücke oder das Ganze entfernt hat. */
+function grenzen(rest: Intervalle, a: number, b: number): [number, number] {
+  if (rest.length === 0) return [a, b];
+  if (rest.length === 2) return [rest[0]![1], rest[1]![0]];
+  const [r0, r1] = rest[0]!;
+  if (r0 === a && r1 === b) return [b, a]; // nichts entfernt
+  return r0 === a ? [r1, b] : [a, r0];
+}
+
+/** Schnitt zweier sortierter Intervalllisten. */
+function schnitt(p: Intervalle, q: Intervalle): Intervalle {
+  const out: Intervalle = [];
+  for (const [a, b] of p) for (const [c, d] of q) { const lo = Math.max(a, c), hi = Math.min(b, d); if (hi - lo > EPS) out.push([lo, hi]); }
+  return out;
+}
+
+/** Lagetoleranz für Gültigkeitsbereiche (Clipper-Raster 0,1 mm, mit Reserve). */
+const BEREICH_TOL = 1e-3;
+
+/** Parameterbereiche der Geraden p0 + t·dir in den Polygonen (Rand und Abstand ≤ tol zählen als innen). */
+function imGebiet(polys: readonly Polygon[], p0: Vec2, dir: Vec2, tol: number): Intervalle {
+  const n = { x: -dir.y, y: dir.x };
+  const ringe = polys.flatMap((p) => [p.outer, ...p.holes]);
+  const ts: number[] = [];
+  for (const r of ringe) {
+    for (let i = 0; i < r.length; i++) {
+      const p = r[i]!, q = r[(i + 1) % r.length]!;
+      const sp = n.x * (p.x - p0.x) + n.y * (p.y - p0.y), sq = n.x * (q.x - p0.x) + n.y * (q.y - p0.y);
+      const tp = dir.x * (p.x - p0.x) + dir.y * (p.y - p0.y), tq = dir.x * (q.x - p0.x) + dir.y * (q.y - p0.y);
+      if (Math.abs(sp) <= tol + EPS) ts.push(tp);
+      if ((sp > EPS && sq < -EPS) || (sp < -EPS && sq > EPS)) ts.push(tp + ((tq - tp) * sp) / (sp - sq));
+    }
+  }
+  ts.sort((a, b) => a - b);
+  const drin = (p: Vec2) => polys.some((poly) => pointInPolygon(p, poly) !== "outside") ||
+    (tol > 0 && ringe.some((r) => r.some((a, i) => distPointSegment(p, a, r[(i + 1) % r.length]!) <= tol)));
+  const iv: Intervalle = [];
+  for (let i = 0; i + 1 < ts.length; i++) {
+    const a = ts[i]!, b = ts[i + 1]!;
+    if (b - a <= EPS || !drin({ x: p0.x + ((a + b) / 2) * dir.x, y: p0.y + ((a + b) / 2) * dir.y })) continue;
+    const letztes = iv[iv.length - 1];
+    if (letztes && a - letztes[1] <= EPS) letztes[1] = b;
+    else iv.push([a, b]);
+  }
+  return iv;
 }
 
 /** Parameterbereiche der Geraden p0 + t·dir im Inneren des Dachs. */
@@ -413,7 +558,7 @@ const b0 = (iv: Intervalle, t: number) => iv.find(([a, b]) => t >= a - 1e-6 && t
 
 function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlinie[] {
   const mitte = { x: (box[0]!.x + box[2]!.x) / 2, y: (box[0]!.y + box[2]!.y) / 2 };
-  const ebenen = f.quellen.flatMap((_, i) => SEITEN.map((k) => ({ i, k, L: ebeneVon(f, i, k) })));
+  const ebenen = teilquellen(f).flatMap((t) => SEITEN.map((k) => ({ t, i: t.i, nr: t.nr, k, L: ebeneDer(f.gefaelle, t.q, k) })));
   // Ein Streifen (ohneStreifen) setzt eine parallele Ebene voraus, deren Versatz höchstens der Höhenänderung
   // über LAGE_TOL entspricht (Breite ≤ LAGE_TOL, Neigungsunterschied ≤ 2 s); sonst entfällt die Abtastung.
   const streifenMoeglich = (L: Ebene) => ebenen.some((E) => {
@@ -428,7 +573,9 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
       // (bei einer Strecke treffen sich die Seiten 1/3 in der Kehle entlang der Strecke).
       const dlt = differenz(A.L, B.L);
       if (parallel(dlt)) continue;
-      if (A.i === B.i && (A.k - B.k) % 2 === 0 && quellLaenge(f.quellen[A.i]!) <= EPS) continue;
+      if (A.nr === B.nr && (A.k - B.k) % 2 === 0 && quellLaenge(A.t.q) <= EPS) continue;
+      // Teilquellen derselben Quelle mit getrennten Bereichen berühren sich nur am Fenster (dort stetig).
+      if (A.i === B.i && A.nr !== B.nr && !(A.t.bereich && B.t.bereich)) continue;
       const norm = Math.hypot(dlt.a, dlt.b);
       const dir = { x: -dlt.b / norm, y: dlt.a / norm };
       const w = auswerten(dlt, mitte) / (norm * norm);
@@ -439,21 +586,23 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
       };
 
       let iv = imDach(dach, p0, dir);
+      for (const b of [A.t.bereich, B.t.bereich]) if (b && iv.length > 0) iv = schnitt(iv, imGebiet(b, p0, dir, BEREICH_TOL));
       // Auf der Geraden muss A in Pyramide A und B in Pyramide B die höchste Seite sein
       // (die Grenze A = B selbst ist die Gerade und entfällt) …
       for (const [P, Q] of [[A, B], [B, A]] as const) {
         for (const k2 of SEITEN) {
-          if (k2 === P.k || (P.i === Q.i && k2 === Q.k)) continue;
-          const g = entlang(differenz(P.L, ebeneVon(f, P.i, k2)));
+          if (k2 === P.k || (P.nr === Q.nr && k2 === Q.k)) continue;
+          const g = entlang(differenz(P.L, ebeneDer(f.gefaelle, P.t.q, k2)));
           if (typeof g !== "number") iv = mindestens(iv, g);
           else if (g < -EPS) iv = [];
         }
       }
       // … und keine dritte Pyramide darf tiefer liegen.
-      f.quellen.forEach((_, j) => {
-        if (j === A.i || j === B.i || iv.length === 0) return;
-        iv = ohneWoAllePositiv(iv, SEITEN.map((k2) => entlang(differenz(A.L, ebeneVon(f, j, k2)))));
-      });
+      for (const u of teilquellen(f)) {
+        if (u.i === A.i || u.i === B.i || iv.length === 0) continue;
+        const fs = SEITEN.map((k2) => entlang(differenz(A.L, ebeneDer(f.gefaelle, u.q, k2))));
+        iv = u.bereich ? ohneWoAllePositivIn(iv, fs, imGebiet(u.bereich, p0, dir, 0)) : ohneWoAllePositiv(iv, fs);
+      }
       iv = nurKnicke(f, p0, dir, iv);
       if (iv.length > 0 && (streifenMoeglich(A.L) || streifenMoeglich(B.L))) iv = ohneStreifen(f, p0, dir, iv);
       for (const [a, b] of iv) {
@@ -462,7 +611,7 @@ function berechneFaltlinien(dach: Polygon, box: Vec2[], f: Hoehenfeld): Faltlini
         const art = A.i === B.i ? "kehle" : "grat";
         const gleich = (l: Faltlinie) => l.art === art &&
           ((nah(l.von, von) && nah(l.bis, bis)) || (nah(l.von, bis) && nah(l.bis, von)));
-        if (!out.some(gleich)) out.push({ art, von, bis, ablaufIds: [f.quellen[A.i]!.ablaufId, f.quellen[B.i]!.ablaufId] });
+        if (!out.some(gleich)) out.push({ art, von, bis, ablaufIds: [A.t.q.ablaufId, B.t.q.ablaufId] });
       }
     }
   }
