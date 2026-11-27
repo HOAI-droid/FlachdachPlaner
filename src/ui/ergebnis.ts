@@ -28,9 +28,9 @@ export function berechne(m: ProjectModel): Ergebnis {
   const catchments = computeCatchments(m, slope, regeln?.typ === "regeln" ? { regeln } : {});
   const em = estimateEmergency(m, slope, catchments.flaechen, null, packs);
   const befunde = [
-    ...runChecks(m, { slope, catchments }, packs, std !== undefined ? { daemmdickeTiefpunktStandard: std } : {}),
+    ...runChecks(m, { slope, catchments, notfall: em.schaetzungen }, packs, std !== undefined ? { daemmdickeTiefpunktStandard: std } : {}),
     ...em.befunde,
-  ];
+  ].filter((b, i, a) => a.findIndex((x) => x.code === b.code && x.objektId === b.objektId && x.meldung === b.meldung) === i);
   const eids = new Map(catchments.flaechen.map((f, i) => [f.id, `E${i + 1}`] as const));
   return {
     slope, catchments, notfall: em.schaetzungen, befunde,
