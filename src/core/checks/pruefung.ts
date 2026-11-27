@@ -8,12 +8,15 @@ import { dist, distPointSegment } from "../geometry/segment";
 import type { Vec2 } from "../geometry/types";
 import { computeCatchments } from "../catchment/catchment";
 import type { CatchmentResult } from "../catchment/types";
-import { dachPolygon, konturKante } from "../model/model";
+import { estimateEmergency, REGEL_NOT_ANSTAU, type EmergencyEstimate } from "../drainage/drainage";
+import { dachPolygon, konturKante, wandanschluesseVon } from "../model/model";
 import type { Dachflaeche, ProjectModel, Regenspende } from "../model/types";
 import { bewerteEinzugsflaeche, findeRegelParameter, REGEL_FLAECHE_JE_ABLAUF, type RegelWert } from "../rules/regeln";
-import type { AblaufPack, RegelPack, RulePack } from "../rules/types";
+import type { RegelPack, RulePack } from "../rules/types";
 import { hoeheDachflaeche } from "../slope/slope";
 import type { DachGefaelle, SlopeResult } from "../slope/types";
+import { computeAnschluesse, type Anschluss, type AnschlussArt } from "./anschluesse";
+import { computeNotwasserstaende, VERMERK_SCHAETZUNG, type Notwasserstand } from "./notwasser";
 import { QUELLE_PROGRAMM, type Befund } from "./types";
 import { pruefeVorgaben } from "./vorgaben";
 
@@ -23,11 +26,15 @@ export const REGEL_BARRIEREFREI = "barrierefrei-schwelle";
 export const REGEL_PFUETZEN = "fdp-pfuetzen";
 export const REGEL_PACK_UNGEPRUEFT = "pack-ungeprueft";
 export const REGEL_REGEN_MANUELL = "regenspende-manuell";
+/** Programmprüfung: Überflutungskante über der Hauptentwässerung. */
+export const REGEL_NOT_KANTE = "notentwaesserung-kante";
 
 export interface CheckErgebnisse {
   readonly slope: SlopeResult;
   /** Fehlt sie, wird sie mit dem ersten Regel-Pack berechnet. */
   readonly catchments?: CatchmentResult;
+  /** Notentwässerungs-Schätzung (`estimateEmergency`); fehlt sie, wird sie bei Bedarf berechnet (r aus dem Projekt). */
+  readonly notfall?: readonly EmergencyEstimate[];
 }
 
 export interface CheckOptionen {
@@ -39,6 +46,7 @@ export interface CheckOptionen {
 
 const MM = 1000;
 const mm = (m: number) => `${(m * MM).toFixed(0)} mm`;
+const kote = (m: number) => `${m >= 0 ? "+" : ""}${m.toFixed(3)} m`;
 const prozent = (s: number) => `${(s * 100).toFixed(1).replace(".", ",")} %`;
 const quelleVon = (w: RegelWert) => (w.fundstelle ? `${w.quelle}, ${w.fundstelle}` : w.quelle);
 
@@ -59,17 +67,41 @@ export function runChecks(m: ProjectModel, r: CheckErgebnisse, packs: readonly R
     return w;
   };
 
+  /** Fehlender Sollwert einer Anschlussregel: einmal je Regel/Parameter als Hinweis (statt Schweigen). */
+  const regelFehltHinweis = (a: Anschluss, name: string) => {
+    const key = `${a.sollRegel.regelId}.${a.sollRegel.parameter}`;
+    if (fehlend.has(key)) return;
+    fehlend.add(key);
+    out.push({
+      stufe: "hinweis", code: "regel-fehlt", objektId: null, dachflaecheId: a.dachflaecheId, regelId: a.sollRegel.regelId, ort: a.ort,
+      quelle: `Regel-Packs: ${packs.filter((p) => p.typ === "regeln").map((p) => p.id).join(", ") || "keine geladen"}`,
+      meldung: `Regel ${a.sollRegel.regelId} fehlt im Pack (Parameter „${a.sollRegel.parameter}“); Anschlusshöhe von ${name} nicht prüfbar.`,
+    });
+  };
+
+  const packRegeln = packs.find((p): p is RegelPack => p.typ === "regeln" && p.daten.regeln.some((x) => x.id === REGEL_FLAECHE_JE_ABLAUF));
+  let cache: CatchmentResult | undefined = r.catchments;
+  const catchments = () => (cache ??= computeCatchments(m, r.slope, packRegeln ? { regeln: packRegeln } : {}));
+  const anschluesse = computeAnschluesse(m, r.slope, packs);
+  // Notwasserstände nur, wenn es Notelemente gibt (sonst entfällt die Einzugsflächen-/Notentwässerungs-Schätzung)
+  const hatNot = m.dachflaechen.some((d) => d.entwaesserung.some((e) => e.art === "notablauf" || e.art === "dachreiter"));
+  const notwasser = hatNot ? computeNotwasserstaende(m, r.slope,
+    r.notfall ?? estimateEmergency(m, r.slope, catchments().flaechen, null, packs).schaetzungen, packs) : [];
+
   out.push(...pruefeVorgaben(m, r.slope, opt.daemmdickeTiefpunktStandard !== undefined
     ? { daemmdickeTiefpunktStandard: opt.daemmdickeTiefpunktStandard } : {}));
   for (const d of m.dachflaechen) {
     const g = r.slope.dachflaechen.find((x) => x.dachflaecheId === d.id);
     if (!g) continue;
+    const an = anschluesse.filter((a) => a.dachflaecheId === d.id);
+    const nw = notwasser.filter((n) => n.dachflaecheId === d.id);
     pruefeGefaelle(d, g, regel, out);
     pruefePfuetzen(d, g, opt.raster ?? 0.1, out);
-    pruefeAttika(d, g, regel, out);
-    pruefeSchwellen(d, g, packs, regel, out);
+    pruefeAnschluesse(d, an, regelFehltHinweis, out);
+    pruefeBarrierefrei(d, g, an, nw, regel, out);
+    pruefeNotentwaesserung(d, g, an, nw, regel, out);
   }
-  pruefeFlaechen(m, r, packs, regel, out);
+  pruefeFlaechen(catchments, packRegeln, regel, out);
   pruefePacks(packs, out);
   pruefeRegen(m, packs, out);
   return out;
@@ -167,9 +199,8 @@ function pruefePfuetzen(d: Dachflaeche, g: DachGefaelle, raster: number, out: Be
 
 // ---------- Fläche je Ablauf (Grenzen hinweisAb/fehlerUeber aus Pack) ----------
 
-function pruefeFlaechen(m: ProjectModel, r: CheckErgebnisse, packs: readonly RulePack[], regel: RegelFn, out: Befund[]): void {
-  const pack = packs.find((p): p is RegelPack => p.typ === "regeln" && p.daten.regeln.some((x) => x.id === REGEL_FLAECHE_JE_ABLAUF));
-  const c = r.catchments ?? computeCatchments(m, r.slope, pack ? { regeln: pack } : {});
+function pruefeFlaechen(catchments: () => CatchmentResult, pack: RegelPack | undefined, regel: RegelFn, out: Befund[]): void {
+  const c = catchments();
   if (c.flaechen.length === 0) return;
   if (!pack) { regel(REGEL_FLAECHE_JE_ABLAUF, "hinweisAb"); return; }
   for (const f of c.flaechen) {
@@ -188,66 +219,73 @@ function pruefeFlaechen(m: ProjectModel, r: CheckErgebnisse, packs: readonly Rul
   }
 }
 
-// ---------- Anschlusshöhen ----------
+// ---------- Anschlusshöhen (PLAN M9 Schritt 44, Grundlage `computeAnschluesse`) ----------
 
-/** Größte Höhe der Dachfläche entlang a–b (Abtastung 1 cm, Fehler ≤ s · 5 mm). */
-function maxHoeheAuf(g: DachGefaelle, a: Vec2, b: Vec2): number {
-  const n = Math.max(1, Math.ceil(dist(a, b) / 0.01));
-  let h = -Infinity;
-  for (let k = 0; k <= n; k++) {
-    const t = k / n;
-    h = Math.max(h, hoeheDachflaeche(g, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) }));
-  }
-  return h;
+const ART_NAME: Record<AnschlussArt, string> = { attika: "Attika", wand: "Wandanschluss", tuer: "Türschwelle", aufbau: "Aufbau" };
+/** Codes „Oberkante fehlt“ (Attika/Tür wie bisher). */
+const OK_FEHLT: Record<AnschlussArt, string> = {
+  attika: "attika-oberkante-fehlt", wand: "wand-oberkante-fehlt", tuer: "schwelle-oberkante-fehlt", aufbau: "aufbau-oberkante-fehlt",
+};
+
+function anschlussName(d: Dachflaeche, a: Anschluss): string {
+  const obj = a.art === "attika" ? d.attika.find((x) => x.id === a.objektId)
+    : a.art === "wand" ? wandanschluesseVon(d).find((x) => x.id === a.objektId)
+      : a.art === "tuer" ? d.tuerschwellen.find((x) => x.id === a.objektId) : d.aufbauten.find((x) => x.id === a.objektId);
+  const n = obj && "name" in obj && typeof obj.name === "string" && obj.name ? obj.name : a.objektId;
+  return `${ART_NAME[a.art]} ${n}`;
 }
 
-function pruefeAttika(d: Dachflaeche, g: DachGefaelle, regel: RegelFn, out: Befund[]): void {
-  if (d.attika.length === 0 || g.feld.quellen.length === 0) return;
-  const w = regel(REGEL_ANSCHLUSS, "attikaMin");
-  if (!w) return;
-  for (const a of d.attika) {
-    const k = konturKante(d.kontur, a.kante);
-    if (!k) continue;
-    if (a.oberkante === undefined) {
-      out.push({ stufe: "hinweis", code: "attika-oberkante-fehlt", objektId: a.id, dachflaecheId: d.id, regelId: w.regelId,
-        quelle: quelleVon(w), meldung: `Attika ${a.id}: Oberkante fehlt; Anschlusshöhe nicht prüfbar.` });
+function tuerZusatz(d: Dachflaeche, a: Anschluss): string {
+  if (a.art !== "tuer") return "";
+  const t = d.tuerschwellen.find((x) => x.id === a.objektId);
+  return t?.barrierefrei ? " (barrierefrei)" : t?.rinne ? " (mit Rinne)" : "";
+}
+
+function pruefeAnschluesse(d: Dachflaeche, an: readonly Anschluss[], regelFehlt: (a: Anschluss, name: string) => void, out: Befund[]): void {
+  for (const a of an) {
+    const name = anschlussName(d, a) + tuerZusatz(d, a);
+    if (a.soll === null || a.regelId === null || a.quelle === null) { regelFehlt(a, name); continue; }
+    const basis = { objektId: a.objektId, dachflaecheId: d.id, regelId: a.regelId, quelle: a.quelle, ort: a.ort };
+    if (a.vorhanden === null) {
+      const erf = a.erforderlicheOberkante!;
+      out.push({ ...basis, stufe: "hinweis", code: OK_FEHLT[a.art], grenze: erf,
+        meldung: `${name}: Oberkante fehlt; Anschlusshöhe nicht prüfbar. Erforderliche OK ${kote(erf)} `
+          + `(OK fertig max ${kote(a.okFertigMax)} + ${mm(a.soll)}).` });
       continue;
     }
-    const hMax = maxHoeheAuf(g, k[0], k[1]), vorhanden = a.oberkante - hMax;
-    if (vorhanden < w.wert - EPS) {
-      out.push({
-        stufe: "fehler", code: "anschlusshoehe-attika", objektId: a.id, dachflaecheId: d.id, regelId: w.regelId, quelle: quelleVon(w),
-        wert: vorhanden, grenze: w.wert, differenz: w.wert - vorhanden,
-        meldung: `Attika ${a.id}: Anschlusshöhe ${mm(vorhanden)} unter ${mm(w.wert)} (Fehlbetrag ${mm(w.wert - vorhanden)}).`,
-      });
+    if (a.vorhanden < a.soll - EPS) {
+      const diff = a.soll - a.vorhanden;
+      out.push({ ...basis, stufe: "fehler", code: `anschlusshoehe-${a.art}`, wert: a.vorhanden, grenze: a.soll, differenz: diff,
+        meldung: `${name}: Anschlusshöhe ${mm(a.vorhanden)} unter ${mm(a.soll)} (Fehlbetrag ${mm(diff)}); `
+          + `erforderliche OK ${kote(a.erforderlicheOberkante!)}.` });
     }
   }
 }
 
-/** Überflutungskante einer Notentwässerung (z + Wehr-/Einlaufhöhe aus Pack) oder null, wenn Pack-Daten fehlen. */
-interface Notkante { readonly id: string; readonly kante: number | null }
+// ---------- barrierefreie Schwellen ----------
 
-function pruefeSchwellen(d: Dachflaeche, g: DachGefaelle, packs: readonly RulePack[], regel: RegelFn, out: Befund[]): void {
-  if (d.tuerschwellen.length === 0 || g.feld.quellen.length === 0) return;
-  // Haupt- und Notentwässerung trennen (Dachreiter-Art aus Pack, unbekannt = Haupt)
-  const haupt: { a: Vec2; b: Vec2 }[] = [];
-  const not: Notkante[] = [];
+interface Strecke { readonly a: Vec2; readonly b: Vec2 }
+
+/** Hauptentwässerung (Gully, LES, Dachreiter mit Pack-Art ≠ „not“) als Strecken samt Kote z. */
+function hauptAblaeufe(d: Dachflaeche, g: DachGefaelle): (Strecke & { readonly z: number })[] {
+  const out: (Strecke & { z: number })[] = [];
   for (const e of d.entwaesserung) {
-    if (e.art === "gully") haupt.push({ a: e.position, b: e.position });
-    else if (e.art === "les") haupt.push({ a: e.von, b: e.bis });
-    else if (e.art === "notablauf") {
-      const eintrag = e.typ ? packs.find((p): p is AblaufPack => p.typ === "ablaeufe" && p.id === e.typ!.packId)
-        ?.daten.eintraege.find((x) => x.id === e.typ!.eintragId) : undefined;
-      not.push({ id: e.id, kante: eintrag?.wehrhoehe !== undefined ? e.z + eintrag.wehrhoehe : null });
-    } else {
+    if (e.art === "gully") out.push({ a: e.position, b: e.position, z: e.z });
+    else if (e.art === "les") out.push({ a: e.von, b: e.bis, z: e.z });
+    else if (e.art === "dachreiter") {
       const lage = g.dachreiter.find((x) => x.ablaufId === e.id);
-      if (lage?.masse?.art === "not") {
-        not.push({ id: e.id, kante: lage.masse.einlaufhoehe !== undefined ? e.z + lage.masse.einlaufhoehe : null });
-      } else if (lage) haupt.push({ a: lage.von, b: lage.bis });
+      if (lage && lage.masse?.art !== "not") out.push({ a: lage.von, b: lage.bis, z: e.z });
     }
   }
+  return out;
+}
 
+function pruefeBarrierefrei(d: Dachflaeche, g: DachGefaelle, an: readonly Anschluss[], nw: readonly Notwasserstand[],
+  regel: RegelFn, out: Befund[]): void {
+  if (g.feld.quellen.length === 0) return;
+  const haupt = hauptAblaeufe(d, g);
   for (const t of d.tuerschwellen) {
+    if (!t.barrierefrei) continue;
     const k = konturKante(d.kontur, t.lage.kante);
     if (!k) continue;
     const len = dist(k[0], k[1]);
@@ -255,24 +293,10 @@ function pruefeSchwellen(d: Dachflaeche, g: DachGefaelle, packs: readonly RulePa
     const u = { x: (k[1].x - k[0].x) / len, y: (k[1].y - k[0].y) / len };
     const s0 = Math.max(0, t.lage.abstand), s1 = Math.min(len, t.lage.abstand + t.breite);
     const a = { x: k[0].x + u.x * s0, y: k[0].y + u.y * s0 }, b = { x: k[0].x + u.x * s1, y: k[0].y + u.y * s1 };
-    const ort = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    // ungünstigste Stelle der Schwelle (höchste OK fertig), sonst Mitte
+    const ort = an.find((x) => x.art === "tuer" && x.objektId === t.id)?.ort ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const name = `Türschwelle ${t.name || t.id}`;
     const basis = { objektId: t.id, dachflaecheId: d.id, ort };
-
-    // Anschlusshöhe: barrierefrei nach Regel barrierefrei-schwelle, sonst Regel anschlusshoehe
-    const w = t.barrierefrei ? regel(REGEL_BARRIEREFREI, "anschlusshoeheMin") : regel(REGEL_ANSCHLUSS, "tuerMin");
-    if (w && t.oberkante === undefined) {
-      out.push({ ...basis, stufe: "hinweis", code: "schwelle-oberkante-fehlt", regelId: w.regelId, quelle: quelleVon(w),
-        meldung: `${name}: Oberkante fehlt; Anschlusshöhe nicht prüfbar.` });
-    } else if (w && t.oberkante !== undefined) {
-      const vorhanden = t.oberkante - maxHoeheAuf(g, a, b);
-      if (vorhanden < w.wert - EPS) {
-        out.push({ ...basis, stufe: "fehler", code: "anschlusshoehe-tuer", regelId: w.regelId, quelle: quelleVon(w),
-          wert: vorhanden, grenze: w.wert, differenz: w.wert - vorhanden,
-          meldung: `${name}: Anschlusshöhe ${mm(vorhanden)} unter ${mm(w.wert)} (Fehlbetrag ${mm(w.wert - vorhanden)}).` });
-      }
-    }
-    if (!t.barrierefrei) continue;
 
     // Abstand zur Hauptentwässerung
     const wa = regel(REGEL_BARRIEREFREI, "maxAbstandEntwaesserung");
@@ -286,30 +310,30 @@ function pruefeSchwellen(d: Dachflaeche, g: DachGefaelle, packs: readonly RulePa
             : `${name} (barrierefrei): keine Hauptentwässerung auf der Dachfläche.` });
       }
     }
-    // Überflutungskante der Notentwässerung unter OK Schwelle (Annahme: OK Schwelle = OK FFB)
+    // Überflutungskante der Notentwässerung (dieselbe Kante wie `computeNotwasserstaende`, inkl. Nutzerwert)
+    // unter OK Schwelle (Annahme: OK Schwelle = OK FFB)
     const wu = regel(REGEL_BARRIEREFREI, "ueberflutungskanteUnterOkFk");
-    if (!wu) continue;
-    if (t.oberkante === undefined) continue; // oben bereits gemeldet bzw. Regel fehlt
-    if (not.length === 0) {
+    if (!wu || t.oberkante === undefined) continue; // fehlende OK: als Anschluss-Hinweis gemeldet
+    if (nw.length === 0) {
       out.push({ ...basis, stufe: "fehler", code: "barrierefrei-keine-notentwaesserung", regelId: wu.regelId, quelle: quelleVon(wu),
         meldung: `${name} (barrierefrei): keine Notentwässerung auf der Dachfläche; Überflutungskante nicht nachweisbar.` });
       continue;
     }
-    const unbekannt = not.filter((n) => n.kante === null);
-    for (const n of unbekannt) {
-      out.push({ ...basis, stufe: "warnung", code: "notentwaesserung-kante-unbekannt", objektId: n.id, regelId: wu.regelId,
-        quelle: quelleVon(wu),
-        meldung: `${name}: Überflutungskante von ${n.id} unbekannt (Produkt bzw. Wehr-/Einlaufhöhe fehlt im Pack).` });
+    for (const n of nw.filter((x) => x.kante === null)) {
+      out.push({ ...basis, stufe: "warnung", code: "notentwaesserung-kante-unbekannt", objektId: n.objektId, ort: n.ort,
+        regelId: wu.regelId, quelle: quelleVon(wu),
+        meldung: `${name}: Überflutungskante von ${n.objektId} unbekannt (Produkt bzw. Wehr-/Einlaufhöhe fehlt im Pack).` });
     }
-    const bekannt = not.filter((n): n is { id: string; kante: number } => n.kante !== null);
+    const bekannt = nw.filter((n): n is Notwasserstand & { kante: number } => n.kante !== null);
     if (bekannt.length === 0) continue;
-    const kante = Math.max(...bekannt.map((n) => n.kante)); // ungünstigste (höchste) Überflutungskante
-    const vorhanden = t.oberkante - kante;
+    const mass = bekannt.reduce((x, y) => (y.kante > x.kante ? y : x)); // ungünstigste (höchste) Überflutungskante
+    const vorhanden = t.oberkante - mass.kante;
     if (vorhanden < wu.wert - EPS) {
-      out.push({ ...basis, stufe: "fehler", code: "barrierefrei-ueberflutungskante", regelId: wu.regelId, quelle: quelleVon(wu),
+      out.push({ ...basis, ort: mass.ort, stufe: "fehler", code: "barrierefrei-ueberflutungskante", regelId: wu.regelId,
+        quelle: `${quelleVon(wu)}; Kante ${kanteHerkunft(mass)}`,
         wert: vorhanden, grenze: wu.wert, differenz: wu.wert - vorhanden,
-        meldung: `${name} (barrierefrei): Überflutungskante ${kante.toFixed(3)} m nur ${mm(vorhanden)} unter OK Schwelle, `
-          + `gefordert ${mm(wu.wert)}.` });
+        meldung: `${name} (barrierefrei): Überflutungskante ${mass.kante.toFixed(3)} m (${mass.objektId}) nur ${mm(vorhanden)} `
+          + `unter OK Schwelle, gefordert ${mm(wu.wert)}.` });
     }
   }
 }
@@ -317,6 +341,55 @@ function pruefeSchwellen(d: Dachflaeche, g: DachGefaelle, packs: readonly RulePa
 /** Abstand zweier Strecken (0 bei Schnitt nicht nötig: Schwelle liegt auf dem Rand, Abläufe im Dach). */
 function segmentAbstand(a: Vec2, b: Vec2, c: Vec2, d: Vec2): number {
   return Math.min(distPointSegment(a, c, d), distPointSegment(b, c, d), distPointSegment(c, a, b), distPointSegment(d, a, b));
+}
+
+// ---------- Notentwässerung (Kante, Anstau, Notwasserstand; Schätzung) ----------
+
+const kanteHerkunft = (n: Notwasserstand) => (n.kanteQuelle === "nutzer" ? "Nutzereingabe" : "Produkt-Pack");
+
+function pruefeNotentwaesserung(d: Dachflaeche, g: DachGefaelle, an: readonly Anschluss[], nw: readonly Notwasserstand[],
+  regel: RegelFn, out: Befund[]): void {
+  const bekannt = nw.filter((n): n is Notwasserstand & { kante: number } => n.kante !== null);
+  if (bekannt.length === 0) return;
+  const haupt = hauptAblaeufe(d, g);
+  if (haupt.length > 0) {
+    const zMax = Math.max(...haupt.map((h) => h.z)), zTp = Math.min(...haupt.map((h) => h.z));
+    // Kante ≤ höchste Kote der Hauptabläufe: Notentwässerung springt vor der Hauptentwässerung an
+    for (const n of bekannt) {
+      if (n.kante > zMax + EPS) continue;
+      out.push({ stufe: "warnung", code: "notentwaesserung-vor-haupt", objektId: n.objektId, dachflaecheId: d.id, ort: n.ort,
+        regelId: REGEL_NOT_KANTE, quelle: `${QUELLE_PROGRAMM}; Kante ${kanteHerkunft(n)}`, wert: n.kante, grenze: zMax, differenz: zMax - n.kante,
+        meldung: `${n.objektId}: Überflutungskante ${kote(n.kante)} nicht über der höchsten Hauptablauf-Kote ${kote(zMax)}; `
+          + `Notentwässerung springt vor der Hauptentwässerung an.` });
+    }
+    // Kante − z_TP > Anstau max
+    const wm = regel(REGEL_NOT_ANSTAU, "max");
+    if (wm) {
+      for (const n of bekannt) {
+        const anstau = n.kante - zTp;
+        if (anstau <= wm.wert + EPS) continue;
+        out.push({ stufe: "warnung", code: "notentwaesserung-anstau", objektId: n.objektId, dachflaecheId: d.id, ort: n.ort,
+          regelId: wm.regelId, quelle: `${quelleVon(wm)}; Kante ${kanteHerkunft(n)}`, wert: anstau, grenze: wm.wert, differenz: anstau - wm.wert,
+          meldung: `${n.objektId}: Überflutungskante ${mm(anstau)} über Tiefpunkt ${kote(zTp)}, zulässiger Anstau ${mm(wm.wert)}.` });
+      }
+    }
+  }
+  // W + Freibord > OK eines Anschlusses derselben Dachfläche (Schätzung)
+  const mitW = bekannt.filter((n): n is Notwasserstand & { kante: number; wasserstand: number } => n.wasserstand !== null);
+  const mitOk = an.filter((a): a is Anschluss & { oberkante: number } => a.oberkante !== null);
+  if (mitW.length === 0 || mitOk.length === 0) return;
+  const wf = regel(REGEL_NOT_ANSTAU, "freibordNot");
+  if (!wf) return;
+  const w = mitW.reduce((x, y) => (y.wasserstand > x.wasserstand ? y : x)); // ungünstigster Notwasserstand
+  const pegel = w.wasserstand + wf.wert;
+  for (const a of mitOk) {
+    if (pegel <= a.oberkante + EPS) continue;
+    const name = anschlussName(d, a);
+    out.push({ stufe: "fehler", code: "notwasserstand-anschluss", objektId: a.objektId, dachflaecheId: d.id, ort: a.ort,
+      regelId: wf.regelId, quelle: `${quelleVon(wf)}; ${VERMERK_SCHAETZUNG}`, wert: pegel, grenze: a.oberkante, differenz: pegel - a.oberkante,
+      meldung: `Notwasserstand erreicht Anschluss ${name}: W ${kote(w.wasserstand)} an ${w.objektId} + Freibord ${mm(wf.wert)} `
+        + `über OK ${kote(a.oberkante)} (${VERMERK_SCHAETZUNG}, kein hydraulischer Nachweis).` });
+  }
 }
 
 // ---------- Packs, Regenspende ----------
