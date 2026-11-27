@@ -1094,6 +1094,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     ziehEnde(w) { if (ziehen) { ziehAnwenden({ x: w[0], y: w[1] }); ziehen = null; treffer = null; ausricht = null; stage.setCursor(""); refresh(); } },
     move(w) {
       cursor = { x: w[0], y: w[1] };
+      stage.setCursor(ziehTreffer(cursor) ? "grab" : "");
       treffer = null; kante = null; ausricht = null;
       if (zeichnetMitFang()) {
         if (z.tool === "attika" || z.tool === "schwelle" || z.tool === "dachreiter") kante = kantenTreffer(modell(), cursor, tol());
