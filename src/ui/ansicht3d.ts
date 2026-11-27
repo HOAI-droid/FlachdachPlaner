@@ -1,5 +1,5 @@
 /** 3D-Ansicht (PLAN Schritt 27, DESIGN §7, §11): Canvas-2D-Projektion ohne Zusatzbibliothek (Painter-Algorithmus). */
-import { meshDach, meshDaemmung, type Flaeche3, type InsulationLayout, type SlopeResult, type Vec3 } from "../core/index";
+import { meshDach, hoeheDachflaeche, type Flaeche3, type InsulationLayout, type SlopeResult, type Vec3 } from "../core/index";
 import { farbe } from "./ergebnis";
 import { zahl } from "./format";
 import { css, dunkel } from "./zeichnen";
@@ -67,7 +67,7 @@ export class Ansicht3D {
 
   private baue(): void {
     if (!this.slope) { this.netz = []; return; }
-    this.netz = this.modus === "daemmplan" && this.plan ? meshDaemmung(this.slope, this.plan, this.ue) : meshDach(this.slope, this.ue);
+    this.netz = meshDach(this.slope, this.ue);
   }
 
   /** Weltpunkt → Bild (rechts, oben) und Tiefe (größer = weiter weg). */
@@ -100,47 +100,40 @@ export class Ansicht3D {
       const pts = f.outer.map(bild);
       return { f, pts, tiefe: pts.reduce((a, q) => a + q.t, 0) / pts.length };
     }).sort((a, b) => b.tiefe - a.tiefe);
-    const dicken = this.netz.filter((f) => f.art === "platte" && f.dicke !== undefined).map((f) => f.dicke!);
-    const dmin = Math.min(...dicken), dmax = Math.max(...dicken);
     for (const { f, pts } of faces) {
       const n = normale(f.outer);
       const licht = 0.72 + 0.28 * Math.max(0, n.x * LICHT[0] + n.y * LICHT[1] + n.z * LICHT[2]);
-      let basis: [number, number, number];
-      if (f.art === "dach") basis = mischen(farbe(f.gruppe)[dk ? 1 : 0], dk ? 0 : 255, dk ? 0 : 0.15);
-      else if (f.art === "platte") {
-        if (f.zusatzlagen) basis = dk ? [214, 176, 40] : [244, 208, 63];
-        else {
-          const t = f.dicke !== undefined && dmax > dmin ? Math.round(((f.dicke - dmin) / (dmax - dmin)) * 5) / 5 : 0.5; // dünn hell → dick dunkel
-          basis = dk ? [170 - 110 * t, 174 - 110 * t, 182 - 106 * t] : [246 - 110 * t, 242 - 106 * t, 232 - 96 * t];
-        }
-      }
-      else basis = mischen(dk ? "#6E7076" : "#C9C4B8", 0, 0);
+      const basis = mischen(farbe(f.gruppe)[dk ? 1 : 0], dk ? 0 : 255, dk ? 0 : 0.15);
       ctx.beginPath();
       for (const ring of [pts, ...f.holes.map((r) => r.map(bild))]) { ring.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y))); ctx.closePath(); }
-      ctx.fillStyle = rgb(basis, f.art === "seite" ? licht * 0.85 : licht); ctx.fill("evenodd");
-      if (f.art !== "dach") { ctx.strokeStyle = ctx.fillStyle; ctx.globalAlpha = 1; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke(); } // Nähte (Antialiasing) zwischen Nachbarflächen schließen
-      ctx.strokeStyle = f.art === "platte" ? css("--text-muted", "#777") : linie; ctx.globalAlpha = f.art === "dach" ? 0.6 : f.art === "platte" ? 0.9 : 0.25; ctx.lineWidth = f.art === "platte" ? 1 : 1;
-      if (f.art === "platte") {
-        // Plattenstreifen: nur Fugen quer zur Gefällerichtung (Gefälle abstrahiert, bessere Lesbarkeit)
-        const nq = n.x * n.x + n.y * n.y > 1e-6 ? Math.hypot(n.x, n.y) : 0;
-        ctx.beginPath();
-        f.outer.forEach((a, i) => {
-          const b = f.outer[(i + 1) % f.outer.length]!, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy);
-          if (nq === 0 || l < 1e-6 || Math.abs((dx * n.x + dy * n.y) / (l * nq)) > 0.1) return;
-          ctx.moveTo(pts[i]!.x, pts[i]!.y); ctx.lineTo(pts[(i + 1) % pts.length]!.x, pts[(i + 1) % pts.length]!.y);
-        });
-        ctx.stroke();
-      } else if (f.art === "seite") {
-        // keine Kontur an Seitenflächen
-      } else if (f.stumm) {
-        ctx.beginPath();
-        pts.forEach((q, i) => { const r = pts[(i + 1) % pts.length]!; if (!f.stumm![i]) { ctx.moveTo(q.x, q.y); ctx.lineTo(r.x, r.y); } });
-        ctx.stroke();
-      } else ctx.stroke();
+      ctx.fillStyle = rgb(basis, licht); ctx.fill("evenodd");
+      ctx.strokeStyle = linie; ctx.globalAlpha = 0.6; ctx.lineWidth = 1;
+      ctx.beginPath();
+      pts.forEach((q, i) => { const r = pts[(i + 1) % pts.length]!; if (!f.stumm?.[i]) { ctx.moveTo(q.x, q.y); ctx.lineTo(r.x, r.y); } });
+      ctx.stroke();
       ctx.globalAlpha = 1;
     }
+    // Dämmplan: Plattenfugen quer zur Gefällerichtung (Linien auf der Dachoberfläche)
+    if (this.modus === "daemmplan" && this.plan && this.slope) {
+      ctx.strokeStyle = linie; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.85; ctx.beginPath();
+      for (const d of this.plan.dachflaechen) {
+        const g = this.slope.dachflaechen.find((x) => x.dachflaecheId === d.dachflaecheId);
+        if (!g) continue;
+        const z0 = g.tiefpunkt?.kote ?? 0, pt = (v: { x: number; y: number }) => bild({ x: v.x, y: v.y, z: z0 + (hoeheDachflaeche(g, v) - z0) * this.ue });
+        for (const p of d.platten) {
+          const gl = Math.hypot(p.dicke.a, p.dicke.b);
+          if (gl < 1e-9) continue;
+          for (const ring of [p.polygon.outer, ...p.polygon.holes]) ring.forEach((a, i) => {
+            const b = ring[(i + 1) % ring.length]!, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy);
+            if (l < 1e-6 || Math.abs((dx * p.dicke.a + dy * p.dicke.b) / (l * gl)) > 0.1) return;
+            const q = pt(a), r = pt(b); ctx.moveTo(q.x, q.y); ctx.lineTo(r.x, r.y);
+          });
+        }
+      }
+      ctx.stroke(); ctx.globalAlpha = 1;
+    }
     // Gefällepfeile wie in 2D (nur Flächenmodus): 0,8 m lang, Spitze bergab, auf der Facettenebene
-    if (this.modus === "flaeche" && this.slope) {
+    if (this.slope) {
       ctx.strokeStyle = dk ? "#E8E6E0" : css("--text", "#222"); ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 1.4; ctx.lineCap = "round";
       for (const g of this.slope.dachflaechen) {
         const z0 = g.tiefpunkt?.kote ?? 0;
