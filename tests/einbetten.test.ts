@@ -36,3 +36,15 @@ describe("Unterlage einbetten (gzip, nur gewählte PDF-Seite)", () => {
     expect(new TextDecoder().decode(alt)).toBe("hallo");
   });
 });
+
+import { gunzip as _gunzip, gzip as _gzip, MAX_ENTPACKT as _MAX } from "../src/ui/einbetten";
+describe("Entpacken (Review M10)", () => {
+  it("kaputtes gzip wirft", async () => {
+    await expect(_gunzip(new Uint8Array([1, 2, 3, 4]) as Uint8Array<ArrayBuffer>)).rejects.toBeDefined();
+  });
+  it("Grenze ist gesetzt", () => { expect(_MAX).toBeGreaterThan(1e7); });
+  it("Rundlauf", async () => {
+    const d = new Uint8Array([5, 6, 7]) as Uint8Array<ArrayBuffer>;
+    expect(Array.from(await _gunzip(await _gzip(d)))).toEqual([5, 6, 7]);
+  });
+});

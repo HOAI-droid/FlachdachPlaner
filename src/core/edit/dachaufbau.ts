@@ -98,7 +98,7 @@ export function mitAbleitung(b: Befehl, dachId: Id, opt: SlopeOptionen = {}): Be
       const z0 = hauptAbl(vorher).length > 0 ? Math.min(...hauptAbl(vorher).map((e) => e.z)) : undefined;
       const angepasst = z0 === undefined ? r : {
         ...r, dachflaechen: r.dachflaechen.map((x) => (x.id !== dachId ? x
-          : { ...x, entwaesserung: x.entwaesserung.map((e) => (alt.has(e.id) ? e : { ...e, z: z0 })) })),
+          : { ...x, entwaesserung: x.entwaesserung.map((e) => (alt.has(e.id) || e.art === "notablauf" ? e : { ...e, z: z0 })) })),
       };
       // Nur der erste Ablauf legt die Höhenlage fest; später gesetzte oder von Hand angehobene Koten bleiben.
       return leiteHoehenAb(angepasst, dachId, opt, z0 === undefined);

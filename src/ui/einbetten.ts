@@ -3,13 +3,29 @@ import { base64ZuBytes, bytesZuBase64 } from "./speicher";
 
 type Roh = Uint8Array<ArrayBuffer>;
 
-async function stroeme(daten: Roh, ts: CompressionStream | DecompressionStream): Promise<Roh> {
+/** Obergrenze für entpackte Daten (Schutz vor präparierten Dateien, die sich auf GB aufblähen). */
+export const MAX_ENTPACKT = 200 * 1024 * 1024;
+
+async function stroeme(daten: Roh, ts: CompressionStream | DecompressionStream, max = Infinity): Promise<Roh> {
   const w = ts.writable.getWriter();
   void w.write(daten).then(() => w.close()).catch(() => undefined);
-  return new Uint8Array(await new Response(ts.readable).arrayBuffer());
+  const r = ts.readable.getReader();
+  const teile: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await r.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > max) { await r.cancel().catch(() => undefined); throw new Error("Eingebettete Unterlage zu groß."); }
+    teile.push(value);
+  }
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const t of teile) { out.set(t, o); o += t.byteLength; }
+  return out;
 }
 export const gzip = (d: Roh): Promise<Roh> => stroeme(d, new CompressionStream("gzip"));
-export const gunzip = (d: Roh): Promise<Roh> => stroeme(d, new DecompressionStream("gzip"));
+export const gunzip = (d: Roh): Promise<Roh> => stroeme(d, new DecompressionStream("gzip"), MAX_ENTPACKT);
 
 /** Einseitiges PDF aus Seite `seite` (1-basiert) eines PDFs. */
 export async function einzelseitePdf(bytes: ArrayBuffer, seite: number): Promise<Roh> {

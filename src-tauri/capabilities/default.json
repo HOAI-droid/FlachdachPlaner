@@ -16,9 +16,10 @@
     {
       "identifier": "fs:allow-read-file",
       "allow": [
-        {
-          "path": "$HOME/**"
-        }
+        { "path": "$HOME/**/*.pdf" },
+        { "path": "$HOME/**/*.PDF" },
+        { "path": "$HOME/**/*.dxf" },
+        { "path": "$HOME/**/*.DXF" }
       ]
     },
     "core:event:default"

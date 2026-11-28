@@ -422,9 +422,18 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const m = modell();
     if (!(einbetten && m.unterlage && unterlageBytes)) return m;
     const pdf = m.unterlage.art === "pdf";
-    const { eingebettet, roh } = await packeUnterlage(unterlageBytes, pdf ? "pdf" : "dxf", m.unterlage.seite);
-    const u = pdf ? { ...m.unterlage, seite: 1, pruefsumme: { algorithmus: "sha-256" as const, wert: await sha256(roh.buffer) } } : m.unterlage;
-    return { ...m, unterlage: { ...u, eingebettet } };
+    const ohnePfad = (() => { const k: { quellpfad?: unknown } = { ...m.unterlage }; delete k.quellpfad; return k as NonNullable<ProjectModel["unterlage"]>; })();
+    try {
+      const { eingebettet, roh } = await packeUnterlage(unterlageBytes, pdf ? "pdf" : "dxf", m.unterlage.seite);
+      const u = pdf ? { ...ohnePfad, seite: 1, pruefsumme: { algorithmus: "sha-256" as const, wert: await sha256(roh.buffer) } } : ohnePfad;
+      return { ...m, unterlage: { ...u, eingebettet } };
+    } catch {
+      if (pdf) { // PDF nicht zerlegbar (verschlüsselt/beschädigt): vollständige Datei einbetten
+        const { eingebettet } = await packeUnterlage(unterlageBytes, "dxf", undefined);
+        return { ...m, unterlage: { ...ohnePfad, eingebettet } };
+      }
+      throw new Error("Unterlage konnte nicht eingebettet werden.");
+    }
   }
   async function speichereProjekt(): Promise<boolean> {
     const stand = schluessel(), standP = verlauf.aktuell, standE = einbetten;
@@ -446,16 +455,21 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     verlauf = neuerVerlauf(m); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; unterlagePfad = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
     projektMeldung = r.hinweise.length ? r.hinweise.join(" ") : "Projekt geöffnet.";
     if (u?.eingebettet) {
-      const bytes = await entpackeUnterlage(u.eingebettet);
-      offeneUnterlage = u; unterlagePfad = u.quellpfad ?? null;
+      offeneUnterlage = u;
+      let bytes: Uint8Array<ArrayBuffer>;
+      try { bytes = await entpackeUnterlage(u.eingebettet); }
+      catch { projektMeldung += ` Eingebettete Unterlage „${u.dateiname}“ ist beschädigt: bitte Datei erneut wählen.`; refresh(); return; }
       unterlageBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer; // Rückfall: Daten bleiben erhalten, falls das Laden scheitert
       await ladeDatei(new File([bytes], u.dateiname), true);
       einbetten = true;
       markiereGespeichert();
     } else if (u) {
       offeneUnterlage = u;
-      const bytes = u.quellpfad && istTauri() ? await leseDatei(u.quellpfad).catch(() => null) : null;
-      if (bytes) {
+      const endungOk = !!u.quellpfad && u.quellpfad.toLowerCase().endsWith(`.${u.art}`);
+      const bytes = endungOk && istTauri() ? await leseDatei(u.quellpfad!).catch(() => null) : null;
+      const summeOk = !!bytes && (!u.pruefsumme || (await sha256(bytes.buffer as ArrayBuffer)) === u.pruefsumme.wert);
+      if (bytes && !summeOk) projektMeldung += ` Datei unter ${u.quellpfad} weicht von der gespeicherten Unterlage „${u.dateiname}“ ab und wurde nicht geladen: bitte Datei erneut wählen.`;
+      else if (bytes) {
         unterlagePfad = u.quellpfad ?? null;
         await ladeDatei(new File([bytes], u.dateiname), true);
         projektMeldung += ` Unterlage „${u.dateiname}“ vom Ursprungspfad geladen.`;
@@ -826,7 +840,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   function schlageVor(dachId: string) {
     const r = schlageAblaeufeVor(modell(), packs, { dachflaecheId: dachId });
     z = { ...z, hinweis: r.befunde.map((b) => b.meldung).join(" ") || null };
-    ausfuehreBefehl(ablaeufeHinzufuegen(r.ablaeufe, standardTyp("gully")));
+    ausfuehreBefehl(mitAbleitung(ablaeufeHinzufuegen(r.ablaeufe, standardTyp("gully")), dachId, ableitOpt()));
   }
 
   /** Live: vorhanden / soll / erforderliche OK je Anschluss (Schritt 45), aus computeAnschluesse. */
@@ -1345,6 +1359,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (istTextEingabe(e.target)) return;
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
+      if (istTauri() && /^[nsoz]$/.test(k)) return; // übernimmt das native Menü (Accelerator), sonst doppelte Auslösung
       if (k === "n" && !e.shiftKey) { e.preventDefault(); void neuesProjekt(); return; }
       if (k === "s" && !e.shiftKey) { e.preventDefault(); void speichereProjekt(); return; }
       if (k === "o" && !e.shiftKey) { e.preventDefault(); void oeffneProjekt(); return; }
