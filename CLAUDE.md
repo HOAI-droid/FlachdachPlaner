@@ -46,6 +46,7 @@ Wenn etwas davon fehlt, hole es nach, bevor du zum `/clear` rätst.
 - Automatisches Zusammenfassen läuft bei ca. 200k (`.claude/settings.json`). Prüfe mit `/autocompact`, dass der Wert greift.
 
 ## Qualität
+- Nach jedem Push/Abschluss den Link zur GitHub-Actions-Seite angeben: https://github.com/HOAI-droid/FlachdachPlaner/actions (Branch-Filter: `?query=branch%3A<branch>`), damit der Nutzer Build und Download direkt findet.
 - Definition of Done pro Schritt: Abnahmekriterien erfüllt, `check.sh` grün, bei UI `visual-qa` ABGENOMMEN.
 - Dokumentation aktuell halten: Nach jedem abgeschlossenen Schritt `PLAN.md` (Haken, Übergabe, erledigte Review-Punkte), bei neuen Funktionen `README.md` und bei neuen Plan-Mustern `DESIGN.md` im selben Commit aktualisieren. Vor neuer Arbeit zuerst dort nachsehen, was schon umgesetzt ist.
 - Halte dich an `DESIGN.md` (Tokens, Typografie, Abstände). Keine Abweichungen ohne Rücksprache.
