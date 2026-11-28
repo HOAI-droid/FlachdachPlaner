@@ -913,7 +913,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const g = ergebnis?.slope.dachflaechen.find((x) => x.dachflaecheId === d.id);
     if (g?.tiefpunkt || g?.hochpunkt) {
       p.append(row("Tiefpunkt z", g.tiefpunkt ? `${zahl(g.tiefpunkt.kote * 100, 1)} cm` : "–", "hoehe-tief"), row("Hochpunkt z", g.hochpunkt ? `${zahl(g.hochpunkt.kote * 100, 1)} cm` : "–", "hoehe-hoch"));
-      if (g.daemmung) p.append(row("Dämmung Tiefpunkt / Mittel / max.", `${zahl(g.daemmung.min / 10, 1)} / ${zahl(g.daemmung.mittel / 10, 1)} / ${zahl(g.daemmung.max / 10, 1)} cm`, "daemm-werte"));
+      if (g.daemmung) p.append(row("Dämmung T / Ø / max", `${zahl(g.daemmung.min / 10, 1)} / ${zahl(g.daemmung.mittel / 10, 1)} / ${zahl(g.daemmung.max / 10, 1)} cm`, "daemm-werte"));
     }
   }
   function panelAuswahl() {
