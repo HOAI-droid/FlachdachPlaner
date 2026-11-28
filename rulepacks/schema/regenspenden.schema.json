@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "regenspenden.schema.json",
+  "title": "Rule-Pack: Regenspenden (KOSTRA-Raster)",
+  "description": "Regelmäßiges Raster im angegebenen KBS. Zelle (i, j): x = x0 + i·zellgroesse, y = y0 + j·zellgroesse (linke untere Ecke). Werte zeilenweise, Index j·spalten + i, Zeile 0 = Süden. null = keine Daten. Einheit l/(s·ha), Dauerstufe 5 min, Wiederkehrzeit 5 bzw. 100 a.",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "regenspenden" },
+    "daten": {
+      "type": "object",
+      "required": ["raster", "werte"],
+      "properties": {
+        "raster": {
+          "type": "object",
+          "required": ["crs", "x0", "y0", "zellgroesse", "spalten", "zeilen"],
+          "properties": {
+            "crs": { "$ref": "basis.schema.json#/$defs/text", "description": "Koordinatenbezugssystem, z. B. EPSG-Code oder proj4-String" },
+            "x0": { "type": "number" },
+            "y0": { "type": "number" },
+            "zellgroesse": { "type": "number", "exclusiveMinimum": 0 },
+            "spalten": { "type": "integer", "minimum": 1 },
+            "zeilen": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "werte": {
+          "type": "object",
+          "required": ["r5_5", "r5_100"],
+          "properties": {
+            "r5_5": { "$ref": "#/$defs/feld" },
+            "r5_100": { "$ref": "#/$defs/feld" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "feld": { "type": "array", "items": { "type": ["number", "null"], "minimum": 0 } }
+  }
+}

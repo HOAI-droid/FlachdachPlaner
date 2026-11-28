@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "abflussbeiwerte.schema.json",
+  "title": "Rule-Pack: Abflussbeiwerte C",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "abflussbeiwerte" },
+    "daten": {
+      "type": "object",
+      "required": ["eintraege"],
+      "properties": {
+        "eintraege": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "bezeichnung", "c"],
+            "properties": {
+              "id": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "bezeichnung": { "$ref": "basis.schema.json#/$defs/text" },
+              "c": { "type": "number", "minimum": 0, "maximum": 1 },
+              "fundstelle": { "$ref": "basis.schema.json#/$defs/fundstelle" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

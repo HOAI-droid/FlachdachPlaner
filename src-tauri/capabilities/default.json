@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimale Rechte: Hauptfenster, Speichern-Dialog und Schreiben der vom Nutzer gewählten Datei",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-destroy",
+    "core:window:allow-close",
+    "dialog:allow-save",
+    "fs:allow-write-file",
+    "dialog:allow-open",
+    "fs:allow-read-text-file",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "$HOME/**/*.pdf" },
+        { "path": "$HOME/**/*.PDF" },
+        { "path": "$HOME/**/*.dxf" },
+        { "path": "$HOME/**/*.DXF" }
+      ]
+    },
+    "core:event:default"
+  ]
+}

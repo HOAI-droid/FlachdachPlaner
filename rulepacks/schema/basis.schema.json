@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "basis.schema.json",
+  "title": "Rule-Pack: gemeinsamer Kopf",
+  "description": "Pflichtkopf jedes Packs. Einheiten im Kern: m, m², m/m, l/s, l/(s·ha). Der Typ-Teil steht unter 'daten' und wird im jeweiligen Typ-Schema beschrieben.",
+  "type": "object",
+  "required": ["id", "typ", "version", "quelle", "ausgabe", "gueltigAb", "geprueft", "daten"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "description": "Pack-ID wie in ProjectModel.packVersionen" },
+    "typ": { "enum": ["regeln", "ablaeufe", "les", "dachreiter", "abflussbeiwerte", "regenspenden", "daemmplatten", "orte"] },
+    "version": { "$ref": "#/$defs/text" },
+    "titel": { "$ref": "#/$defs/text" },
+    "quelle": { "$ref": "#/$defs/text", "description": "Herkunft der Werte (Dokument, Hersteller, Datensatz)" },
+    "ausgabe": { "$ref": "#/$defs/text", "description": "Ausgabestand der Quelle, z. B. 'Januar 2026'" },
+    "gueltigAb": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$", "description": "ISO-Datum JJJJ-MM-TT" },
+    "geprueft": { "type": "boolean", "description": "false = Werte nicht gegen Original geprüft; erzeugt Hinweis 'Regelwerk ungeprüft'" },
+    "lizenz": { "$ref": "#/$defs/text" },
+    "hinweis": { "$ref": "#/$defs/text" },
+    "daten": { "type": "object" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "eintragId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "laenge": { "type": "number", "exclusiveMinimum": 0, "description": "Länge in m" },
+    "dicke": { "type": "number", "minimum": 0, "description": "Dicke in m" },
+    "gefaelle": { "type": "number", "minimum": 0, "maximum": 1, "description": "Gefälle in m/m (0.02 = 2 %)" },
+    "fundstelle": { "$ref": "#/$defs/text", "description": "Abschnitt/Seite/Abbildung in der Quelle" },
+    "abflussleistung": {
+      "type": "array",
+      "description": "Abflussleistung je Anstauhöhe (Herstellertabelle)",
+      "items": {
+        "type": "object",
+        "required": ["anstau", "q"],
+        "properties": {
+          "anstau": { "type": "number", "exclusiveMinimum": 0, "description": "Anstauhöhe in m" },
+          "q": { "type": "number", "minimum": 0, "description": "Abfluss in l/s" }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dachreiter.schema.json",
+  "title": "Rule-Pack: Dachreiter (Attikaentwässerung)",
+  "description": "Herstellermaße in m: lichte Breite und Höhe der Einlauföffnung, Einbaulänge durch die Attika, Höhe Unterkante Einlauf über Abdichtung.",
+  "type": "object",
+  "$ref": "basis.schema.json",
+  "properties": {
+    "typ": { "const": "dachreiter" },
+    "daten": {
+      "type": "object",
+      "required": ["eintraege"],
+      "properties": {
+        "eintraege": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "hersteller", "produkt", "art", "breite", "hoehe", "einbaulaenge"],
+            "properties": {
+              "id": { "$ref": "basis.schema.json#/$defs/eintragId" },
+              "hersteller": { "$ref": "basis.schema.json#/$defs/text" },
+              "produkt": { "$ref": "basis.schema.json#/$defs/text" },
+              "art": { "enum": ["haupt", "not"] },
+              "breite": { "$ref": "basis.schema.json#/$defs/laenge" },
+              "hoehe": { "$ref": "basis.schema.json#/$defs/laenge" },
+              "einbaulaenge": { "$ref": "basis.schema.json#/$defs/laenge" },
+              "einlaufhoehe": { "$ref": "basis.schema.json#/$defs/dicke" },
+              "ueberlaufBreite": { "$ref": "basis.schema.json#/$defs/laenge", "description": "Notüberlauf/Speier: wirksame Überlaufbreite in m (Poleni)" },
+              "abflussleistung": { "$ref": "basis.schema.json#/$defs/abflussleistung" },
+              "fundstelle": { "$ref": "basis.schema.json#/$defs/fundstelle" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/ablaeufe.schema.json",
+  "id": "ablaeufe",
+  "typ": "ablaeufe",
+  "version": "0.0.0",
+  "titel": "Abläufe – Platzhalter",
+  "quelle": "Platzhalter ohne Daten; Loro-Abflussleistungstabelle reicht der Nutzer nach",
+  "ausgabe": "Platzhalter",
+  "gueltigAb": "2026-11-22",
+  "geprueft": false,
+  "daten": { "eintraege": [] }
+}

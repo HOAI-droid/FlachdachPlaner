@@ -1,0 +1,26 @@
+{
+  "$schema": "../schema/les.schema.json",
+  "id": "bauder-les",
+  "typ": "les",
+  "version": "0.1.0",
+  "titel": "BauderPIR T LES – Gefälle und Keilmaße",
+  "quelle": "Bauder, Unterlagen BauderPIR T LES laut Nutzer (docs/referenz/bauder-les-gefaelle.jpg, bauder-les-keil.jpg, bauder-les-sets.jpg); nicht gegen Datenblatt geprüft",
+  "ausgabe": "unbekannt (Nutzerunterlage)",
+  "gueltigAb": "2026-11-22",
+  "geprueft": false,
+  "hinweis": "Diagonalgefälle 3,5 % wie vom Nutzer gegeben, nicht aus 1 %/4 % hergeleitet. gueltigAb = Erfassungsdatum.",
+  "daten": {
+    "eintraege": [
+      {
+        "id": "pir-t-les",
+        "hersteller": "Bauder",
+        "produkt": "BauderPIR T LES",
+        "gefaelle": { "laengs": 0.01, "quer": 0.04, "diagonal": 0.035 },
+        "keil": { "laenge": 6.0, "breiteJeSeite": 1.5, "dickeMin": 0.01, "dickeMax": 0.07 },
+        "plattenformat": { "laenge": 2.5, "breite": 2.0 },
+        "maxLaenge": 10.0,
+        "fundstelle": "bauder-les-gefaelle.jpg (Beispiel LES 6 m), bauder-les-sets.jpg (Plattenmaße, Systemlänge bis 10 m)"
+      }
+    ]
+  }
+}

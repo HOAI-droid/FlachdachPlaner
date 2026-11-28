@@ -1,0 +1,70 @@
+{
+  "$schema": "../schema/regeln.schema.json",
+  "id": "zvdh-2026",
+  "typ": "regeln",
+  "version": "0.1.0",
+  "titel": "Flachdachrichtlinie – Planungsregeln (Auszug)",
+  "quelle": "ZVDH Flachdachrichtlinie, Angaben laut Nutzer-Scan S. 56/57 (Ausgabe 12/2025) und Nutzerangaben; nicht gegen Originaltext geprüft",
+  "ausgabe": "Januar 2026 (laut Nutzer)",
+  "gueltigAb": "2026-01-01",
+  "geprueft": false,
+  "hinweis": "Alle Werte ungeprüft (PLAN R3). gueltigAb angenommen, vor Einsatz gegen Original prüfen.",
+  "daten": {
+    "regeln": [
+      {
+        "id": "flaeche-je-ablauf",
+        "titel": "Einzugsfläche je Ablauf: Hinweis ab, Fehler über",
+        "fundstelle": "Nutzer-Scan S. 56/57",
+        "parameter": {
+          "hinweisAb": { "wert": 300, "einheit": "m2" },
+          "fehlerUeber": { "wert": 350, "einheit": "m2" }
+        }
+      },
+      {
+        "id": "gefaelle-planungsziel",
+        "titel": "Planungsziel Gefälle der Abdichtung",
+        "parameter": { "regel": { "wert": 0.02, "einheit": "m/m" } }
+      },
+      {
+        "id": "gefaelle-kies-stelzlager",
+        "titel": "Gefälle zur Hauptentwässerung bei Kies/Splitt und Stelzlagern (soll)",
+        "fundstelle": "Nutzer-Scan S. 56/57",
+        "parameter": { "min": { "wert": 0.01, "einheit": "m/m" } }
+      },
+      {
+        "id": "notentwaesserung-anstau",
+        "titel": "Maximale Anstauhöhe Notentwässerung",
+        "fundstelle": "Nutzer-Scan S. 56/57",
+        "parameter": {
+          "max": { "wert": 0.035, "einheit": "m" },
+          "freibordNot": { "wert": 0, "einheit": "m" },
+          "ueberfallbeiwert": { "wert": 0.6, "einheit": "1" }
+        }
+      },
+      {
+        "id": "anschlusshoehe",
+        "titel": "Mindest-Anschlusshöhe über OK Belag (Attika, Wand, Tür, Aufbau)",
+        "fundstelle": "laut Nutzer, ungeprüft",
+        "parameter": {
+          "attikaMin": { "wert": 0.15, "einheit": "m" },
+          "wandMin": { "wert": 0.15, "einheit": "m" },
+          "tuerMin": { "wert": 0.15, "einheit": "m" },
+          "tuerMitRinneMin": { "wert": 0.05, "einheit": "m" },
+          "aufbauMin": { "wert": 0.15, "einheit": "m" }
+        }
+      },
+      {
+        "id": "barrierefrei-schwelle",
+        "titel": "Barrierefreie Schwellen: Sicherheitsbeiwerte, Abstand, Überflutungskante, Anschlusshöhe",
+        "fundstelle": "Nutzer-Scan S. 56/57",
+        "parameter": {
+          "sicherheitsbeiwertHaupt": { "wert": 1, "einheit": "1" },
+          "sicherheitsbeiwertNot": { "wert": 2, "einheit": "1" },
+          "maxAbstandEntwaesserung": { "wert": 10.0, "einheit": "m" },
+          "ueberflutungskanteUnterOkFk": { "wert": 0.05, "einheit": "m" },
+          "anschlusshoeheMin": { "wert": 0.05, "einheit": "m" }
+        }
+      }
+    ]
+  }
+}

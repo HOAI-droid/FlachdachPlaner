@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/dachreiter.schema.json",
+  "id": "dachreiter",
+  "typ": "dachreiter",
+  "version": "0.0.0",
+  "titel": "Dachreiter – Platzhalter",
+  "quelle": "Platzhalter ohne Daten; Herstellermaße werden aus Datenblättern übernommen",
+  "ausgabe": "Platzhalter",
+  "gueltigAb": "2026-11-22",
+  "geprueft": false,
+  "daten": { "eintraege": [] }
+}

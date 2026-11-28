@@ -1,0 +1,43 @@
+/* Design-Tokens laut DESIGN.md §2–§4, §8. Hell = :root, Dunkel = [data-theme="dark"]. */
+:root {
+  --bg: #F4F2EC; --surface: #FBFAF7; --surface-2: #ECE9E1;
+  --line: #D6D2C7; --line-strong: #A9A498;
+  --text: #1C1D1F; --text-muted: #5A5C60;
+  --accent: #1F4FA3; --on-accent: #FFFFFF; --accent-soft: #DCE5F5;
+  --ok: #2E6B3A; --warn: #8A5A00; --warn-soft: #F6E7C4;
+  --error: #B3261E; --error-soft: #F7DAD7;
+  --snap: #D4007A; --underlay-opacity: 0.45;
+
+  --font-ui: "IBM Plex Sans Condensed", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --fs-xs: 11px; --lh-xs: 14px;
+  --fs-sm: 12px; --lh-sm: 16px;
+  --fs-md: 13px; --lh-md: 18px;
+  --fs-lg: 15px; --lh-lg: 20px;
+  --fs-xl: 18px; --lh-xl: 24px;
+
+  --sp-1: 2px; --sp-2: 4px; --sp-3: 8px; --sp-4: 12px; --sp-5: 16px; --sp-6: 24px; --sp-7: 32px;
+  --r-1: 2px; --r-2: 4px;
+  --shadow-1: 0 2px 8px rgb(0 0 0 / .12);
+
+  --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 280ms;
+  --ease: cubic-bezier(.2, 0, 0, 1);
+
+  --h-head: 40px; --w-tools: 44px; --w-panel: 320px; --h-status: 24px; --h-check: 200px;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --bg: #17181A; --surface: #202124; --surface-2: #2A2B2F;
+  --line: #3A3B40; --line-strong: #55575D;
+  --text: #E8E6E1; --text-muted: #A3A29D;
+  --accent: #8CAEF0; --on-accent: #111214; --accent-soft: #26324A;
+  --ok: #7CC48A; --warn: #E6B450; --warn-soft: #3A3020;
+  --error: #F28B82; --error-soft: #43201E;
+  --snap: #FF5CB8; --underlay-opacity: 0.35;
+  color-scheme: dark;
+}
+@media (min-width: 1600px) { :root { --w-panel: 360px; } }
+@media (min-width: 1920px) { :root { --h-check: 240px; } }
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; }
+}
