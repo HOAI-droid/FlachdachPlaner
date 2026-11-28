@@ -1,6 +1,7 @@
 /** Unterlagen in der UI (PLAN Schritte 15/16): DXF (Vektor, fangbar) und PDF (Bitmap, kalibrierbar). */
 import { ausNenner, anwenden, zuPasspunkten, type Aehnlichkeit, type SnapSegment, type Unterlage } from "../core/index";
 import { flatten, parseDxf, type DxfDokument } from "../io/dxf";
+import type { PlanUnterlage } from "../io/pdf/plan";
 import type { LayerDraw } from "./canvas/stage";
 
 let deckkraftWert: number | null = null;
@@ -21,6 +22,8 @@ export interface UnterlageUI {
   /** Fangbare Strecken in Welt-Metern (nur sichtbare Layer). */
   segmente(): readonly SnapSegment[];
   readonly draw: LayerDraw;
+  /** Unterlage für den PDF-Export (Bild als JPEG bzw. DXF-Strecken) mit der gewünschten Deckkraft. */
+  exportUnterlage(deckkraft: number): Promise<PlanUnterlage | null>;
   /** minX, minY, maxX, maxY in Welt-Metern; null, wenn leer. */
   bounds(): [number, number, number, number] | null;
   /** Nur PDF: Abbildung Seite (pt, y nach oben) → Welt (m). */
@@ -74,6 +77,10 @@ export async function ladeDxf(file: File): Promise<UnterlageUI> {
     setLayer(name, an) { if (an) sichtbar.add(name); else sichtbar.delete(name); cache = null; },
     segmente() { cache ??= bauen(); return cache.segmente; },
     bounds() { cache ??= bauen(); return cache.bounds; },
+    async exportUnterlage(deckkraft) {
+      cache ??= bauen();
+      return cache.segmente.length ? { art: "linien", deckkraft, segmente: cache.segmente } : null;
+    },
     draw(ctx, vp) {
       cache ??= bauen();
       ctx.globalAlpha = deckkraft();
@@ -116,6 +123,19 @@ export async function ladePdf(file: File, seite = 1): Promise<UnterlageUI> {
   await page.render({ canvas: bitmap, canvasContext: bctx, viewport: vpR }).promise;
 
   let t: Aehnlichkeit = ausNenner(PDF_STANDARD_NENNER)!;
+  let jpegCache: Promise<{ breite: number; hoehe: number; jpeg: Uint8Array }> | null = null;
+  /** Bitmap auf höchstens 3000 px verkleinert und als JPEG (Qualität 0,85) kodiert; einmal je Unterlage. */
+  const jpeg = () => (jpegCache ??= (async () => {
+    const f = Math.min(1, 3000 / Math.max(bitmap.width, bitmap.height));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(bitmap.width * f)); c.height = Math.max(1, Math.round(bitmap.height * f));
+    const cx = c.getContext("2d");
+    if (!cx) throw new Error("Canvas 2D nicht verfügbar");
+    cx.fillStyle = "#ffffff"; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(bitmap, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>((ok) => c.toBlob(ok, "image/jpeg", 0.85));
+    if (!blob) throw new Error("JPEG-Kodierung nicht verfügbar");
+    return { breite: c.width, hoehe: c.height, jpeg: new Uint8Array(await blob.arrayBuffer()) };
+  })());
   const W = base.width, H = base.height;
   return {
     art: "pdf", name: file.name, pruefsumme, seite: seiteNr, layer: [], sichtbar: new Set(), einheitUnbekannt: false,
@@ -125,6 +145,10 @@ export async function ladePdf(file: File, seite = 1): Promise<UnterlageUI> {
       return [Math.min(...c.map((p) => p.x)), Math.min(...c.map((p) => p.y)), Math.max(...c.map((p) => p.x)), Math.max(...c.map((p) => p.y))];
     },
     kalibrierung: { get: () => t, set: (n) => { t = n; }, breite: W, hoehe: H },
+    async exportUnterlage(deckkraft) {
+      const j = await jpeg();
+      return { art: "bild", deckkraft, bild: j, seiteBreite: W, seiteHoehe: H, t: { a: t.a, b: t.b, tx: t.tx, ty: t.ty } };
+    },
     draw(ctx) {
       ctx.globalAlpha = deckkraft();
       ctx.transform(t.a, t.b, -t.b, t.a, t.tx, t.ty);          // Seite (pt, y oben) → Welt

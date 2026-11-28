@@ -81,8 +81,37 @@ function farbOps(hex: string, strich: boolean): string {
   return `${c.join(" ")} ${strich ? "RG" : "rg"}`;
 }
 
+/** JPEG-Bild (Binärstring-frei: Rohbytes) für `PdfSeite.bild`. */
+export interface PdfBild { readonly breite: number; readonly hoehe: number; readonly jpeg: Uint8Array }
+
 export class PdfSeite {
   private readonly ops: string[] = [];
+  /** Bilder und Transparenzstufen dieser Seite (Ressourcen werden beim Schreiben als Objekte angelegt). */
+  readonly bilder: PdfBild[] = [];
+  readonly alphas: number[] = [];
+  private alphaNr(a: number): number {
+    const w = Math.round(a * 1000) / 1000;
+    let i = this.alphas.indexOf(w);
+    if (i < 0) { i = this.alphas.length; this.alphas.push(w); }
+    return i;
+  }
+  /** Rechteck als Klippbereich; bis `klippEnde()` wird nur darin gezeichnet. */
+  klippAnfang(x0: number, y0: number, x1: number, y1: number): void {
+    this.ops.push(`q ${f(x0 * PT)} ${f(y0 * PT)} ${f((x1 - x0) * PT)} ${f((y1 - y0) * PT)} re W n`);
+  }
+  klippEnde(): void { this.ops.push("Q"); }
+  /** Alle folgenden Operationen mit Deckkraft `a` (0–1) zeichnen, bis `transparenzEnde()`. */
+  transparenzAnfang(a: number): void { this.ops.push(`q /GS${this.alphaNr(a)} gs`); }
+  transparenzEnde(): void { this.ops.push("Q"); }
+  /**
+   * Bild auf die Einheitsquadrat-Abbildung [ux uy vx vy ox oy] (mm): (0,0)=unten links, u nach rechts, v nach oben.
+   * `deckkraft` < 1 setzt eine Transparenzstufe (ExtGState /ca).
+   */
+  bild(b: PdfBild, m: readonly [number, number, number, number, number, number], deckkraft = 1): void {
+    const i = this.bilder.push(b) - 1;
+    const gs = deckkraft < 1 ? `/GS${this.alphaNr(deckkraft)} gs ` : "";
+    this.ops.push(`q ${gs}${f(m[0] * PT)} ${f(m[1] * PT)} ${f(m[2] * PT)} ${f(m[3] * PT)} ${f(m[4] * PT)} ${f(m[5] * PT)} cm /Im${i} Do Q`);
+  }
   constructor(readonly breite: number, readonly hoehe: number) {}
 
   private stil(o: LinienOpt): string {
@@ -140,25 +169,39 @@ export class PdfDokument {
   seite(breite: number, hoehe: number): PdfSeite { const s = new PdfSeite(breite, hoehe); this.seiten.push(s); return s; }
 
   bytes(): Uint8Array {
-    // Objekte: 1 Katalog, 2 Seitenbaum, 3/4 Schriften, 5 Info, danach je Seite (Seite, Inhalt)
+    // Objekte: 1 Katalog, 2 Seitenbaum, 3/4 Schriften, 5 Info, danach je Seite: Seite, Inhalt, Bilder, Transparenzstufen
     const teile: string[] = [];
     const offs: number[] = [];
     let len = 0;
     const emit = (s: string) => { teile.push(s); len += s.length; };
     const obj = (nr: number, body: string) => { offs[nr] = len; emit(`${nr} 0 obj\n${body}\nendobj\n`); };
     emit("%PDF-1.4\n%âãÏÓ\n");
-    const kinder = this.seiten.map((_, i) => `${6 + i * 2} 0 R`).join(" ");
+    let nr = 6;
+    const plan = this.seiten.map((s) => {
+      const seite = nr++, inhalt = nr++;
+      const bilder = s.bilder.map(() => nr++), alphas = s.alphas.map(() => nr++);
+      return { s, seite, inhalt, bilder, alphas };
+    });
+    const kinder = plan.map((p) => `${p.seite} 0 R`).join(" ");
     obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
     obj(2, `<< /Type /Pages /Kids [${kinder}] /Count ${this.seiten.length} >>`);
     obj(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
     obj(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
     obj(5, `<< /Title <${titelHex(this.titel)}> /Producer (FlachdachPlaner) >>`);
-    this.seiten.forEach((s, i) => {
-      const nr = 6 + i * 2, inhalt = s.inhalt();
-      obj(nr, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(s.breite * PT)} ${f(s.hoehe * PT)}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${nr + 1} 0 R >>`);
-      obj(nr + 1, `<< /Length ${inhalt.length} >>\nstream\n${inhalt}\nendstream`);
-    });
-    const n = 6 + this.seiten.length * 2;
+    for (const { s, seite, inhalt: inr, bilder, alphas } of plan) {
+      const inhalt = s.inhalt();
+      const xo = bilder.length ? ` /XObject << ${bilder.map((n, i) => `/Im${i} ${n} 0 R`).join(" ")} >>` : "";
+      const gs = alphas.length ? ` /ExtGState << ${alphas.map((n, i) => `/GS${i} ${n} 0 R`).join(" ")} >>` : "";
+      obj(seite, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(s.breite * PT)} ${f(s.hoehe * PT)}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xo}${gs} >> /Contents ${inr} 0 R >>`);
+      obj(inr, `<< /Length ${inhalt.length} >>\nstream\n${inhalt}\nendstream`);
+      s.bilder.forEach((b, i) => {
+        let bin = "";
+        for (let k = 0; k < b.jpeg.length; k += 8192) bin += String.fromCharCode(...b.jpeg.subarray(k, k + 8192));
+        obj(bilder[i]!, `<< /Type /XObject /Subtype /Image /Width ${b.breite} /Height ${b.hoehe} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bin.length} >>\nstream\n${bin}\nendstream`);
+      });
+      s.alphas.forEach((a, i) => obj(alphas[i]!, `<< /Type /ExtGState /ca ${f(a)} /CA ${f(a)} >>`));
+    }
+    const n = nr;
     const xref = len;
     let x = `xref\n0 ${n}\n0000000000 65535 f \n`;
     for (let i = 1; i < n; i++) x += `${String(offs[i]).padStart(10, "0")} 00000 n \n`;

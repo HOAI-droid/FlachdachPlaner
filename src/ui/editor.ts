@@ -28,6 +28,7 @@ import { frageSpeichern, oeffneDialog } from "./dialog";
 import { gibDateiAus, leseDatei, waehleUnterlagePfad } from "./datei-ausgabe";
 import { entpackeUnterlage, packeUnterlage } from "./einbetten";
 import { oeffneAngabenDialog } from "./angaben";
+import { zeigePdfVorschau, type VorschauWahl } from "./pdf-vorschau";
 import { waehlePdfSeite } from "./pdf-seiten";
 import { istTauri, schuetzeFenster } from "./schliessen";
 import { hoereAufMenue, waehleProjektText } from "./datei-ausgabe";
@@ -567,35 +568,6 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const { anschluesse, notstaende } = anschlussDaten(m, erg.slope, erg.notfall);
     return { eingabe: { modell: m, slope: erg.slope, catchments: erg.catchments, eids: erg.eids, plan: pl, befunde: erg.befunde, anschluesse, notstaende, farbe: (i: number) => farbe(i)[0], datum, regelwerk, ...(mitName ? { variante: name } : {}) } };
   }
-  /** Fragt bei mehreren Varianten, welche exportiert werden (Standard: die aktive); null = abgebrochen. */
-  async function waehleExportVarianten(): Promise<string[] | null> {
-    const pr = aktuellesProjekt();
-    const liste = variantenListe(pr);
-    if (liste.length < 2) return [pr.aktiveVariante];
-    const gewaehlt = new Set<string>([pr.aktiveVariante]);
-    const box = el("div", "pad");
-    const hinweis = el("div", "note warn", "Wählen Sie mindestens eine Variante.");
-    hinweis.hidden = true;
-    const felder: HTMLInputElement[] = [];
-    for (const v of liste) {
-      const lab = el("label", "check-row");
-      const cb = el("input"); cb.type = "checkbox"; cb.checked = gewaehlt.has(v.id); cb.dataset.k = `export-${v.id}`;
-      cb.addEventListener("change", () => { if (cb.checked) gewaehlt.add(v.id); else gewaehlt.delete(v.id); aktualisiere(); });
-      felder.push(cb);
-      lab.append(cb, el("span", "", v.name + (v.aktiv ? " (aktiv)" : "")));
-      box.append(lab);
-    }
-    box.append(hinweis);
-    const d = oeffneDialog({
-      titel: "Plan als PDF exportieren", text: "Welche Varianten sollen ins PDF? Jede Variante erhält ihre eigenen Blätter.", inhalt: box,
-      knoepfe: [{ id: "abbrechen", label: "Abbrechen" }, { id: "export", label: "Exportieren", primaer: true }], abbruchId: "abbrechen",
-    });
-    const ok = d.wurzel.querySelector<HTMLButtonElement>("[data-k='dialog-export']")!;
-    function aktualisiere() { ok.disabled = gewaehlt.size === 0; hinweis.hidden = gewaehlt.size > 0; }
-    const antwort = await d.ergebnis;
-    if (antwort !== "export") return null;
-    return liste.filter((v) => gewaehlt.has(v.id)).map((v) => v.id);
-  }
   let pdfLaeuft = false;
   /** Sperre gegen Doppelstart: während des Exports (inkl. Dialog und Speichern) startet kein zweiter. */
   async function exportierePdf() {
@@ -603,30 +575,40 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     pdfLaeuft = true;
     try { await exportierePdfJetzt(); } finally { pdfLaeuft = false; }
   }
+  /** Zuletzt gewählte Unterlage-Einstellung des PDF-Exports (gilt für die Sitzung). */
+  const pdfUnterlage = { an: false, deckkraft: 0.35 };
   async function exportierePdfJetzt() {
     const pr = aktuellesProjekt();
-    const ids = await waehleExportVarianten();
-    if (!ids) return;
-    try {
-      const regeln = packs.find((x) => x.typ === "regeln");
-      const heute = new Date();
-      const datum = `${String(heute.getDate()).padStart(2, "0")}.${String(heute.getMonth() + 1).padStart(2, "0")}.${heute.getFullYear()}`;
-      const regelwerk = regeln ? `${regeln.titel ?? regeln.id} · ${regeln.version}` : "–";
-      const mehrere = variantenListe(pr).length > 1;
-      const teile = [];
-      const leer: string[] = [];
-      for (const [i, id] of ids.entries()) {
-        const name = variantenListe(pr).find((v) => v.id === id)?.name ?? id;
-        if (ids.length > 1) { projektMeldung = `PDF wird erstellt: Variante ${i + 1}/${ids.length} …`; refresh(); await new Promise<void>((res) => requestAnimationFrame(() => setTimeout(res, 0))); }
+    const liste = variantenListe(pr);
+    const regeln = packs.find((x) => x.typ === "regeln");
+    const heute = new Date();
+    const datum = `${String(heute.getDate()).padStart(2, "0")}.${String(heute.getMonth() + 1).padStart(2, "0")}.${heute.getFullYear()}`;
+    const regelwerk = regeln ? `${regeln.titel ?? regeln.id} · ${regeln.version}` : "–";
+    const mehrere = liste.length > 1;
+    const erzeuge = async (w: VorschauWahl) => {
+      const u = w.unterlage && unterlage ? await unterlage.exportUnterlage(w.deckkraft) : null;
+      const teile = [], leer: string[] = [];
+      for (const id of w.ids) {
+        const name = liste.find((v) => v.id === id)?.name ?? id;
         const t = baueExportEingabe(modellFuerVariante(pr, id), name, datum, regelwerk, mehrere);
-        if (t) teile.push(t); else leer.push(name);
+        if (t) teile.push(u ? { eingabe: { ...t.eingabe, unterlage: u } } : t); else leer.push(name);
       }
-      if (teile.length === 0) { projektMeldung = "PDF-Export: erst eine Dachfläche zeichnen."; refresh(); return; }
-      const r = baueVariantenPdf(teile);
-      const einzel = ids.length === 1 && mehrere ? `-${dateiname(variantenListe(pr).find((v) => v.id === ids[0])?.name ?? "")}` : "";
+      return teile.length === 0 ? null : { ...baueVariantenPdf(teile), anzahl: teile.length, leer };
+    };
+    const wahl = await zeigePdfVorschau({
+      liste, unterlageName: unterlage ? unterlage.name : null,
+      start: { ids: [pr.aktiveVariante], unterlage: pdfUnterlage.an, deckkraft: pdfUnterlage.deckkraft },
+      baue: async (w) => (await erzeuge(w))?.bytes ?? null,
+    });
+    if (!wahl) return;
+    if (unterlage) { pdfUnterlage.an = wahl.unterlage; pdfUnterlage.deckkraft = wahl.deckkraft; }
+    try {
+      const r = await erzeuge(wahl);
+      if (!r) { projektMeldung = "PDF-Export: erst eine Dachfläche zeichnen."; refresh(); return; }
+      const einzel = wahl.ids.length === 1 && mehrere ? `-${dateiname(liste.find((v) => v.id === wahl.ids[0])?.name ?? "")}` : "";
       const gespeichert = await gibDateiAus(r.bytes, { name: `${dateiname(pr.meta.name)}${einzel}-Plan.pdf`, mime: "application/pdf", endung: "pdf", beschreibung: "PDF" });
       if (!gespeichert) { projektMeldung = "PDF-Export abgebrochen."; refresh(); return; }
-      projektMeldung = `PDF erstellt (A3, ${teile.length} ${teile.length === 1 ? "Variante" : "Varianten"}, Maßstab 1 : ${[...new Set(r.massstaebe)].join(" / 1 : ")}).` + (leer.length ? ` Ohne Dachfläche übersprungen: ${leer.join(", ")}.` : "");
+      projektMeldung = `PDF erstellt (A3, ${r.anzahl} ${r.anzahl === 1 ? "Variante" : "Varianten"}, Maßstab 1 : ${[...new Set(r.massstaebe)].join(" / 1 : ")}${wahl.unterlage && unterlage ? `, Unterlage ${Math.round(wahl.deckkraft * 100)} %` : ""}).` + (r.leer.length ? ` Ohne Dachfläche übersprungen: ${r.leer.join(", ")}.` : "");
     } catch (e) { projektMeldung = `PDF-Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; }
     refresh();
   }

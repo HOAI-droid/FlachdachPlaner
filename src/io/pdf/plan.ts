@@ -7,9 +7,17 @@ import {
   anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, pfeilLage, plattenDaemmdicke, polygonCentroid, verletzteKoten,
   type Anschluss, type Befund, type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type Notwasserstand, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
-import { PdfDokument, textBreite, type PdfSeite, type Punkt } from "./pdf";
+import { PdfDokument, textBreite, type PdfBild, type PdfSeite, type Punkt } from "./pdf";
+
+/** Unterlage unter dem Plan (Export-Vorschau: ein/aus, Deckkraft). Bild = PDF-Seite als JPEG, Linien = DXF-Strecken in Metern. */
+export type PlanUnterlage = { readonly deckkraft: number } & (
+  | { readonly art: "bild"; readonly bild: PdfBild; readonly seiteBreite: number; readonly seiteHoehe: number; readonly t: { readonly a: number; readonly b: number; readonly tx: number; readonly ty: number } }
+  | { readonly art: "linien"; readonly segmente: readonly { readonly a: Vec2; readonly b: Vec2 }[] }
+);
 
 export interface PlanEingabe {
+  /** Unterlage unter dem Plan; fehlt sie, erscheint keine. */
+  readonly unterlage?: PlanUnterlage;
   readonly modell: ProjectModel;
   readonly slope: SlopeResult;
   readonly catchments: CatchmentResult;
@@ -511,6 +519,21 @@ function anschlussBlatt(s: PdfSeite, e: PlanEingabe): void {
   ], zeilenNt.length ? zeilenNt : [["–", "", "", "", "", ""]]);
 }
 
+/** Unterlage hinter dem Plan, auf den Planausschnitt geklippt; Bild transparent, DXF-Linien grau mit Transparenz. */
+function zeichneUnterlage(s: PdfSeite, a: Abbildung, u: PlanUnterlage): void {
+  s.klippAnfang(PLAN.x0, PLAN.y0, PLAN.x1, PLAN.y1);
+  if (u.art === "bild") {
+    const w = (x: number, y: number) => a.p({ x: u.t.a * x - u.t.b * y + u.t.tx, y: u.t.b * x + u.t.a * y + u.t.ty });
+    const o = w(0, 0), ux = w(u.seiteBreite, 0), vy = w(0, u.seiteHoehe);
+    s.bild(u.bild, [ux.x - o.x, ux.y - o.y, vy.x - o.x, vy.y - o.y, o.x, o.y], u.deckkraft);
+  } else {
+    s.transparenzAnfang(u.deckkraft);
+    for (const g of u.segmente) s.linie([a.p(g.a), a.p(g.b)], { breite: LW.fein, farbe: "#555555" });
+    s.transparenzEnde();
+  }
+  s.klippEnde();
+}
+
 /** Eine Variante für den Mehrvarianten-Export. */
 export interface VariantenPlan { readonly eingabe: PlanEingabe }
 
@@ -533,6 +556,7 @@ export function baueVariantenPdf(vs: readonly VariantenPlan[], titel?: string): 
       const s = dok.seite(BLATT.b, BLATT.h);
       nr++;
       rahmen(s);
+      if (e.unterlage) zeichneUnterlage(s, a, e.unterlage);
       b.zeichne(s);
       bemassung(s, a, e.modell);
       nordpfeil(s, PLAN.x0 + 8, PLAN.y1 - 26);

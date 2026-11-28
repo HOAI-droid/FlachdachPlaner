@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { computeCatchments, computeSlope, createProject, layoutInsulation, loadRulePack, type DaemmplattenPack, type ProjectModel } from "../src/core/index";
 import { PdfDokument, textBreite } from "../src/io/pdf/pdf";
-import { Abbildung, baueProjektPdf, waehleMassstab } from "../src/io/pdf/plan";
+import { Abbildung, baueProjektPdf, waehleMassstab, type PlanUnterlage } from "../src/io/pdf/plan";
 
 const packTexte = import.meta.glob("../rulepacks/*/pack.json", { eager: true, query: "?raw", import: "default" }) as Record<string, string>;
 const r = loadRulePack(JSON.parse(packTexte["../rulepacks/daemmplatten/pack.json"]!));
@@ -55,5 +55,35 @@ describe("Schritt 28: PDF-Export", () => {
     expect(s).toContain("(Gef\\344lleplan)");
     expect(s).toContain("(Testdach \\(PDF\\))");
     expect(s).not.toContain("NaN");
+  });
+  it("Bild + Transparenz: Objekte, xref-Offsets und Ressourcen stimmen; pdf-lib kann das Dokument lesen", async () => {
+    const d = new PdfDokument("T");
+    const sp = d.seite(100, 100);
+    sp.klippAnfang(5, 5, 95, 95);
+    sp.bild({ breite: 2, hoehe: 2, jpeg: new Uint8Array([0xff, 0xd8, 0xff, 0xd9, 0x80, 0x0a, 0x28]) }, [50, 0, 0, 50, 10, 10], 0.4);
+    sp.klippEnde();
+    sp.text("x", 5, 5);
+    d.seite(100, 100).text("zweite", 5, 5);
+    const b = d.bytes(), s = Array.from(b, (c) => String.fromCharCode(c)).join("");
+    expect(s).toContain("/Filter /DCTDecode");
+    expect(s).toContain("/ExtGState << /GS0 ");
+    expect(s).toContain("/ca 0.4 /CA 0.4");
+    const start = Number(/startxref\n(\d+)/.exec(s)![1]);
+    const offs = [...s.slice(start).matchAll(/(\d{10}) 00000 n/g)].map((x) => Number(x[1]));
+    offs.forEach((o, i) => expect(s.slice(o, o + `${i + 1} 0 obj`.length)).toBe(`${i + 1} 0 obj`));
+    const { PDFDocument } = await import("pdf-lib");
+    expect((await PDFDocument.load(b)).getPageCount()).toBe(2);
+  });
+  it("Plan mit Unterlage (DXF-Linien, Deckkraft) enthält Transparenz und Klippbereich; ohne Unterlage nicht", () => {
+    const m = modell();
+    const slope = computeSlope(m, { daemmdickeTiefpunktStandard: 20 });
+    const catchments = computeCatchments(m, slope, {});
+    const eids = new Map(catchments.flaechen.map((f, i) => [f.id, `E${i + 1}`] as const));
+    const basis = { modell: m, slope, catchments, eids, plan: null, farbe: () => "#77AADD", datum: "01.01.2026", regelwerk: "Test 1.0" };
+    const text = (u?: PlanUnterlage) => Array.from(baueProjektPdf({ ...basis, ...(u ? { unterlage: u } : {}) }).bytes, (c) => String.fromCharCode(c)).join("");
+    const mit = text({ art: "linien", deckkraft: 0.3, segmente: [{ a: { x: -2, y: -2 }, b: { x: 20, y: 20 } }] });
+    expect(mit).toContain("/ca 0.3 /CA 0.3");
+    expect(mit).toContain(" re W n");
+    expect(text()).not.toContain("/ExtGState");
   });
 });

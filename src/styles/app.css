@@ -221,3 +221,13 @@ button, input, select { font: inherit; color: inherit; }
 /* Höhenfeld mit −/+-Schritten (feldCm) */
 .stepper { display: grid; grid-template-columns: 28px 1fr 28px; gap: var(--sp-1); min-width: 0; }
 .stepper .btn.step { height: 28px; padding: 0; font-variant-numeric: tabular-nums; }
+
+/* PDF-Export-Vorschau */
+.dialog-bg .dialog.vorschau-dialog { width: min(1040px, calc(100vw - var(--sp-6))); max-width: none; }
+.vorschau { display: grid; grid-template-columns: 240px 1fr; gap: var(--sp-4); min-height: 360px; }
+.vorschau-opt { display: flex; flex-direction: column; gap: var(--sp-2); }
+.vorschau-regler { grid-template-columns: 64px 1fr 40px; }
+.vorschau-regler input[type="range"] { width: 100%; padding: 0; }
+.vorschau-bild { min-width: 0; background: var(--surface-2); border: 1px solid var(--line); padding: var(--sp-2); overflow: auto; max-height: calc(100vh - 220px); }
+.vorschau-bild canvas { box-shadow: var(--shadow-1); background: #fff; }
+@media (max-width: 760px) { .vorschau { grid-template-columns: 1fr; } }

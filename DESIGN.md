@@ -139,6 +139,8 @@ Hintergrund `--bg`. Licht: Hemisphere (Himmel `#FFFFFF`, Boden `#B8B2A4`, 0,8) +
 ## 9. Planexport (PDF)
 Immer hell, Papierweiß `#FFFFFF`, Linien Schwarz `#000000`; Strichstärken ISO 128: 0,18 / 0,25 / 0,35 / 0,50 / 0,70 mm. Einzugsflächen mit 25 % Tint, ohne Schraffur; im Graustufendruck unterscheidet das Label (ID + m²). Schriftfeld unten rechts 180 x 50 mm: Projekt, Planinhalt, Maßstab, Datum, Bearbeiter, Regelwerk + Version, Index. Legende (Symbole, Flächen-IDs mit m², Warnungen) rechts neben dem Plan. Textgrößen 2,5 / 3,5 / 5 mm. Nordpfeil und Maßstabsbalken Pflicht. Keine UI-Farben (`--accent`, `--snap`) im Export.
 
+Export-Vorschau: Dialog mit Optionen links (Varianten, Unterlage, Deckkraft-Regler, Blatt) und Seitenvorschau rechts. Verletzte Koten im Plan rot (`#C00000`, fett, Ring). Eingabefelder für Höhen: Zahlenfeld in cm mit −/+-Schaltflächen (`.stepper`). 3D: Dämmdicken in cm als Text mit Halo an den Koten.
+
 ## 10. Abnahme-Checkliste (per Screenshot, hell und dunkel)
 1. Schriften sind Plex Sans Condensed / Plex Mono; keine Schrift > 18 px in der App.
 2. Alle Zahlen mit Einheit, deutschem Dezimalkomma, Koten mit Vorzeichen und 3 Nachkommastellen.

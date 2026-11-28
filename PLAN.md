@@ -175,6 +175,14 @@ computeNotwasserstaende(m, s, e: EmergencyEstimate[], packs): Notwasserstand[]
 53. **[X] Unterlage einbetten/verknüpfen**: Einbetten gzip-komprimiert (`ui/einbetten.ts`), bei PDF nur die gewählte Seite (neue Abhängigkeit `pdf-lib`, MIT, dynamisch geladen, nur zum Extrahieren einer Seite; pdf.js kann nicht schreiben). Prüfsumme/Seite beziehen sich dann auf die eingebetteten Bytes. Ohne Einbetten: `quellpfad` (nur Desktop, Öffnen-Dialog), beim Öffnen automatisch geladen, Prüfsumme-Abgleich. Capability `fs:allow-read-file` auf `$HOME/**`.
 54. **[X] Review M10** erledigt (visual-qa ABGENOMMEN, Review-Fixes umgesetzt: Pfad-Scope nur pdf/dxf mit Endungs- und Prüfsummenprüfung, Entpack-Limit 200 MB, Fehlerbehandlung, quellpfad beim Einbetten entfernt, PDF-Rückfall, Abläufe vorschlagen mit Ableitung, Notablauf ohne Tiefpunkt-Kote, Tastenkürzel in Tauri nur nativ). E2E-Skripte auf Menü umgestellt (alle 5 grün), Tauri-Build (Mac/Windows) auf GitHub Actions grün.
 
+### M11 Höhenangaben in cm, Markierung, Einbetten, PDF-Vorschau (V1.5)
+55. **[X] Höhen in cm mit ±-Schritt**: Dämmdicke (Mittel), min. Tiefpunkt, max. Hochpunkt und die Höhenzeilen im Panel in cm; −/+-Tasten und Tastatur (`+`/↑ = +0,5 cm, ↓/`-` bei gefülltem Feld = −0,5 cm), Plan und Ergebnis ziehen sofort nach. Modell bleibt mm/m (`feldCm` in `ui/editor.ts`).
+56. **[X] Problematische Kote rot**: `verletzteKoten(befunde)` (`core/checks/vorgaben.ts`) über den Befund-`wert`; 2D (`ergebnis.ts`) und PDF-Gefälleplan markieren die Kote rot mit Ring (Test `zonen-vorgaben.test.ts`).
+57. **[X] Dämmdicken in 3D**: Beschriftung in cm an den Koten (`ansicht3d.ts`, Kollisionsvermeidung).
+58. **[X] Einbetten beim Speichern abfragen**: Dialog „Nur verweisen / Einbetten“ einmal je Unterlage (`frageEinbetten`, nur manuelles Speichern).
+59. **[X] PDF-Export-Vorschau**: Dialog `ui/pdf-vorschau.ts` (pdf.js-Vorschau, Varianten, Unterlage an/aus, Deckkraft 5–100 %, Blattformat). PDF-Writer mit Bild-XObject (JPEG), ExtGState-Transparenz und Clipping (`io/pdf/pdf.ts`, `plan.ts`, `ui/underlay.ts`; Tests in `pdf.test.ts`). check.sh grün, E2E-Dialoge grün.
+
 ## Übergabe
+- **M11 Stand:** Schritte 55–59 umgesetzt, check.sh grün. Offen: visual-qa, Review M11. Hinweis: „−“-Taste im Feld nur bei gefülltem Feld Schritt (negative Werte: alles markieren und tippen). Guard R9: Eigenschaft in `pdf-vorschau` heißt `liste`, nicht `varianten`.
 - **M10 Stand:** abgeschlossen (Schritte 50–54): visual-qa ABGENOMMEN, Review-Fixes drin, E2E grün, Tauri-Build grün, check.sh grün. **Nächster Schritt:** M9-Reste (Golden-Speier-Fixture, h_ü vs. qAblauf, Dachreiter-Abstand klammern), `/impeccable polish`, ungenutzte `Flaeche3.dicke`/`dickeMitte` entfernen.
 - **Offen aus Review (mittel/gering):** Trennen leitet Höhen nicht neu ab; Menü ohne Pfeiltasten; Ebene „koten“ sperren wirkt nicht; Ebenen-/Ansichtsänderungen nicht undo-fähig; Unterlagen außerhalb $HOME werden nicht automatisch gefunden.
