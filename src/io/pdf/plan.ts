@@ -4,8 +4,8 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, pfeilLage, plattenDaemmdicke, polygonCentroid,
-  type Anschluss, type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type Notwasserstand, type ProjectModel, type SlopeResult, type Vec2,
+  anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, pfeilLage, plattenDaemmdicke, polygonCentroid, verletzteKoten,
+  type Anschluss, type Befund, type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type Notwasserstand, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfSeite, type Punkt } from "./pdf";
 
@@ -16,6 +16,8 @@ export interface PlanEingabe {
   /** Einzugsflächen-ID → „E3“. */
   readonly eids: ReadonlyMap<string, string>;
   readonly plan: InsulationLayout | null;
+  /** Befunde (Höhenvorgaben): verletzte Koten erscheinen rot. */
+  readonly befunde?: readonly Befund[];
   /** Füllfarbe (#rrggbb) je Farbindex der Einzugsfläche. */
   readonly farbe: (i: number) => string;
   /** Datum im Schriftfeld, z. B. „22.11.2026“. */
@@ -360,12 +362,14 @@ function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
   for (const l of ablaufLabels) s.text(l.t, l.x, l.y, { groesse: T.klein, fett: true });
   // Koten an Ecken, Linienenden, Abläufen (Abläufe sind oben beschriftet)
   // Gebündelt (kotenMarken): nahezu gleiche Stelle und Höhe → eine Kote, auch über Dachflächengrenzen.
+  const verletzt = verletzteKoten(e.befunde ?? []);
   for (const k of kotenMarken(e.slope.dachflaechen)) {
     if (k.art === "ablauf") continue;
-    const c = a.p(k.position), t = kote(k.kote), w = textBreite(t, 2, false);
-    s.kreis(c, 0.6, { fuell: "#000000", breite: 0 });
+    const c = a.p(k.position), t = kote(k.kote), w = textBreite(t, 2, false), schlecht = verletzt(k.kote), fz = schlecht ? "#C00000" : "#000000";
+    s.kreis(c, schlecht ? 0.9 : 0.6, { fuell: fz, breite: 0 });
+    if (schlecht) s.kreis(c, 1.8, { breite: 0.35, farbe: fz });
     for (const [dx, dy] of [[1, 1], [-1 - w, 1], [1, -3], [-1 - w, -3]] as const) {
-      if (frei.belege(c.x + dx, c.y + dy, w, 2.6)) { s.text(t, c.x + dx, c.y + dy + 0.4, { groesse: 2 }); break; }
+      if (frei.belege(c.x + dx, c.y + dy, w, 2.6)) { s.text(t, c.x + dx, c.y + dy + 0.4, { groesse: 2, fett: schlecht, farbe: fz }); break; }
     }
   }
 }

@@ -1,5 +1,5 @@
 /** 3D-Ansicht (PLAN Schritt 27, DESIGN §7, §11): Canvas-2D-Projektion ohne Zusatzbibliothek (Painter-Algorithmus). */
-import { meshDach, hoeheDachflaeche, type Flaeche3, type InsulationLayout, type SlopeResult, type Vec3 } from "../core/index";
+import { meshDach, hoeheDachflaeche, kotenMarken, type Flaeche3, type InsulationLayout, type SlopeResult, type Vec3 } from "../core/index";
 import { farbe } from "./ergebnis";
 import { zahl } from "./format";
 import { css, dunkel } from "./zeichnen";
@@ -149,9 +149,29 @@ export class Ansicht3D {
         }
       }
     }
+    // Dämmdicken (cm) an Ecken, Hoch-/Tiefpunkten und Abläufen: d = d_TP + (Kote − Kote_TP) · 1000; überlappende Marken entfallen
+    if (this.slope) {
+      const belegt: { x: number; y: number }[] = [];
+      ctx.font = "600 11px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+      const bg = css("--bg", "#F4F2EC");
+      for (const g of this.slope.dachflaechen) {
+        if (!g.daemmung || !g.tiefpunkt) continue;
+        const z0 = g.tiefpunkt.kote;
+        for (const m of kotenMarken([g])) {
+          const q = bild({ x: m.position.x, y: m.position.y, z: z0 + (m.kote - z0) * this.ue });
+          if (belegt.some((b) => Math.abs(b.x - q.x) < 34 && Math.abs(b.y - q.y) < 14)) continue;
+          belegt.push(q);
+          const t = zahl((g.daemmung.tiefpunktDicke + (m.kote - z0) * 1000) / 10, 1);
+          ctx.beginPath(); ctx.arc(q.x, q.y, 2.5, 0, Math.PI * 2); ctx.fillStyle = linie; ctx.fill();
+          ctx.lineWidth = 3; ctx.strokeStyle = bg; ctx.strokeText(t, q.x, q.y - 9);
+          ctx.fillStyle = linie; ctx.fillText(t, q.x, q.y - 9);
+        }
+      }
+      ctx.lineWidth = 1;
+    }
     // Überhöhung + Kompass/Achsenkreuz (unten links, 48 px)
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.font = "12px 'IBM Plex Mono', monospace"; ctx.fillStyle = linie;
-    ctx.fillText(`Überhöhung ${zahl(this.ue, 0)}×`, 12, h - 12 - 60);
+    ctx.fillText(`Überhöhung ${zahl(this.ue, 0)}× · Dämmdicke in cm`, 12, h - 12 - 60);
     const k = { x: 12 + 24, y: h - 12 - 24 };
     ctx.strokeStyle = linie; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(k.x, k.y, 24, 0, Math.PI * 2); ctx.globalAlpha = 0.4; ctx.stroke(); ctx.globalAlpha = 1;
     const achse = (v: Vec3, t: string, stark: boolean) => {

@@ -88,6 +88,38 @@ function feldOpt(label: string, wert: number | undefined, key: string, commit: (
   i.replaceWith(neu);
   return f;
 }
+/**
+ * Höhenfeld in cm mit −/+-Schritten (0,5 cm = 5 mm): Tasten +/−, ↑/↓ und Schaltflächen. `faktor` = cm je Modelleinheit
+ * (mm → 0,1; m → 100). Leeres Feld = nicht gesetzt. Nach dem Neuaufbau des Panels bekommt das Feld den Fokus zurück.
+ */
+function feldCm(label: string, wert: number | undefined, faktor: number, key: string, commit: (v: number | undefined) => void, platzhalter = "", schritt = 0.5): HTMLElement {
+  const f = el("div", "field");
+  const l = el("label", "", `${label} (cm)`);
+  const i = el("input");
+  i.id = `f-${key}`; l.htmlFor = i.id; i.inputMode = "decimal"; i.dataset.k = key; i.placeholder = platzhalter;
+  i.value = wert === undefined ? "" : zahl(Math.round(wert * faktor * 10) / 10, 1);
+  const uebernimm = (cm: number | undefined) => {
+    commit(cm === undefined ? undefined : cm / faktor);
+    const n = document.getElementById(i.id) as HTMLInputElement | null;
+    if (n && n !== i) { n.focus(); n.select(); }
+  };
+  const stufe = (r: number) => {
+    const t = i.value.trim(), aktuell = t === "" ? 0 : num(t);
+    if (!Number.isFinite(aktuell)) return;
+    uebernimm(Math.round((aktuell + r * schritt) * 10) / 10);
+  };
+  i.addEventListener("change", () => { const t = i.value.trim(); if (t === "") uebernimm(undefined); else { const v = num(t); if (Number.isFinite(v)) uebernimm(v); } });
+  i.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") i.blur();
+    else if (e.key === "ArrowUp" || e.key === "+") { e.preventDefault(); stufe(1); }
+    else if (e.key === "ArrowDown" || (e.key === "-" && i.value.trim() !== "")) { e.preventDefault(); stufe(-1); }
+  });
+  const mk = (t: string, r: number, titel: string) => { const b = button(t, () => stufe(r), "btn step"); b.title = titel; b.setAttribute("aria-label", titel); b.tabIndex = -1; return b; };
+  const zeile = el("div", "stepper");
+  zeile.append(mk("−", -1, `${zahl(schritt * 10, 0)} mm weniger`), i, mk("+", 1, `${zahl(schritt * 10, 0)} mm mehr`));
+  f.append(l, zeile);
+  return f;
+}
 const mm = (v: number | null) => (v === null ? "–" : `${Math.round(v * 1000)} mm`);
 function button(text: string, onClick: () => void, cls = "btn"): HTMLButtonElement {
   const b = el("button", cls, text);
@@ -153,6 +185,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   /** Ursprungspfad der Unterlage (nur Desktop-App, wo der Öffnen-Dialog Pfade liefert). */
   let unterlagePfad: string | null = null;
   let einbetten = false;
+  /** Einbetten wurde in dieser Sitzung bereits entschieden (Rückfrage beim Speichern erscheint nur einmal je Unterlage). */
+  let einbettenEntschieden = false;
   /** Verweis aus geöffnetem Projekt, dessen Datei noch erneut gewählt werden muss. */
   let offeneUnterlage: ProjectModel["unterlage"] = null;
   let projektMeldung: string | null = null;
@@ -317,7 +351,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       const bytes = await f.arrayBuffer();
       const u = await ladeUnterlageDatei(f, offeneUnterlage?.seite, ohneDialog);
       if (!u) { refresh(); return; }
-      unterlage = u; unterlageBytes = bytes;
+      unterlage = u; unterlageBytes = bytes; einbettenEntschieden = false;
       const ref = offeneUnterlage; offeneUnterlage = null;
       if (ref && ref.pruefsumme.wert === u.pruefsumme) {
         const t = ausPasspunkten(ref.passpunkte);
@@ -340,7 +374,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       const bytes = await f.arrayBuffer();
       const u = await ladeUnterlageDatei(f, unterlage?.seite ?? offeneUnterlage?.seite, false);
       if (!u) return;
-      unterlage = u; unterlageBytes = bytes; offeneUnterlage = null; meldung = null; kal = {};
+      unterlage = u; unterlageBytes = bytes; einbettenEntschieden = false; offeneUnterlage = null; meldung = null; kal = {};
       unterlageInsModell(); stage.setLayer("unterlage", u.draw);
       tausch = alt && u.art === "dxf" ? { alt, belassen: new Set(), toleranz: TOLERANZ_STANDARD, pass: [0, 0, 0, 0, 0, 0, 0, 0] } : null;
       if (!tausch) meldung = "Unterlage ersetzt. Abweichungsprüfung nur zwischen zwei DXF-Dateien möglich.";
@@ -435,7 +469,23 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       throw new Error("Unterlage konnte nicht eingebettet werden.");
     }
   }
+  /** Beim Speichern mit Unterlage: einbetten oder nur auf den Ursprungspfad verweisen? false = abgebrochen. */
+  async function frageEinbetten(): Promise<boolean> {
+    const u = modell().unterlage;
+    if (!u || !unterlageBytes || einbettenEntschieden) return true;
+    const pdf = u.art === "pdf";
+    const d = oeffneDialog({
+      titel: "Unterlage in die Projektdatei einbetten?",
+      text: `${pdf ? `PDF (nur Seite ${u.seite ?? 1})` : "DXF"} „${u.dateiname}“ wird komprimiert in die Projektdatei geschrieben, damit das Projekt auch ohne die Originaldatei vollständig öffnet. Ohne Einbetten bleibt nur der Verweis auf den Ursprungspfad.`,
+      knoepfe: [{ id: "abbrechen", label: "Abbrechen" }, { id: "verweis", label: "Nur verweisen" }, { id: "einbetten", label: "Einbetten", primaer: true }], abbruchId: "abbrechen",
+    });
+    const a = await d.ergebnis;
+    if (a === "abbrechen") return false;
+    einbetten = a === "einbetten"; einbettenEntschieden = true;
+    return true;
+  }
   async function speichereProjekt(): Promise<boolean> {
+    if (!(await frageEinbetten())) return false;
     const stand = schluessel(), standP = verlauf.aktuell, standE = einbetten;
     let ok = false;
     try { ok = await speichereDatei(serializeProjekt(mitAnsicht(mitModell(verlauf.aktuell, await modellFuerDatei()))), dateiname(modell().meta.name)); }
@@ -449,7 +499,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const r = leseProjekt(text);
     if (!r.ok) { projektMeldung = r.meldung; refresh(); return; }
     const u = r.projekt.unterlage;
-    einbetten = false; uebernehmeAnsicht(r.projekt.ansicht);
+    einbetten = false; einbettenEntschieden = false; uebernehmeAnsicht(r.projekt.ansicht);
     let m = r.projekt;
     if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
     verlauf = neuerVerlauf(m); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; unterlagePfad = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
@@ -461,7 +511,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       catch { projektMeldung += ` Eingebettete Unterlage „${u.dateiname}“ ist beschädigt: bitte Datei erneut wählen.`; refresh(); return; }
       unterlageBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer; // Rückfall: Daten bleiben erhalten, falls das Laden scheitert
       await ladeDatei(new File([bytes], u.dateiname), true);
-      einbetten = true;
+      einbetten = true; einbettenEntschieden = true;
       markiereGespeichert();
     } else if (u) {
       offeneUnterlage = u;
@@ -496,7 +546,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   async function neuesProjekt() {
     if (!(await darfVerwerfen("dem Anlegen eines neuen Projekts"))) return;
     verlauf = neuerVerlauf(createProjekt("Neues Projekt", new Date().toISOString())); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; unterlagePfad = null; offeneUnterlage = null;
-    uebernehmeAnsicht(undefined); einbetten = false; gespeichertEinbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
+    uebernehmeAnsicht(undefined); einbetten = false; einbettenEntschieden = false; gespeichertEinbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
   }
@@ -515,7 +565,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     let pl = null;
     try { pl = berechnePlan(m, erg.slope); } catch { /* ohne Dämmplan */ }
     const { anschluesse, notstaende } = anschlussDaten(m, erg.slope, erg.notfall);
-    return { eingabe: { modell: m, slope: erg.slope, catchments: erg.catchments, eids: erg.eids, plan: pl, anschluesse, notstaende, farbe: (i: number) => farbe(i)[0], datum, regelwerk, ...(mitName ? { variante: name } : {}) } };
+    return { eingabe: { modell: m, slope: erg.slope, catchments: erg.catchments, eids: erg.eids, plan: pl, befunde: erg.befunde, anschluesse, notstaende, farbe: (i: number) => farbe(i)[0], datum, regelwerk, ...(mitName ? { variante: name } : {}) } };
   }
   /** Fragt bei mehreren Varianten, welche exportiert werden (Standard: die aktive); null = abgebrochen. */
   async function waehleExportVarianten(): Promise<string[] | null> {
@@ -875,13 +925,13 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       refresh();
     };
     p.append(el("div", "panel-title", "Dachaufbau"),
-      feldOpt("Dämmstärke im Mittel", w.daemmMittel, "daemm-mittel", (v) => { if (v !== undefined && (v < 0 || v > 1000)) { refresh(); return; } setze({ daemmMittel: v }); }, "aus", "mm", 0),
-      feldOpt("Min. Tiefpunkt z", w.minTiefpunkt, "min-tiefpunkt", (v) => setze({ minTiefpunkt: v }), "aus"),
-      feldOpt("Max. Hochpunkt z", w.maxHochpunkt, "max-hochpunkt", (v) => setze({ maxHochpunkt: v }), "keine Warnung"));
+      feldCm("Dämmstärke im Mittel", w.daemmMittel, 0.1, "daemm-mittel", (v) => { if (v !== undefined && (v < 0 || v > 1000)) { refresh(); return; } setze({ daemmMittel: v }); }, "aus"),
+      feldCm("Min. Tiefpunkt z", w.minTiefpunkt, 100, "min-tiefpunkt", (v) => setze({ minTiefpunkt: v }), "aus"),
+      feldCm("Max. Hochpunkt z", w.maxHochpunkt, 100, "max-hochpunkt", (v) => setze({ maxHochpunkt: v }), "keine Warnung"));
     const g = ergebnis?.slope.dachflaechen.find((x) => x.dachflaecheId === d.id);
     if (g?.tiefpunkt || g?.hochpunkt) {
-      p.append(row("Tiefpunkt z", g.tiefpunkt ? `${zahl(g.tiefpunkt.kote, 3)} m` : "–", "hoehe-tief"), row("Hochpunkt z", g.hochpunkt ? `${zahl(g.hochpunkt.kote, 3)} m` : "–", "hoehe-hoch"));
-      if (g.daemmung) p.append(row("Dämmung Tiefpunkt / Mittel / max.", `${zahl(g.daemmung.min, 0)} / ${zahl(g.daemmung.mittel, 0)} / ${zahl(g.daemmung.max, 0)} mm`, "daemm-werte"));
+      p.append(row("Tiefpunkt z", g.tiefpunkt ? `${zahl(g.tiefpunkt.kote * 100, 1)} cm` : "–", "hoehe-tief"), row("Hochpunkt z", g.hochpunkt ? `${zahl(g.hochpunkt.kote * 100, 1)} cm` : "–", "hoehe-hoch"));
+      if (g.daemmung) p.append(row("Dämmung Tiefpunkt / Mittel / max.", `${zahl(g.daemmung.min / 10, 1)} / ${zahl(g.daemmung.mittel / 10, 1)} / ${zahl(g.daemmung.max / 10, 1)} cm`, "daemm-werte"));
     }
   }
   function panelAuswahl() {
@@ -1421,8 +1471,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     ausfuehre: { value: ausfuehreBefehl },
     aktion: { value: aktion },
     modell: { get: () => modell() },
-    lade: { value: (m: ProjectModel) => { einbetten = false; verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
-    ladeProjekt: { value: (pr: Projekt) => { einbetten = false; verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; uebernehmeAnsicht(pr.ansicht); refresh(); } },
+    lade: { value: (m: ProjectModel) => { einbetten = false; einbettenEntschieden = false; verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
+    ladeProjekt: { value: (pr: Projekt) => { einbetten = false; einbettenEntschieden = false; verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; uebernehmeAnsicht(pr.ansicht); refresh(); } },
     projekt: { get: () => aktuellesProjekt() },
     waehle: { value: setzeAuswahl },
   });

@@ -217,3 +217,7 @@ button, input, select { font: inherit; color: inherit; }
 .ebene .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ebene input[type="range"] { width: 72px; }
 .ebene-unterlage { border-top: 1px solid var(--line); margin-top: var(--sp-1); }
+
+/* Höhenfeld mit −/+-Schritten (feldCm) */
+.stepper { display: grid; grid-template-columns: 28px 1fr 28px; gap: var(--sp-1); min-width: 0; }
+.stepper .btn.step { height: 28px; padding: 0; font-variant-numeric: tabular-nums; }

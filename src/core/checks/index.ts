@@ -2,7 +2,7 @@ export type * from "./types";
 export { QUELLE_PROGRAMM } from "./types";
 export {
   REGEL_VORGABE_DAEMMDICKE_TP, REGEL_VORGABE_MAX_HP, REGEL_VORGABE_MIN_TP, REGEL_VORGABE_ZONE_GEFAELLE,
-  pruefeVorgaben, type VorgabenOptionen,
+  pruefeVorgaben, verletzteKoten, type VorgabenOptionen,
 } from "./vorgaben";
 export {
   computeAnschluesse, okFertigAm,

@@ -1,6 +1,6 @@
 /** Berechnung und Darstellung der Ergebnisse (PLAN Schritt 19): Einzugsflächen, Koten, Pfeile, Notbereich, Kennwerte. */
 import {
-  attikaStreifen, computeCatchments, computeSlope, estimateEmergency, kotenMarken, pfeilLage, pointInPolygon, polygonCentroid, runChecks,
+  attikaStreifen, computeCatchments, computeSlope, estimateEmergency, kotenMarken, pfeilLage, pointInPolygon, polygonCentroid, runChecks, verletzteKoten,
   type Befund, type CatchmentResult, type Dachflaeche, type EmergencyEstimate, type Einzugsflaeche, type ProjectModel,
   type Anschluss, type Notwasserstand, type Auswahl, type KotenMarke, type SlopeResult, type Vec2,
 } from "../core/index";
@@ -193,7 +193,8 @@ export function zeichnePfeile(ctx: CanvasRenderingContext2D, vp: Viewport, e: Er
 export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Ergebnis): void {
   const px = 1 / vp.scale, belegung = geteilteBelegung(vp), tx = css("--text", "#222");
   ctx.save(); ctx.setLineDash([]);
-  const marke = (p: Vec2, s: string, fett: boolean) => {
+  const rot = css("--error", "#B3261E"), verletzt = verletzteKoten(e.befunde);
+  const marke = (p: Vec2, s: string, fett: boolean, schlecht: boolean) => {
     const w = s.length * 7.4;
     let dy = 0, ok = false;
     let links = false;
@@ -202,10 +203,12 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
       if (belegung.belege(p, -(w + 12), v - 2, w + 4, 18)) { dy = v; ok = true; links = true; break; }
     }
     if (!ok) return;
-    ctx.fillStyle = tx; ctx.beginPath();
+    const fz = schlecht ? rot : tx;
+    ctx.fillStyle = fz; ctx.beginPath();
     ctx.moveTo(p.x - 4 * px, p.y + 8 * px); ctx.lineTo(p.x + 4 * px, p.y + 8 * px); ctx.lineTo(p.x, p.y); ctx.closePath(); ctx.fill();
-    if (dy > 6) { ctx.strokeStyle = tx; ctx.lineWidth = px; bahn(ctx, [p, { x: p.x + (links ? -8 : 8) * px, y: p.y + dy * px }], false); ctx.stroke(); }
-    text(ctx, vp, s, p.x + (links ? -(w + 10) : 10) * px, p.y + dy * px, { px: 12, mono: true, farbe: fett ? css("--accent", "#1F4FA3") : tx });
+    if (schlecht) { ctx.strokeStyle = rot; ctx.lineWidth = 2 * px; ctx.beginPath(); ctx.arc(p.x, p.y, 7 * px, 0, Math.PI * 2); ctx.stroke(); }
+    if (dy > 6) { ctx.strokeStyle = fz; ctx.lineWidth = px; ctx.lineWidth = px; bahn(ctx, [p, { x: p.x + (links ? -8 : 8) * px, y: p.y + dy * px }], false); ctx.stroke(); }
+    text(ctx, vp, s, p.x + (links ? -(w + 10) : 10) * px, p.y + dy * px, { px: 12, mono: true, farbe: schlecht ? rot : fett ? css("--accent", "#1F4FA3") : tx });
   };
   const alle = kotenMarken(e.slope.dachflaechen);
   // Der Ablauf trägt seine eigene Kote (Beschriftung); Koten in unmittelbarer Nähe (< 40 px) würden nur überlagern.
@@ -218,10 +221,10 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
   const rest: KotenMarke[] = [];
   for (const k of alle) {
     if (k.art === "ablauf" || amAblauf(k)) continue;
-    if ((k.art === "hochpunkt" || k.art === "tiefpunkt") && zaehl[k.art]++ < 2) marke(k.position, `${k.art === "hochpunkt" ? "HP" : "TP"} ${kote(k.kote)}`, true);
+    if ((k.art === "hochpunkt" || k.art === "tiefpunkt") && zaehl[k.art]++ < 2) marke(k.position, `${k.art === "hochpunkt" ? "HP" : "TP"} ${kote(k.kote)}`, true, verletzt(k.kote));
     else rest.push(k);
   }
-  for (const k of [...rest.filter(hpTp), ...rest.filter((k) => !hpTp(k))]) marke(k.position, kote(k.kote), false);
+  for (const k of [...rest.filter(hpTp), ...rest.filter((k) => !hpTp(k))]) marke(k.position, kote(k.kote), false, verletzt(k.kote));
   ctx.restore();
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
-  computeSlope, createProject, hoeheDachflaeche, loadRulePack, pruefeVorgaben, standardDaemmdickeTiefpunkt,
+  computeSlope, createProject, hoeheDachflaeche, loadRulePack, pruefeVorgaben, standardDaemmdickeTiefpunkt, verletzteKoten,
   type Dachflaeche, type DaemmplattenPack, type Entwaesserung, type Kontur, type ProjectModel, type Zone,
 } from "../src/core/index";
 
@@ -97,6 +97,15 @@ describe("Schritt 8: Vorgabenprüfung", () => {
     expect(b[0]!.quelle).toContain("Dach");
     const ok = projekt({ vorgaben: { maxHochpunkt: 0.2 } });
     expect(pruefeVorgaben(ok, computeSlope(ok))).toEqual([]);
+  });
+
+  it("verletzteKoten: nur Koten mit dem gemeldeten Verstoßwert sind rot", () => {
+    const m = projekt({ vorgaben: { maxHochpunkt: 0.15 } });
+    const sl = computeSlope(m), b = pruefeVorgaben(m, sl);
+    const rot = verletzteKoten(b), hp = sl.dachflaechen[0]!.hochpunkt!.kote;
+    expect(rot(hp)).toBe(true);
+    expect(rot(hp - 0.01)).toBe(false);
+    expect(verletzteKoten([])(hp)).toBe(false);
   });
 
   it("Zonenvorgabe hat Vorrang vor Dachvorgabe", () => {
