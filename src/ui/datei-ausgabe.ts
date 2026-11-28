@@ -28,6 +28,18 @@ export async function waehleProjektText(): Promise<string | null> {
   return typeof pfad === "string" ? await readTextFile(pfad) : null;
 }
 
+/** Desktop-App: Unterlage (DXF/PDF) per Öffnen-Dialog wählen; liefert Pfad und Bytes. null bei Abbruch. */
+export async function waehleUnterlagePfad(): Promise<{ pfad: string; bytes: Uint8Array<ArrayBuffer> } | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const pfad = await open({ multiple: false, directory: false, filters: [{ name: "Unterlage (DXF, PDF)", extensions: ["dxf", "pdf"] }] });
+  return typeof pfad === "string" ? { pfad, bytes: await leseDatei(pfad) } : null;
+}
+/** Desktop-App: Datei über ihren Pfad lesen (wirft, wenn sie fehlt). */
+export async function leseDatei(pfad: string): Promise<Uint8Array<ArrayBuffer>> {
+  const { readFile } = await import("@tauri-apps/plugin-fs");
+  return new Uint8Array(await readFile(pfad));
+}
+
 /** Desktop-App: auf Klicks im nativen Menü hören (Ereignis "menu" mit der Menü-ID). */
 export async function hoereAufMenue(handler: (id: string) => void): Promise<void> {
   const { listen } = await import("@tauri-apps/api/event");

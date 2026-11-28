@@ -13,6 +13,14 @@
     "fs:allow-write-file",
     "dialog:allow-open",
     "fs:allow-read-text-file",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    },
     "core:event:default"
   ]
 }

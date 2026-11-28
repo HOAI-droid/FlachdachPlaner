@@ -23,14 +23,15 @@ import { mountStandort } from "./standort";
 import { kantenLage, zeichneEntwaesserung } from "./symbole";
 import { geteilteBelegung, neuerDurchgang } from "./zeichnen";
 import type { Shell } from "./shell";
-import { deckkraft, dxfModell, ladeDxf, ladePdf, pdfModell, setzeDeckkraft, type UnterlageUI } from "./underlay";
+import { deckkraft, dxfModell, ladeDxf, ladePdf, pdfModell, setzeDeckkraft, sha256, type UnterlageUI } from "./underlay";
 import { frageSpeichern, oeffneDialog } from "./dialog";
-import { gibDateiAus } from "./datei-ausgabe";
+import { gibDateiAus, leseDatei, waehleUnterlagePfad } from "./datei-ausgabe";
+import { entpackeUnterlage, packeUnterlage } from "./einbetten";
 import { oeffneAngabenDialog } from "./angaben";
 import { waehlePdfSeite } from "./pdf-seiten";
 import { istTauri, schuetzeFenster } from "./schliessen";
 import { hoereAufMenue, waehleProjektText } from "./datei-ausgabe";
-import { autosaveSchreiben, base64ZuBytes, bytesZuBase64, leseProjekt, speichereDatei, waehleDatei } from "./speicher";
+import { autosaveSchreiben, leseProjekt, speichereDatei, waehleDatei } from "./speicher";
 
 const FANG_PX = 10;
 const TASTEN: Record<string, WerkzeugId> = { v: "select", k: "contour", a: "attika", u: "aufbau", t: "terrasse", s: "schwelle", w: "wandanschluss", g: "gully", n: "notablauf", r: "dachreiter", l: "les", x: "trennen", m: "measure" };
@@ -149,6 +150,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let meldung: string | null = null;
   /** Originalbytes der geladenen Unterlage (nur im Speicher; für optionales Einbetten). */
   let unterlageBytes: ArrayBuffer | null = null;
+  /** Ursprungspfad der Unterlage (nur Desktop-App, wo der Öffnen-Dialog Pfade liefert). */
+  let unterlagePfad: string | null = null;
   let einbetten = false;
   /** Verweis aus geöffnetem Projekt, dessen Datei noch erneut gewählt werden muss. */
   let offeneUnterlage: ProjectModel["unterlage"] = null;
@@ -299,6 +302,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       } else eintrag = dxfModell(u);
     }
     if (JSON.stringify(eintrag) === JSON.stringify(verlauf.aktuell.unterlage ?? null)) return; // unverändert → nicht „geändert“
+    if (eintrag && unterlagePfad) eintrag = { ...eintrag, quellpfad: unterlagePfad };
     verlauf = { ...verlauf, aktuell: { ...verlauf.aktuell, unterlage: eintrag } };
   }
   /** DXF laden; PDF mit mehreren Seiten erst nach Seitenwahl (Abbruch → null). `ohneDialog`: gespeicherte Seite verwenden. */
@@ -396,7 +400,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     box.append(button("Schließen", () => { tausch = null; refresh(); }));
     p.append(box);
   }
-  function entferneUnterlage() { unterlage = null; unterlageBytes = null; offeneUnterlage = null; unterlageInsModell(); stage.setLayer("unterlage", null); kal = {}; refresh(); }
+  function entferneUnterlage() { unterlage = null; unterlageBytes = null; unterlagePfad = null; offeneUnterlage = null; unterlageInsModell(); stage.setLayer("unterlage", null); kal = {}; refresh(); }
   function setzeMassstab(n: number) {
     const k = unterlage?.kalibrierung;
     if (!k || !(n > 0)) return;
@@ -413,15 +417,19 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
 
   // ---------- Projektdatei (PLAN Schritt 22) ----------
-  function modellFuerDatei(): ProjectModel {
+  /** Mit Einbetten: DXF bzw. nur die gewählte PDF-Seite, gzip-komprimiert. Die Prüfsumme gilt dann für die eingebetteten Bytes. */
+  async function modellFuerDatei(): Promise<ProjectModel> {
     const m = modell();
-    if (einbetten && m.unterlage && unterlageBytes) return { ...m, unterlage: { ...m.unterlage, eingebettet: { base64: bytesZuBase64(unterlageBytes) } } };
-    return m;
+    if (!(einbetten && m.unterlage && unterlageBytes)) return m;
+    const pdf = m.unterlage.art === "pdf";
+    const { eingebettet, roh } = await packeUnterlage(unterlageBytes, pdf ? "pdf" : "dxf", m.unterlage.seite);
+    const u = pdf ? { ...m.unterlage, seite: 1, pruefsumme: { algorithmus: "sha-256" as const, wert: await sha256(roh.buffer) } } : m.unterlage;
+    return { ...m, unterlage: { ...u, eingebettet } };
   }
   async function speichereProjekt(): Promise<boolean> {
     const stand = schluessel(), standP = verlauf.aktuell, standE = einbetten;
     let ok = false;
-    try { ok = await speichereDatei(serializeProjekt(mitAnsicht(mitModell(verlauf.aktuell, modellFuerDatei()))), dateiname(modell().meta.name)); }
+    try { ok = await speichereDatei(serializeProjekt(mitAnsicht(mitModell(verlauf.aktuell, await modellFuerDatei()))), dateiname(modell().meta.name)); }
     catch (e) { projektMeldung = `Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); return false; }
     projektMeldung = ok ? "Projekt gespeichert." : null;
     if (ok) { gespeichertSchluessel = stand; gespeichertStand = standP; gespeichertEinbetten = standE; }
@@ -435,16 +443,26 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     einbetten = false; uebernehmeAnsicht(r.projekt.ansicht);
     let m = r.projekt;
     if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
-    verlauf = neuerVerlauf(m); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
+    verlauf = neuerVerlauf(m); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; unterlagePfad = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
     projektMeldung = r.hinweise.length ? r.hinweise.join(" ") : "Projekt geöffnet.";
     if (u?.eingebettet) {
-      const bytes = base64ZuBytes(u.eingebettet.base64);
-      offeneUnterlage = u;
+      const bytes = await entpackeUnterlage(u.eingebettet);
+      offeneUnterlage = u; unterlagePfad = u.quellpfad ?? null;
       unterlageBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer; // Rückfall: Daten bleiben erhalten, falls das Laden scheitert
       await ladeDatei(new File([bytes], u.dateiname), true);
       einbetten = true;
       markiereGespeichert();
-    } else if (u) { offeneUnterlage = u; projektMeldung += ` Unterlage „${u.dateiname}“ ist nur verknüpft: bitte Datei erneut wählen.`; }
+    } else if (u) {
+      offeneUnterlage = u;
+      const bytes = u.quellpfad && istTauri() ? await leseDatei(u.quellpfad).catch(() => null) : null;
+      if (bytes) {
+        unterlagePfad = u.quellpfad ?? null;
+        await ladeDatei(new File([bytes], u.dateiname), true);
+        projektMeldung += ` Unterlage „${u.dateiname}“ vom Ursprungspfad geladen.`;
+      } else projektMeldung += u.quellpfad
+        ? ` Unterlage „${u.dateiname}“ nicht gefunden unter ${u.quellpfad}: bitte Datei erneut wählen.`
+        : ` Unterlage „${u.dateiname}“ ist nur verknüpft: bitte Datei erneut wählen.`;
+    }
     refresh();
   }
   async function oeffneProjekt() {
@@ -463,7 +481,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   }
   async function neuesProjekt() {
     if (!(await darfVerwerfen("dem Anlegen eines neuen Projekts"))) return;
-    verlauf = neuerVerlauf(createProjekt("Neues Projekt", new Date().toISOString())); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
+    verlauf = neuerVerlauf(createProjekt("Neues Projekt", new Date().toISOString())); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; unterlagePfad = null; offeneUnterlage = null;
     uebernehmeAnsicht(undefined); einbetten = false; gespeichertEinbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
@@ -645,7 +663,20 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       : "Die Unterlage wird nicht eingebettet: das Projekt verweist nur auf die Originaldatei und sucht sie beim Öffnen am gleichen Ort."));
     return box;
   }
+  /** Desktop: Öffnen-Dialog liefert den Ursprungspfad (wird in der Projektdatei als Verweis gespeichert). */
+  async function waehleUnterlageDialog() {
+    const w = await waehleUnterlagePfad().catch(() => null);
+    if (!w) return;
+    const vorher = unterlage, altPfad = unterlagePfad;
+    unterlagePfad = w.pfad;
+    const f = new File([w.bytes], w.pfad.split(/[\\/]/).pop() ?? "unterlage");
+    await (vorher ? tauscheUnterlage(f) : ladeDatei(f));
+    if (unterlage === vorher) unterlagePfad = altPfad; // Seitenwahl abgebrochen o. Ä.
+    else { unterlageInsModell(); refresh(); }
+  }
   function waehleUnterlageDatei() {
+    if (istTauri()) { void waehleUnterlageDialog(); return; }
+    unterlagePfad = null;
     const i = el("input"); i.type = "file"; i.accept = ".dxf,.pdf,application/pdf";
     i.addEventListener("change", () => { const f = i.files?.[0]; if (f) void (unterlage ? tauscheUnterlage(f) : ladeDatei(f)); });
     i.click();
@@ -657,7 +688,8 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     p.replaceChildren();
     const wahl = el("input");
     wahl.type = "file"; wahl.accept = ".dxf,.pdf,application/pdf"; wahl.id = "f-unterlage"; wahl.setAttribute("aria-label", "Unterlage laden (DXF oder PDF)");
-    wahl.addEventListener("change", () => { const f = wahl.files?.[0]; if (f) void ladeDatei(f); });
+    wahl.addEventListener("click", (e) => { if (istTauri()) { e.preventDefault(); void waehleUnterlageDialog(); } });
+    wahl.addEventListener("change", () => { const f = wahl.files?.[0]; if (f) { unterlagePfad = null; void ladeDatei(f); } });
     wahl.className = "visually-hidden"; wahl.tabIndex = -1;
     const btn = el("button", "btn", "Unterlage laden …"); btn.type = "button";
     btn.addEventListener("click", () => wahl.click());
