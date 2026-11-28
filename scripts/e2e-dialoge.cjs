@@ -14,10 +14,14 @@ const ok = (c, msg) => { if (!c) { fails++; console.error("FAIL:", msg); } else 
   const m = { ...(await pg.evaluate(() => window.__editor.modell)), dachflaechen: [dach] };
   await pg.evaluate((m) => window.__editor.lade(m), m);
   const settle = () => pg.waitForTimeout(150);
+  // Menüaktionen: Menütitel per data-menu, Eintrag per data-aktion
+  const menue = async (titel, aktionId) => { await pg.click(`[data-menu=${titel}]`); await pg.click(`[data-aktion=${aktionId}]`); };
+  await menue("Projekt", "varianten"); await pg.waitForSelector("[data-k=variante-duplizieren]");
   await pg.click("[data-k=variante-duplizieren]"); await settle();
+  await pg.click("[data-k=dialog-ok]"); await settle();
 
   // Export-Dialog
-  await pg.click("text=Plan als PDF"); await settle();
+  await menue("Datei", "export-pdf"); await settle();
   const boxen = await pg.$$("input[data-k^=export-]");
   ok(boxen.length === 2, "Export-Dialog: zwei Varianten wählbar");
   const exp = pg.locator("[data-k=dialog-export]");
@@ -32,7 +36,7 @@ const ok = (c, msg) => { if (!c) { fails++; console.error("FAIL:", msg); } else 
 
   // Angaben-Maske
   const meta = () => pg.evaluate(() => window.__editor.modell.meta);
-  await pg.click("[data-k=projektangaben]"); await settle();
+  await menue("Projekt", "angaben"); await settle();
   await pg.fill("[data-k=angabe-bauherr]", "Muster GmbH"); await pg.press("[data-k=angabe-bauherr]", "Tab"); await settle();
   ok((await meta()).bauherr === "Muster GmbH", "Angaben: Bauherr übernommen");
   await pg.click("[data-k=angabe-planDatum-heute]"); await settle();

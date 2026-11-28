@@ -17,6 +17,9 @@ const ok = (c, msg) => { if (!c) { fails++; console.error("FAIL:", msg); } else 
   const dach = { id: "d1", name: "Dach", typ: "dach", aufbauten: [], zonen: [], vorgaben: {}, attika: [], tuerschwellen: [], kontur: [{id:"a",x:0,y:0},{id:"b",x:10,y:0},{id:"c",x:10,y:8},{id:"d",x:0,y:8}], entwaesserung: [] };
   const m = { ...(await pg.evaluate(() => window.__editor.modell)), dachflaechen: [dach] };
   await pg.evaluate((m) => window.__editor.lade(m), m);
+  // Varianten liegen im Dialog Menü Projekt > Varianten …
+  const menue = async (titel, aktionId) => { await pg.click(`[data-menu=${titel}]`); await pg.click(`[data-aktion=${aktionId}]`); };
+  await menue("Projekt", "varianten"); await pg.waitForSelector("[data-k=variante-neu]");
   const status = async () => (await pg.textContent("[data-k=projekt-status]")) || "";
   const namen = () => pg.$$eval("button.variante", (e) => e.map((x) => x.textContent.trim()));
   const aktiv = () => pg.$$eval("button.variante", (e) => e.findIndex((x) => x.getAttribute("aria-current")));
@@ -62,7 +65,7 @@ const ok = (c, msg) => { if (!c) { fails++; console.error("FAIL:", msg); } else 
   // Löschen
   const anzahl = (await namen()).length;
   await pg.click("[data-k=variante-loeschen]");
-  const txt = await pg.textContent(".dialog-bg, [class*=dialog]");
+  const txt = await pg.locator("[role=dialog]").last().textContent();
   ok(/Rückgängig mit Strg\+Z/.test(txt || ""), "Löschen-Dialog nennt Strg+Z");
   await pg.click("[data-k=dialog-loeschen]"); await settle();
   ok((await namen()).length === anzahl - 1, "Löschen");
