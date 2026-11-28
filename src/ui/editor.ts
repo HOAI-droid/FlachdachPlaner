@@ -6,9 +6,9 @@ import {
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
   type Abweichung, type Ausrichtung, type Auswahl, type Befehl, type InsulationLayout, type SnapSegment, type Dachflaeche, type KlickErgebnis, type ProjectModel, type SnapArt, type SnapIndex, type SnapTreffer,
-  type Projekt, type ProjektangabenTeil, type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
+  type Projekt, type Ansichtseinstellungen, type EbenenZustand, type ProjektangabenTeil, type Verlauf, type Vec2, type WerkzeugId, type WerkzeugZustand,
 } from "../core/index";
-import type { Stage } from "./canvas/stage";
+import type { LayerId, Stage } from "./canvas/stage";
 import type { Viewport } from "./canvas/viewport";
 import { Ansicht3D } from "./ansicht3d";
 import { berechnePlan, zeichneDaemmplan } from "./daemmplan";
@@ -177,7 +177,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   const leeresErgebnis = { slope: { dachflaechen: [], hinweise: [] }, catchments: { flaechen: [], nachbarn: [], hinweise: [] }, notfall: [], befunde: [], hinweise: [], eids: new Map() } as unknown as Ergebnis;
   /** Autosave ins lokale Speichern (ohne Netz); Fehler (z. B. privater Modus) werden ignoriert. */
   let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
-  const autosaveJetzt = () => { if (autosaveTimer !== null) { clearTimeout(autosaveTimer); autosaveTimer = null; } void autosaveSchreiben(serializeProjekt(aktuellesProjekt())); };
+  const autosaveJetzt = () => { if (autosaveTimer !== null) { clearTimeout(autosaveTimer); autosaveTimer = null; } void autosaveSchreiben(serializeProjekt(mitAnsicht(aktuellesProjekt()))); };
   /** Entprellt (400 ms): beim Ziehen wird nicht bei jedem Schritt das ganze Projekt serialisiert; beim Verlassen der Seite sofort. */
   function speichere() { if (autosaveTimer === null) autosaveTimer = setTimeout(autosaveJetzt, 400); }
   window.addEventListener("pagehide", () => { if (autosaveTimer !== null) autosaveJetzt(); });
@@ -247,7 +247,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       fuehreAus(r.befehl);
       if (verlauf === alt) z = { ...z, hinweis: z.hinweis };
     }
-    if (r.auswahl !== undefined) auswahl = r.auswahl;
+    if (r.auswahl !== undefined) auswahl = r.auswahl && z.tool === "select" && gesperrt(r.auswahl.art === "entwaesserung" ? "symbole" : "kontur") ? null : r.auswahl;
     refresh();
   }
   function setzeWerkzeug(id: WerkzeugId) {
@@ -419,7 +419,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   async function speichereProjekt(): Promise<boolean> {
     const stand = schluessel(), standP = verlauf.aktuell, standE = einbetten;
     let ok = false;
-    try { ok = await speichereDatei(serializeProjekt(mitModell(verlauf.aktuell, modellFuerDatei())), dateiname(modell().meta.name)); }
+    try { ok = await speichereDatei(serializeProjekt(mitAnsicht(mitModell(verlauf.aktuell, modellFuerDatei()))), dateiname(modell().meta.name)); }
     catch (e) { projektMeldung = `Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`; refresh(); return false; }
     projektMeldung = ok ? "Projekt gespeichert." : null;
     if (ok) { gespeichertSchluessel = stand; gespeichertStand = standP; gespeichertEinbetten = standE; }
@@ -430,7 +430,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     const r = leseProjekt(text);
     if (!r.ok) { projektMeldung = r.meldung; refresh(); return; }
     const u = r.projekt.unterlage;
-    einbetten = false;
+    einbetten = false; uebernehmeAnsicht(r.projekt.ansicht);
     let m = r.projekt;
     if (u?.eingebettet) { const k: { eingebettet?: unknown } = { ...u }; delete k.eingebettet; m = { ...m, unterlage: k as NonNullable<ProjectModel["unterlage"]> }; }
     verlauf = neuerVerlauf(m); markiereGespeichert(); auswahl = null; tausch = null; kal = {}; z = neuerZustand(); unterlage = null; unterlageBytes = null; offeneUnterlage = null; stage.setLayer("unterlage", null);
@@ -462,7 +462,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   async function neuesProjekt() {
     if (!(await darfVerwerfen("dem Anlegen eines neuen Projekts"))) return;
     verlauf = neuerVerlauf(createProjekt("Neues Projekt", new Date().toISOString())); markiereGespeichert(); auswahl = null; unterlage = null; unterlageBytes = null; offeneUnterlage = null;
-    einbetten = false; gespeichertEinbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
+    uebernehmeAnsicht(undefined); einbetten = false; gespeichertEinbetten = false; tausch = null; kal = {}; meldung = null; z = neuerZustand(); stage.setLayer("unterlage", null);
     projektMeldung = "Neues Projekt angelegt.";
     refresh();
   }
@@ -678,11 +678,6 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       } else if (u.kalibrierung) {
         p.append(feld("Maßstab 1 :", String(Math.round(nennerAusFaktor(faktor(u.kalibrierung.get())))), "massstab", setzeMassstab, "n"));
       }
-      const rl = el("label", "check-row pad"); const rg = el("input"); rg.type = "range"; rg.min = "5"; rg.max = "100"; rg.step = "5"; rg.id = "u-deckkraft";
-      rg.value = String(Math.round(deckkraft() * 100)); rg.setAttribute("aria-label", "Transparenz der Unterlage (Deckkraft in Prozent)");
-      const rw = el("span", "", `Deckkraft ${rg.value} %`);
-      rg.addEventListener("input", () => { setzeDeckkraft(Number(rg.value) / 100); rw.textContent = `Deckkraft ${rg.value} %`; stage.invalidate(); });
-      rl.append(rw, rg); p.append(rl);
       const tw = el("input"); tw.type = "file"; tw.accept = ".dxf,.pdf,application/pdf"; tw.id = "f-tausch"; tw.className = "visually-hidden"; tw.tabIndex = -1;
       tw.addEventListener("change", () => { const f = tw.files?.[0]; tw.value = ""; if (f) void tauscheUnterlage(f); });
       const b = el("div", "pad btn-row"); b.append(button("Unterlage austauschen …", () => tw.click()), button("Unterlage entfernen", entferneUnterlage), tw); p.append(b);
@@ -693,6 +688,65 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     if (!unterlage) s.textContent = "";
     else if (unterlage.kalibrierung) s.textContent = `Unterlage 1:${Math.round(nennerAusFaktor(faktor(unterlage.kalibrierung.get())))}`;
     else s.textContent = "Unterlage DXF";
+  }
+
+  // ---------- Ebenen (oberste Zeile = oberste Zeichenebene, Unterlage ganz unten) ----------
+  const EBENEN: readonly { id: LayerId; name: string }[] = [
+    { id: "koten", name: "Koten & Anschlüsse" }, { id: "symbole", name: "Abläufe" }, { id: "pfeile", name: "Gefälle & Beschriftung" },
+    { id: "kontur", name: "Konturen" }, { id: "daemmplan", name: "Dämmplan" }, { id: "einzugsflaechen", name: "Einzugsflächen" }, { id: "unterlage", name: "Unterlage" },
+  ];
+  let ebenenZ: Record<string, EbenenZustand> = {};
+  const ebZ = (id: LayerId): EbenenZustand => ebenenZ[id] ?? { sichtbar: true, deckkraft: id === "unterlage" ? deckkraft() : 1, gesperrt: false };
+  const gesperrt = (id: LayerId) => ebZ(id).gesperrt;
+  function setzeEbene(id: LayerId, teil: Partial<EbenenZustand>) {
+    ebenenZ = { ...ebenenZ, [id]: { ...ebZ(id), ...teil } };
+    wendeEbenen();
+  }
+  function wendeEbenen() {
+    for (const { id } of EBENEN) {
+      const e = ebZ(id);
+      stage.setEbene(id, { sichtbar: e.sichtbar, deckkraft: id === "unterlage" ? 1 : e.deckkraft });
+      if (id === "unterlage") setzeDeckkraft(e.deckkraft);
+    }
+    stage.invalidate();
+  }
+  const ebenenAnsicht = (): Ansichtseinstellungen => ({ ebenen: Object.fromEntries(EBENEN.map(({ id }) => [id, ebZ(id)])) });
+  const mitAnsicht = (p: Projekt): Projekt => ({ ...p, ansicht: ebenenAnsicht() });
+  function uebernehmeAnsicht(a: Ansichtseinstellungen | undefined) { ebenenZ = a ? { ...a.ebenen } : {}; wendeEbenen(); }
+  const AUGE = '<path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>';
+  const AUGE_ZU = '<path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z" opacity=".4"/><path d="M2 14L14 2"/>';
+  const SCHLOSS = '<rect x="3" y="7" width="10" height="7"/><path d="M5 7V5a3 3 0 016 0v2"/>';
+  const SCHLOSS_OFFEN = '<rect x="3" y="7" width="10" height="7"/><path d="M5 7V5a3 3 0 015.6-1.5"/>';
+  function panelEbenen() {
+    const p = shell.panels.ebenen;
+    const liste = el("div", "ebenen-liste"); liste.setAttribute("role", "list");
+    for (const { id, name } of EBENEN) {
+      const e = ebZ(id);
+      const zeile = el("div", id === "unterlage" ? "ebene ebene-unterlage" : "ebene"); zeile.dataset.ebene = id; zeile.setAttribute("role", "listitem");
+      const icon = (pfad: string) => `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">${pfad}</svg>`;
+      const auge = el("button", "ico"); auge.type = "button"; auge.dataset.k = `ebene-sichtbar-${id}`;
+      auge.setAttribute("aria-pressed", String(e.sichtbar)); auge.setAttribute("aria-label", `${name} ${e.sichtbar ? "ausblenden" : "einblenden"}`); auge.title = e.sichtbar ? "Ausblenden" : "Einblenden";
+      auge.innerHTML = icon(e.sichtbar ? AUGE : AUGE_ZU);
+      auge.addEventListener("click", () => { setzeEbene(id, { sichtbar: !e.sichtbar }); panelEbenen(); speichere(); });
+      zeile.append(auge);
+      if (id === "unterlage") zeile.append(el("span"));
+      else {
+        const lk = el("button", "ico"); lk.type = "button"; lk.dataset.k = `ebene-sperre-${id}`;
+        lk.setAttribute("aria-pressed", String(e.gesperrt)); lk.setAttribute("aria-label", `${name} ${e.gesperrt ? "entsperren" : "sperren"}`); lk.title = e.gesperrt ? "Gesperrt: nicht auswählbar" : "Sperren";
+        lk.innerHTML = icon(e.gesperrt ? SCHLOSS : SCHLOSS_OFFEN);
+        lk.addEventListener("click", () => { setzeEbene(id, { gesperrt: !e.gesperrt }); panelEbenen(); speichere(); });
+        zeile.append(lk);
+      }
+      zeile.append(el("span", "name", name));
+      const rg = el("input"); rg.type = "range"; rg.min = "5"; rg.max = "100"; rg.step = "5"; rg.value = String(Math.round(e.deckkraft * 100));
+      rg.dataset.k = `ebene-deckkraft-${id}`; if (id === "unterlage") rg.id = "u-deckkraft";
+      rg.setAttribute("aria-label", `Deckkraft ${name}`); rg.title = `Deckkraft ${rg.value} %`;
+      rg.addEventListener("input", () => { setzeEbene(id, { deckkraft: Number(rg.value) / 100 }); rg.title = `Deckkraft ${rg.value} %`; });
+      rg.addEventListener("change", () => speichere());
+      zeile.append(rg);
+      liste.append(zeile);
+    }
+    p.replaceChildren(liste);
   }
 
   function panelWerkzeug() {
@@ -895,7 +949,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     }
     shell.status.projekt.textContent = [variantenListe(aktuellesProjekt()).length > 1 ? `Variante: ${variantenListe(aktuellesProjekt()).find((x) => x.aktiv)?.name ?? ""}` : "", geaendertSchnell() ? "ungespeichert" : "", projektMeldung ?? ""].filter(Boolean).join(" · ");
     berechneAbweichungen();
-    panelUnterlage(); panelWerkzeug(); panelAuswahl();
+    panelEbenen(); panelUnterlage(); panelWerkzeug(); panelAuswahl();
     lebendigerDialog?.();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
     if (ergebnisFehler) { shell.panels.pruefliste.replaceChildren(el("div", "note error", `Berechnung fehlgeschlagen: ${ergebnisFehler}`)); shell.panels.ergebnis.replaceChildren(); }
@@ -1299,7 +1353,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     aktion: { value: aktion },
     modell: { get: () => modell() },
     lade: { value: (m: ProjectModel) => { einbetten = false; verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
-    ladeProjekt: { value: (pr: Projekt) => { einbetten = false; verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },
+    ladeProjekt: { value: (pr: Projekt) => { einbetten = false; verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; uebernehmeAnsicht(pr.ansicht); refresh(); } },
     projekt: { get: () => aktuellesProjekt() },
     waehle: { value: setzeAuswahl },
   });

@@ -8,6 +8,7 @@ import { EPS } from "../geometry/eps";
 import { signedArea } from "../geometry/polygon";
 import { dist } from "../geometry/segment";
 import { SCHEMA_VERSION } from "./migrate";
+import { EBENEN_IDS } from "./types";
 import { PROJEKTANGABEN_FELDER, pruefeAngabe } from "./projektangaben";
 import { VARIANTEN_NAME_MAX, variantenNameSchluessel } from "./varianten";
 
@@ -292,7 +293,7 @@ function pruefeDach(c: Pruefer, p: string, v: unknown): void {
 }
 
 function pruefeUnterlage(c: Pruefer, p: string, v: unknown): void {
-  const o = c.obj(p, v, ["dateiname", "art", "pruefsumme", "passpunkte"], ["seite", "massstab", "eingebettet"]);
+  const o = c.obj(p, v, ["dateiname", "art", "pruefsumme", "passpunkte"], ["seite", "massstab", "eingebettet", "quellpfad"]);
   if (!o) return;
   c.str(sub(p, "dateiname"), o["dateiname"], { nichtLeer: true });
   c.oneOf(sub(p, "art"), o["art"], ["pdf", "dxf"] as const);
@@ -303,6 +304,7 @@ function pruefeUnterlage(c: Pruefer, p: string, v: unknown): void {
     c.str(sub(q, "wert"), s["wert"], { muster: SHA256, text: "SHA-256 als 64 Hex-Zeichen (klein) erwartet" });
   }
   c.optNum(p, o, "seite", { min: 1, ganz: true });
+  c.optStr(p, o, "quellpfad");
   c.optNum(p, o, "massstab", { gt: 0 });
   const pp = sub(p, "passpunkte");
   const a = c.arr(pp, o["passpunkte"], 2);
@@ -317,8 +319,26 @@ function pruefeUnterlage(c: Pruefer, p: string, v: unknown): void {
   if (p0?.w && p1?.w && dist(p0.w, p1.w) <= EPS) c.err(sub(sub(pp, 1), "welt"), "Passpunkte fallen zusammen");
   if (o["eingebettet"] !== undefined) {
     const eq = sub(p, "eingebettet");
-    const e = c.obj(eq, o["eingebettet"], ["base64"]);
-    if (e) c.str(sub(eq, "base64"), e["base64"], { muster: BASE64, text: "Base64 erwartet" });
+    const e = c.obj(eq, o["eingebettet"], ["base64"], ["komprimiert"]);
+    if (e) {
+      c.str(sub(eq, "base64"), e["base64"], { muster: BASE64, text: "Base64 erwartet" });
+      if (e["komprimiert"] !== undefined) c.oneOf(sub(eq, "komprimiert"), e["komprimiert"], ["gzip"] as const);
+    }
+  }
+}
+
+function pruefeAnsicht(c: Pruefer, v: unknown): void {
+  const a = c.obj("/ansicht", v, ["ebenen"]);
+  if (!a) return;
+  const eb = a["ebenen"];
+  if (!isObj(eb)) return c.err("/ansicht/ebenen", "Objekt erwartet");
+  for (const [k, w] of Object.entries(eb)) {
+    const q = sub("/ansicht/ebenen", k);
+    if (!(EBENEN_IDS as readonly string[]).includes(k)) { c.err(q, "Unbekannte Ebene"); continue; }
+    const x = c.obj(q, w, ["sichtbar", "deckkraft", "gesperrt"]);
+    if (!x) continue;
+    for (const b of ["sichtbar", "gesperrt"]) if (typeof x[b] !== "boolean") c.err(sub(q, b), "Wahrheitswert erwartet");
+    c.num(sub(q, "deckkraft"), x["deckkraft"], { min: 0, max: 1 });
   }
 }
 
@@ -375,8 +395,9 @@ export function validateProject(raw: unknown, schemaVersion: number = SCHEMA_VER
 export function validateProjekt(raw: unknown, schemaVersion: number = SCHEMA_VERSION): ValidationError[] {
   if (!isObj(raw)) return [{ pfad: "", meldung: "Projekt muss ein JSON-Objekt sein" }];
   const c = new Pruefer(packIdsVon(raw), schemaVersion >= 4);
-  const o = c.obj("", raw, ["schemaVersion", "meta", "packVersionen", "standort", "gefaelleStandard", "varianten", "aktiveVariante", "unterlage"]);
+  const o = c.obj("", raw, ["schemaVersion", "meta", "packVersionen", "standort", "gefaelleStandard", "varianten", "aktiveVariante", "unterlage"], ["ansicht"]);
   if (!o) return c.fehler;
+  if (o["ansicht"] !== undefined) pruefeAnsicht(c, o["ansicht"]);
   if (o["schemaVersion"] !== schemaVersion) c.err("/schemaVersion", `Schemaversion ${schemaVersion} erwartet`);
   pruefeGemeinsam(c, o);
   const ids = new Set<string>();

@@ -1,4 +1,5 @@
 export type * from "./types";
+export { EBENEN_IDS } from "./types";
 export { GEFAELLE_STANDARD, belagDickeVon, createProject, createProjekt, dachPolygon, konturKante, wandanschluesseVon } from "./model";
 export {
   VARIANTEN_NAME_MAX, freieVariantenId, idsDerDachflaechen, mitModell, modellFuerVariante, projektAusModell, reservierteIds,

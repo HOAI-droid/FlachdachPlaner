@@ -233,7 +233,10 @@ export interface Unterlage {
   /** Zwei-Punkt-Zuordnung (Maßstab + Ausrichtung). */
   readonly passpunkte: readonly [Passpunkt, Passpunkt];
   /** Eingebettete Datei (Base64), nur wenn der Nutzer das wählt. */
-  readonly eingebettet?: { readonly base64: string };
+  /** Originalpfad der Datei (nur Desktop-App); Verweis, wenn die Unterlage nicht eingebettet ist. */
+  readonly quellpfad?: string;
+  /** Eingebettete Datei; `komprimiert: "gzip"` = Base64 von gzip-Daten (fehlt = unkomprimiert, ältere Dateien). */
+  readonly eingebettet?: { readonly base64: string; readonly komprimiert?: "gzip" };
 }
 
 /**
@@ -266,6 +269,12 @@ export interface Variante {
  * Projektdatei ab Schemaversion 3. Unterlage, Standort, Metadaten und Pack-Versionen gelten
  * projektweit, Dachflächen je Variante. IDs sind projektweit eindeutig (auch über Varianten).
  */
+/** Sichtbarkeit, Deckkraft und Sperre einer Zeichenebene (Ebenen-Panel). */
+export interface EbenenZustand { readonly sichtbar: boolean; readonly deckkraft: number; readonly gesperrt: boolean }
+/** Ansichtseinstellungen, die mit dem Projekt gespeichert werden (nicht rückgängig-fähig). */
+export interface Ansichtseinstellungen { readonly ebenen: Readonly<Record<string, EbenenZustand>> }
+export const EBENEN_IDS = ["koten", "symbole", "pfeile", "kontur", "daemmplan", "einzugsflaechen", "unterlage"] as const;
+
 export interface Projekt {
   readonly schemaVersion: number;
   readonly meta: Projektmetadaten;
@@ -277,4 +286,6 @@ export interface Projekt {
   readonly varianten: readonly Variante[];
   readonly aktiveVariante: Id;
   readonly unterlage: Unterlage | null;
+  /** Ebenen-Einstellungen; fehlt = alle sichtbar, volle Deckkraft. */
+  readonly ansicht?: Ansichtseinstellungen;
 }
