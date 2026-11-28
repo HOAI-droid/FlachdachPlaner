@@ -109,6 +109,8 @@ Fokus (alle): `outline: 2px solid var(--accent); outline-offset: 1px`, nur `:foc
 
 **Dialoge:** max. 560 px breit, `--surface`, `--shadow-1`, Backdrop `rgb(0 0 0 / .3)`. Buttons rechts unten, Primär ganz rechts.
 
+**Menüleiste und Seitenleiste (M10):** Menüleiste in der Kopfzeile (Tokens `--surface`, `--line`, `--accent-soft`, Kürzel rechts, ⌘ auf macOS). Seitenleiste nur Ebenen (Reihenfolge von oben, Auge/Sperre/Deckkraft-Regler je Zeile), Eigenschaften (je Auswahl, Dachfläche mit Block „Dachaufbau“) und Ergebnis; seltene Einstellungen in Dialogen.
+
 ## 6. Zeichenfläche und Plansymbole
 Größen in **Bildschirm-px bei 100 %** (skalieren nicht mit Zoom, außer Geometrie). Im PDF-Export gelten die mm-Werte in Klammern.
 

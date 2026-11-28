@@ -13,7 +13,10 @@ Architekten und Zeichner im Büro, die Flachdächer (meist Warmdach mit Gründac
 
 ### Unterlage und Zeichnen
 - **PDF- und DXF-Unterlagen** laden und darüberzeichnen (DWG ist ausdrücklich nicht vorgesehen).
-- **Deckkraft-Regler** im Panel Unterlage (5–100 %).
+- **Menüleiste** (Datei, Bearbeiten, Projekt, Ansicht, Hilfe; in der Desktop-App als natives Menü). Strg+Z / ⌘Z macht einen Schritt rückgängig.
+- **Ebenen** (oberster Eintrag = oberste Zeichenebene, Unterlage ganz unten): Sichtbarkeit, Sperre und Deckkraft je Ebene, gespeichert in der Projektdatei.
+- **Dachaufbau:** je Dachfläche Dämmstärke im Mittel, min. Tiefpunkt und max. Hochpunkt (leer = keine Warnung); beim Setzen des ersten Ablaufs werden Tiefpunktdicke und Koten abgeleitet. Hebt man einen Ablauf von Hand an, ändern sich alle Höhen der Dachfläche sofort.
+- **Unterlage in der Projektdatei:** wahlweise eingebettet (komprimiert, bei PDF nur die gewählte Seite) oder als Verweis auf den Ursprungspfad (Desktop-App).
 - **Maßstab/Kalibrierung:** Eingabe 1:n oder Zwei-Punkt-Kalibrierung über eine bekannte Strecke; der Maßstab steht in der Statusleiste.
 - **Punktfang:** Endpunkt, Mittelpunkt, Schnittpunkt, Lot, Ortho – auch auf den Linien der Unterlage.
 - **Zeichenwerkzeuge:** Dachkontur (Rechteck, L, U und freie Formen), Attika, Aufbauten (Lichtkuppel, Lüfter, Aufzug …), Dachterrassen, Türschwellen; Undo/Redo.
