@@ -973,6 +973,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   let zeigeAnschluesse = true;
   let plan: InsulationLayout | null = null, planFuer: Ergebnis | null = null;
   const ansicht3d = new Ansicht3D(shell.stage);
+  new MutationObserver(() => stage.invalidate()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   shell.onAnsicht((a) => { ansicht = a; ansicht3d.setzeModus(a === "daemmplan" ? "daemmplan" : "flaeche"); stage.invalidate(); });
   let ist3d = false;
   function aktualisiere3d() {

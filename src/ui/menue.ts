@@ -56,8 +56,10 @@ export function mountMenuebar(host: HTMLElement, aktion: (id: string) => void): 
       liste.append(i);
     }
     const oeffne = () => { schliesse(); w.dataset.open = "true"; b.setAttribute("aria-expanded", "true"); offen = w; };
-    b.addEventListener("click", () => { if (offen === w) schliesse(); else oeffne(); });
-    b.addEventListener("mouseenter", () => { if (offen && offen !== w) oeffne(); });
+    let perHover = false;
+    b.addEventListener("click", () => { if (offen === w && !perHover) schliesse(); else if (offen !== w) oeffne(); perHover = false; });
+    b.addEventListener("mouseenter", () => { if (offen && offen !== w) { oeffne(); perHover = true; } });
+    b.addEventListener("mouseleave", () => { perHover = false; });
     w.append(b, liste); bar.append(w);
   }
   document.addEventListener("mousedown", (e) => { if (offen && !offen.contains(e.target as Node)) schliesse(); });
