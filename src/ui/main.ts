@@ -14,10 +14,11 @@ import { mountEditor } from "./editor";
 import { autosaveLesen, leseProjekt } from "./speicher";
 import { ladeInstallierte } from "./packs";
 import { mountUpdate } from "./update";
+import { istTauri } from "./schliessen";
 
 const root = document.getElementById("app");
 if (root) {
-  const shell = mountShell(root);
+  const shell = mountShell(root, !istTauri());
   const stage = mountStage(shell.stage);
   stage.onChange((vp, c) => {
     shell.status.cursor.textContent = c ? `x ${zahl(c[0], 3)} m  y ${zahl(c[1], 3)} m` : "x \u2013  y \u2013";

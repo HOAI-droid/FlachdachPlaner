@@ -105,6 +105,8 @@ export interface Editor {
   waehle(a: Auswahl | null): void;
   /** Befehl ausführen (Undo-fähig), z. B. aus dem Standort-Panel. */
   ausfuehre(b: Befehl): void;
+  /** Menüaktion ausführen (gleiche IDs wie Menüleiste und natives Menü). */
+  aktion(id: string): void;
   /** Wird nach jeder Aktualisierung aufgerufen (z. B. Update-Panel). */
   beiAenderung: (() => void) | null;
 }
@@ -151,6 +153,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   /** Verweis aus geöffnetem Projekt, dessen Datei noch erneut gewählt werden muss. */
   let offeneUnterlage: ProjectModel["unterlage"] = null;
   let projektMeldung: string | null = null;
+  let lebendigerDialog: (() => void) | null = null;
   /** Unterlagenwechsel (22a): alte Fangstrecken, Toleranz, bewusst belassene Punkte. */
   let tausch: { alt: SnapSegment[]; belassen: Set<string>; toleranz: number; pass: number[] } | null = null;
   let abweichungen: Abweichung[] = [];
@@ -628,24 +631,22 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     return box;
   }
 
-  function panelProjekt() {
-    const p = shell.panels.projekt;
-    p.querySelector(".projekt-datei")?.remove();
-    const box = el("div", "pad projekt-datei");
-    const wahl = el("input");
-    wahl.type = "file"; wahl.accept = ".fdp,application/json"; wahl.id = "f-projekt"; wahl.setAttribute("aria-label", "Projektdatei öffnen");
-    wahl.className = "visually-hidden"; wahl.tabIndex = -1;
-    wahl.addEventListener("change", () => { const f = wahl.files?.[0]; wahl.value = ""; if (f) void darfVerwerfen("dem Öffnen").then((ok) => ok ? f.text().then(oeffneText) : undefined); });
-    const zeile = el("div", "btn-row");
-    zeile.append(button("Neu", () => void neuesProjekt()), button("Projekt speichern", () => void speichereProjekt()), button("Plan als PDF", () => void exportierePdf()), button("Plan als DXF", exportiereDxf), button("Projekt öffnen …", () => { if (istTauri() || (window as unknown as { showOpenFilePicker?: unknown }).showOpenFilePicker) void oeffneProjekt(); else wahl.click(); }));
+  function blockEinbetten(): HTMLElement {
+    const box = el("div", "einbetten");
+    if (!unterlage) { box.append(el("div", "empty", "Keine Unterlage geladen.")); return box; }
     const lab = el("label", "check-row");
-    const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten"; cb.disabled = !unterlage;
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = einbetten; cb.dataset.k = "einbetten";
     cb.addEventListener("change", () => { einbetten = cb.checked; refresh(); });
-    lab.append(cb, el("span", "", "Unterlage in Projektdatei einbetten"));
-    const angaben = button("Projektangaben (Plankopf) …", () => void oeffneAngabenDialog(modell().meta, setzeAngaben)); angaben.dataset.k = "projektangaben";
-    box.append(blockVarianten(), el("div", "label", "Projekt"), angaben, zeile, lab, wahl);
-    if (projektMeldung) { const n = el("div", "note", projektMeldung); n.dataset.k = "projekt-meldung"; n.setAttribute("role", "status"); box.append(n); }
-    p.append(box);
+    lab.append(cb, el("span", "", unterlage.art === "pdf" ? `PDF (nur Seite ${unterlage.seite ?? 1}) in die Projektdatei einbetten` : "DXF in die Projektdatei einbetten"));
+    box.append(lab, el("div", "note", einbetten
+      ? "Die Unterlage steckt komprimiert in der Projektdatei und lässt sich auf jedem Rechner öffnen."
+      : "Die Unterlage wird nicht eingebettet: das Projekt verweist nur auf die Originaldatei und sucht sie beim Öffnen am gleichen Ort."));
+    return box;
+  }
+  function waehleUnterlageDatei() {
+    const i = el("input"); i.type = "file"; i.accept = ".dxf,.pdf,application/pdf";
+    i.addEventListener("change", () => { const f = i.files?.[0]; if (f) void (unterlage ? tauscheUnterlage(f) : ladeDatei(f)); });
+    i.click();
   }
 
   // ---------- Panels ----------
@@ -892,9 +893,10 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       catch (e) { ergebnis = null; ergebnisFehler = e instanceof Error ? e.message : String(e); }
       speichere();
     }
-    shell.status.projekt.textContent = [variantenListe(aktuellesProjekt()).length > 1 ? `Variante: ${variantenListe(aktuellesProjekt()).find((x) => x.aktiv)?.name ?? ""}` : "", geaendertSchnell() ? "ungespeichert" : ""].filter(Boolean).join(" · ");
+    shell.status.projekt.textContent = [variantenListe(aktuellesProjekt()).length > 1 ? `Variante: ${variantenListe(aktuellesProjekt()).find((x) => x.aktiv)?.name ?? ""}` : "", geaendertSchnell() ? "ungespeichert" : "", projektMeldung ?? ""].filter(Boolean).join(" · ");
     berechneAbweichungen();
-    panelUnterlage(); panelWerkzeug(); panelAuswahl(); panelProjekt();
+    panelUnterlage(); panelWerkzeug(); panelAuswahl();
+    lebendigerDialog?.();
     if (standortFuer !== modell().standort) { standortFuer = modell().standort; standortPanel?.render(); }
     if (ergebnisFehler) { shell.panels.pruefliste.replaceChildren(el("div", "note error", `Berechnung fehlgeschlagen: ${ergebnisFehler}`)); shell.panels.ergebnis.replaceChildren(); }
     else { fuellePruefliste(shell.panels.pruefliste, modell(), ergebnis, (z) => { if (z.auswahl) { auswahl = z.auswahl; } if (z.mitte) stage.centerOn(z.mitte.x, z.mitte.y); refresh(); }); fuelleErgebnis(shell.panels.ergebnis, modell(), ergebnis ?? leeresErgebnis); ebenenSchalter(); }
@@ -1222,10 +1224,17 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   });
 
   shell.onTool((id) => setzeWerkzeug(id as WerkzeugId));
+  /** Schreibfelder behalten ihr eigenes Rückgängig; Regler, Haken und Knöpfe reichen Strg/⌘+Z an den Plan durch. */
+  function istTextEingabe(t: EventTarget | null): boolean {
+    if (!(t instanceof HTMLElement)) return false;
+    if (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
+    if (t.tagName !== "INPUT") return false;
+    return !/^(checkbox|radio|range|button|file|color)$/.test((t as HTMLInputElement).type);
+  }
   shell.undo.addEventListener("click", undo);
   shell.redo.addEventListener("click", redo);
   window.addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLElement && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && e.target.getAttribute("type") !== "checkbox") return;
+    if (istTextEingabe(e.target)) return;
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
       if (k === "n" && !e.shiftKey) { e.preventDefault(); void neuesProjekt(); return; }
@@ -1242,14 +1251,52 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
     else if (TASTEN[k]) setzeWerkzeug(TASTEN[k]!);
   });
 
+  /** Dialog mit einem bestehenden Panel-Element (bleibt lebendig, solange der Dialog offen ist). */
+  function zeigePanel(titel: string, host: HTMLElement) {
+    const inhalt = el("div", "pad dialog-panel"); inhalt.append(host);
+    oeffneDialog({ titel, inhalt, knoepfe: [{ id: "ok", label: "Schließen", primaer: true }], abbruchId: "ok", breit: true });
+  }
+  /** Dialog, dessen Inhalt bei jeder Aktualisierung neu gebaut wird (Varianten, Einbetten). */
+  function zeigeLebendig(titel: string, baue: () => HTMLElement) {
+    const inhalt = el("div", "pad dialog-panel");
+    const neu = () => inhalt.replaceChildren(baue());
+    neu(); lebendigerDialog = neu;
+    void oeffneDialog({ titel, inhalt, knoepfe: [{ id: "ok", label: "Schließen", primaer: true }], abbruchId: "ok", breit: true }).ergebnis.then(() => { if (lebendigerDialog === neu) lebendigerDialog = null; });
+  }
+  function aktion(id: string) {
+    switch (id) {
+      case "neu": return void neuesProjekt();
+      case "oeffnen": return void oeffneProjekt();
+      case "speichern": return void speichereProjekt();
+      case "export-pdf": return void exportierePdf();
+      case "export-dxf": return exportiereDxf();
+      // Natives Menü fängt Cmd/Strg+Z ab: im Schreibfeld das Text-Undo des Feldes, sonst Plan-Undo.
+      case "undo": return istTextEingabe(document.activeElement) ? void document.execCommand("undo") : undo();
+      case "redo": return istTextEingabe(document.activeElement) ? void document.execCommand("redo") : redo();
+      case "auswahl-loeschen": return loescheAuswahl();
+      case "angaben": return void oeffneAngabenDialog(modell().meta, setzeAngaben);
+      case "standort": return zeigePanel("Standort & Regenspende", shell.panels.standort);
+      case "varianten": return zeigeLebendig("Varianten", blockVarianten);
+      case "update": return zeigePanel("Softwareupdate", shell.panels.update);
+      case "unterlage-laden": return void waehleUnterlageDatei();
+      case "unterlage-einbetten": return zeigeLebendig("Unterlage einbetten", blockEinbetten);
+      case "modus-2d": return shell.setModus("2d");
+      case "modus-3d": return shell.setModus("3d");
+      case "ansicht-gefaelle": return shell.setAnsicht("gefaelle");
+      case "ansicht-daemmplan": return shell.setAnsicht("daemmplan");
+      case "thema": return shell.toggleTheme();
+    }
+  }
   const ausfuehreBefehl = (b: Befehl) => { fuehreAus(b); refresh(); };
   standortPanel = mountStandort(shell.panels.standort, { modell, ausfuehre: ausfuehreBefehl });
   setzeWerkzeug("select");
   refresh();
-  if (istTauri()) void hoereAufMenue((id) => { if (id === "neu") void neuesProjekt(); else if (id === "oeffnen") void oeffneProjekt(); else if (id === "speichern") void speichereProjekt(); });
+  shell.onMenue(aktion);
+  if (istTauri()) void hoereAufMenue(aktion);
   void schuetzeFenster(geaendert, () => darfVerwerfen("dem Schließen"));
   Object.defineProperties(api, {
     ausfuehre: { value: ausfuehreBefehl },
+    aktion: { value: aktion },
     modell: { get: () => modell() },
     lade: { value: (m: ProjectModel) => { einbetten = false; verlauf = neuerVerlauf(projektAusModell(m)); markiereGespeichert(); auswahl = null; if (m.unterlage) offeneUnterlage = m.unterlage; refresh(); } },
     ladeProjekt: { value: (pr: Projekt) => { einbetten = false; verlauf = neuerVerlauf(pr); const wieder = modellFuerVariante(pr).dachflaechen.length > 0; gespeichertSchluessel = wieder ? "\u0000" : schluessel(); gespeichertStand = wieder ? null : pr; gespeichertEinbetten = einbetten; auswahl = null; const u = pr.unterlage; if (u) offeneUnterlage = u; refresh(); } },

@@ -1,4 +1,5 @@
 import { version } from "../core/index";
+import { mountMenuebar } from "./menue";
 
 type Theme = "light" | "dark";
 const ICONS: Record<string, string> = {
@@ -91,27 +92,36 @@ export interface Shell {
   /** Markiert das aktive Werkzeug (z. B. nach Esc oder Tastenkürzel). */
   setTool(id: string): void;
   /** Panel-Abschnitte (Inhalt wird von der UI-Steuerung befüllt). */
-  panels: { unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement; standort: HTMLElement; ergebnis: HTMLElement; projekt: HTMLElement; update: HTMLElement };
+  panels: { ebenen: HTMLElement; unterlage: HTMLElement; werkzeug: HTMLElement; auswahl: HTMLElement; pruefliste: HTMLElement; standort: HTMLElement; ergebnis: HTMLElement; update: HTMLElement };
+  /** Menüleiste (Browser) bzw. natives Menü (Desktop) → Aktions-ID. */
+  onMenue(cb: (id: string) => void): void;
+  setModus(m: "2d" | "3d"): void;
+  setAnsicht(a: "gefaelle" | "daemmplan"): void;
+  toggleTheme(): void;
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
 }
 
-export function mountShell(root: HTMLElement): Shell {
+export function mountShell(root: HTMLElement, mitMenue = true): Shell {
   root.replaceChildren();
   setTheme(initialTheme());
 
   const hint = el("div", "hint-bar", "Mindestbreite 1280 px: bitte Fenster vergrößern.");
   const head = el("header", "head");
   head.append(el("h1", "", "Flachdachplaner"));
+  let menueCb: (id: string) => void = () => {};
+  if (mitMenue) mountMenuebar(head, (id) => menueCb(id));
   let modusCb: (m: "2d" | "3d") => void = () => {};
-  head.append(segment([["2d", "2D"], ["3d", "3D"]], (v) => modusCb(v as "2d" | "3d"), "2d"));
+  const modusSeg = segment([["2d", "2D"], ["3d", "3D"]], (v) => modusCb(v as "2d" | "3d"), "2d");
+  head.append(modusSeg);
   let ansichtCb: (a: "gefaelle" | "daemmplan") => void = () => {};
   const ansicht = segment([["gefaelle", "Gefälle"], ["daemmplan", "Dämmplan"]], (v) => ansichtCb(v as "gefaelle" | "daemmplan"), "gefaelle");
   ansicht.setAttribute("aria-label", "Planansicht");
+  const druecke = (seg: HTMLElement, i: number) => (seg.querySelectorAll("button")[i] as HTMLButtonElement | undefined)?.click();
   head.append(ansicht);
   const undo = el("button", "btn icon");
   const redo = el("button", "btn icon");
-  for (const [b, id, name] of [[undo, "undo", "Rückgängig  Strg+Z"], [redo, "redo", "Wiederholen  Strg+Y"]] as const) {
+  for (const [b, id, name] of [[undo, "undo", "Rückgängig  Strg+Z / ⌘Z"], [redo, "redo", "Wiederholen  Strg+Umschalt+Z"]] as const) {
     b.type = "button"; b.title = name; b.setAttribute("aria-label", name.split("  ")[0]!);
     b.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[id]}</svg>`;
     b.disabled = true;
@@ -120,11 +130,12 @@ export function mountShell(root: HTMLElement): Shell {
   head.append(el("span", "spacer"));
   const themeBtn = el("button", "btn", "Dunkel");
   themeBtn.type = "button";
-  themeBtn.addEventListener("click", () => {
+  const toggleTheme = () => {
     const dark = document.documentElement.dataset.theme === "dark";
     setTheme(dark ? "light" : "dark");
     themeBtn.textContent = dark ? "Dunkel" : "Hell";
-  });
+  };
+  themeBtn.addEventListener("click", toggleTheme);
   if (document.documentElement.dataset.theme === "dark") themeBtn.textContent = "Hell";
   head.append(themeBtn);
 
@@ -163,7 +174,6 @@ export function mountShell(root: HTMLElement): Shell {
 
   const props = el("aside", "props");
   props.setAttribute("aria-label", "Eigenschaften");
-  props.append(el("div", "panel-title", "Eigenschaften"));
   const proj = el("div");
   const f = el("div", "field");
   const lbl = el("label", "", "Standard-Gefälle");
@@ -171,10 +181,14 @@ export function mountShell(root: HTMLElement): Shell {
   inp.id = "f-gefaelle"; lbl.htmlFor = inp.id; inp.value = "2,0 %"; inp.inputMode = "decimal";
   f.append(lbl, inp);
   proj.append(f);
-  const update = el("div"), unterlage = el("div"), werkzeug = el("div"), auswahl = el("div"), standort = el("div"), ergebnis = el("div");
+  const ebenen = el("div"), unterlage = el("div"), werkzeug = el("div"), auswahl = el("div"), ergebnis = el("div");
+  // Dialog-Hosts: nicht in der Seitenleiste, werden vom Menü in Dialogen gezeigt.
+  const standort = el("div"), update = el("div");
   unterlage.append(el("div", "empty", "Keine Unterlage geladen."));
   auswahl.append(el("div", "empty", "Nichts ausgewählt."));
-  props.append(section("Unterlage", unterlage), section("Werkzeug", werkzeug), section("Auswahl", auswahl), section("Standort & Regenspende", standort), section("Ergebnis", ergebnis), section("Projekt", proj), section("Updates", update));
+  const ebenenBody = el("div"); ebenenBody.append(ebenen, unterlage);
+  const eigenBody = el("div"); eigenBody.append(proj, werkzeug, auswahl);
+  props.append(section("Ebenen", ebenenBody), section("Eigenschaften", eigenBody), section("Ergebnis", ergebnis));
 
   const status = el("footer", "status");
   const cursor = el("span", "num", "x –  y –");
@@ -190,6 +204,7 @@ export function mountShell(root: HTMLElement): Shell {
 
   return {
     stage, status: { cursor, scale, snap, unterlage: unterlageStatus, projekt: projektStatus }, onTool: (cb) => { toolCb = cb; }, onAnsicht: (cb) => { ansichtCb = cb; }, onModus: (cb) => { modusCb = cb; },
-    setTool: markTool, panels: { unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, projekt: proj, update }, undo, redo,
+    setTool: markTool, panels: { ebenen, unterlage, werkzeug, auswahl, pruefliste, standort, ergebnis, update }, undo, redo,
+    onMenue: (cb) => { menueCb = cb; }, setModus: (m) => druecke(modusSeg, m === "2d" ? 0 : 1), setAnsicht: (a) => druecke(ansicht, a === "gefaelle" ? 0 : 1), toggleTheme,
   };
 }

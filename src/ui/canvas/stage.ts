@@ -5,6 +5,7 @@ export const LAYER_ORDER = [
   "unterlage", "einzugsflaechen", "daemmplan", "kontur", "pfeile", "symbole", "koten", "auswahl", "fang",
 ] as const;
 export type LayerId = (typeof LAYER_ORDER)[number];
+export interface EbenenEinstellung { sichtbar: boolean; deckkraft: number }
 
 /** Zeichnet in Welt-Koordinaten (m, y nach oben); Strichstärken in px = px / vp.scale. */
 export type LayerDraw = (ctx: CanvasRenderingContext2D, vp: Viewport) => void;
@@ -22,6 +23,9 @@ export interface PointerHandlers {
 
 export interface Stage {
   setLayer(id: LayerId, draw: LayerDraw | null): void;
+  /** Sichtbarkeit und Deckkraft (0–1) einer Ebene; wirkt beim Zeichnen, ohne die Zeichenfunktion zu ändern. */
+  setEbene(id: LayerId, e: Partial<EbenenEinstellung>): void;
+  ebene(id: LayerId): EbenenEinstellung;
   invalidate(): void;
   fit(minX: number, minY: number, maxX: number, maxY: number): void;
   /** Verschiebt die Ansicht, sodass der Weltpunkt in der Mitte liegt (Maßstab bleibt). */
@@ -45,6 +49,7 @@ export function mountStage(host: HTMLElement): Stage {
 
   let vp = createViewport(host.clientWidth || 1, host.clientHeight || 1);
   const layers = new Map<LayerId, LayerDraw>();
+  const ebenen = new Map<LayerId, EbenenEinstellung>();
   let queued = false;
   let cb: (vp: Viewport, cursor: [number, number] | null) => void = () => {};
   let cursor: [number, number] | null = null;
@@ -61,8 +66,10 @@ export function mountStage(host: HTMLElement): Stage {
     frameCb(vp);
     for (const id of LAYER_ORDER) {
       const draw = layers.get(id);
-      if (!draw) continue;
+      const eb = ebenen.get(id);
+      if (!draw || (eb && !eb.sichtbar)) continue;
       ctx!.save();
+      if (eb && eb.deckkraft < 1) ctx!.globalAlpha = eb.deckkraft;
       // Welt -> Bildschirm: x' = w/2 + (x-cx)*s ; y' = h/2 - (y-cy)*s
       ctx!.transform(vp.scale, 0, 0, -vp.scale, vp.w / 2 - vp.cx * vp.scale, vp.h / 2 + vp.cy * vp.scale);
       draw(ctx!, vp);
@@ -168,6 +175,8 @@ export function mountStage(host: HTMLElement): Stage {
 
   return {
     setLayer(id, draw) { if (draw) layers.set(id, draw); else layers.delete(id); invalidate(); },
+    setEbene(id, e) { ebenen.set(id, { ...(ebenen.get(id) ?? { sichtbar: true, deckkraft: 1 }), ...e }); invalidate(); },
+    ebene(id) { return ebenen.get(id) ?? { sichtbar: true, deckkraft: 1 }; },
     invalidate,
     fit(a, b, c, d) { vp = fitBounds(vp, a, b, c, d); changed(); },
     centerOn(x, y) { vp = { ...vp, cx: x, cy: y }; changed(); },

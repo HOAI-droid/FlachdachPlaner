@@ -194,3 +194,26 @@ button, input, select { font: inherit; color: inherit; }
 .befund .objekt { font-family: var(--font-mono); }
 .check-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .section-body > .check-row { padding-inline: var(--sp-4); }
+
+/* ---------- Menüleiste (Browser) ---------- */
+.menubar { display: flex; align-items: center; gap: var(--sp-1); }
+.menu { position: relative; }
+.menu-titel { background: none; border: 0; color: var(--text); font: inherit; padding: var(--sp-1) var(--sp-3); border-radius: var(--r-1, 4px); cursor: pointer; }
+.menu-titel:hover, .menu[data-open="true"] > .menu-titel { background: var(--accent-soft); }
+.menu-liste { display: none; position: absolute; top: 100%; left: 0; z-index: 30; min-width: 240px; padding: var(--sp-1) 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-2, 6px); box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
+.menu[data-open="true"] > .menu-liste { display: block; }
+.menu-punkt { display: flex; justify-content: space-between; gap: var(--sp-5); width: 100%; background: none; border: 0; color: var(--text); font: inherit; text-align: left; padding: var(--sp-2) var(--sp-4); cursor: pointer; }
+.menu-punkt:hover, .menu-punkt:focus-visible { background: var(--accent); color: var(--on-accent, #fff); }
+.menu-punkt:disabled { opacity: .45; cursor: default; }
+.menu-kurz { color: var(--text-muted); opacity: .7; font-variant-numeric: tabular-nums; }
+.menu-trenner { height: 1px; margin: var(--sp-1) 0; background: var(--line); }
+
+/* ---------- Ebenen ---------- */
+.ebenen-liste { display: flex; flex-direction: column; }
+.ebene { display: grid; grid-template-columns: 24px 24px 1fr 72px; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-4); }
+.ebene.ausgewaehlt { background: var(--accent-soft); }
+.ebene .ico { background: none; border: 0; padding: 0; width: 24px; height: 24px; cursor: pointer; color: var(--text); opacity: .85; }
+.ebene .ico[aria-pressed="false"] { opacity: .35; }
+.ebene .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ebene input[type="range"] { width: 72px; }
+.ebene-unterlage { border-top: 1px solid var(--line); margin-top: var(--sp-1); }
