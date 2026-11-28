@@ -4,7 +4,7 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, meshDach, pfeilLage, plattenDaemmdicke, polygonCentroid, verletzteKoten,
+  anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, meshDach, pointInPolygon, pfeilLage, plattenDaemmdicke, polygonCentroid, verletzteKoten,
   type Anschluss, type Befund, type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type Notwasserstand, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfBild, type PdfSeite, type Punkt } from "./pdf";
@@ -476,14 +476,23 @@ function uebersicht3d(s: PdfSeite, e: PlanEingabe, y1: number, h = 52): number {
   if (!alle.length) return y0;
   const minX = Math.min(...alle.map((p) => p.x)), maxX = Math.max(...alle.map((p) => p.x));
   const minY = Math.min(...alle.map((p) => p.y)), maxY = Math.max(...alle.map((p) => p.y));
-  const rand = 4, bw = b - 2 * rand, bh = h - 4 - 2 * rand - 3;
+  const rand = 4, bw = b - 2 * rand, bh = h - 4 - 2 * rand - 4;
   const k = Math.min(bw / Math.max(maxX - minX, 1e-6), bh / Math.max(maxY - minY, 1e-6));
   const ox = x0 + rand + (bw - (maxX - minX) * k) / 2, oy = y0 + rand + (bh - (maxY - minY) * k) / 2;
   const sp2 = (p: { x: number; y: number }) => ({ x: ox + (p.x - minX) * k, y: oy + (p.y - minY) * k });
+  // Farbe wie im Plan: Einzugsfläche, in der der Facettenschwerpunkt liegt
+  const farbeVon = (f: { outer: readonly { x: number; y: number }[] }): string => {
+    const c = { x: f.outer.reduce((a, p) => a + p.x, 0) / f.outer.length, y: f.outer.reduce((a, p) => a + p.y, 0) / f.outer.length };
+    const t = e.catchments.flaechen.find((q) => q.polygone.some((pg) => pointInPolygon(c, pg) !== "outside"));
+    return tint(e.farbe(t ? t.farbe : 0), 0.25);
+  };
   for (const i of items.sort((a, c) => c.t - a.t)) {
-    s.flaeche(i.ringe.map((r) => r.map(sp2)), { fuell: tint(e.farbe(Math.max(0, i.f.gruppe)), 0.25), breite: LW.fein });
+    s.flaeche(i.ringe.map((r) => r.map(sp2)), { fuell: farbeVon(i.f), breite: 0 });
+    const r = (i.ringe[0] ?? []).map(sp2);
+    r.forEach((a, n) => { if (!i.f.stumm?.[n]) s.linie([a, r[(n + 1) % r.length]!], { breite: LW.fein }); });
+    for (const h of i.ringe.slice(1)) { const q = h.map(sp2); s.linie(q, { breite: LW.fein, zu: true }); }
   }
-  s.text(`Überhöhung ${UE}×, nicht maßstäblich`, x0 + 1, y0 + 1.2, { groesse: T.klein });
+  s.text(`Überhöhung ${UE}×, nicht maßstäblich`, x0 + 1, y0 + 2.4, { groesse: T.klein });
   return y0;
 }
 
@@ -596,7 +605,7 @@ export function baueVariantenPdf(vs: readonly VariantenPlan[], titel?: string): 
       massstabsbalken(s, a, PLAN.x0 + 20, PLAN.y0 + 3);
       const yl = b.legende(s, PLAN.y1 - 4);
       const y = uebersicht3d(s, e, yl - 3);
-      tabellen(s, e, y - 4);
+      tabellen(s, e, y - 7);
       schriftfeld(s, e, b.titel, a.massstab, `${nr}/${gesamt}`);
     }
     if (hatAn(e)) {
