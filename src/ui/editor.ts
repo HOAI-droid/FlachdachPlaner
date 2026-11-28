@@ -875,7 +875,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       refresh();
     };
     p.append(el("div", "panel-title", "Dachaufbau"),
-      feldOpt("Dämmstärke im Mittel", w.daemmMittel, "daemm-mittel", (v) => setze({ daemmMittel: v === undefined || v < 0 ? undefined : v }), "aus", "mm", 0),
+      feldOpt("Dämmstärke im Mittel", w.daemmMittel, "daemm-mittel", (v) => { if (v !== undefined && (v < 0 || v > 1000)) { refresh(); return; } setze({ daemmMittel: v }); }, "aus", "mm", 0),
       feldOpt("Min. Tiefpunkt z", w.minTiefpunkt, "min-tiefpunkt", (v) => setze({ minTiefpunkt: v }), "aus"),
       feldOpt("Max. Hochpunkt z", w.maxHochpunkt, "max-hochpunkt", (v) => setze({ maxHochpunkt: v }), "keine Warnung"));
     const g = ergebnis?.slope.dachflaechen.find((x) => x.dachflaecheId === d.id);

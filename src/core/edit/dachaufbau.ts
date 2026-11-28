@@ -46,7 +46,7 @@ function mitOptional<T extends object, K extends keyof T>(o: T, k: K, v: T[K] | 
 export function leiteHoehenAb(m: ProjectModel, dachId: Id, opt: SlopeOptionen = {}, verschieben = true): ProjectModel {
   const d = m.dachflaechen.find((x) => x.id === dachId);
   if (!d || d.daemmMittel === undefined || hauptAbl(d).length === 0) return m;
-  const dg = computeSlope(m, opt).dachflaechen.find((x) => x.dachflaecheId === dachId);
+  const dg = computeSlope({ ...m, dachflaechen: [d] }, opt).dachflaechen.find((x) => x.dachflaecheId === dachId);
   if (!dg?.daemmung) return m;
   const anstieg = dg.daemmung.mittel - dg.daemmung.tiefpunktDicke;
   const dtp = Math.max(MIN_TIEFPUNKT_DICKE, d.daemmMittel - anstieg);

@@ -14,7 +14,7 @@ describe("Ansichtseinstellungen (Ebenen) in der Projektdatei", () => {
   it("fehlend ist gültig, Unsinn wird abgelehnt", () => {
     expect(validateProjekt(roh(basis()))).toEqual([]);
     const f = (ebenen: unknown) => validateProjekt({ ...roh(basis()), ansicht: { ebenen } });
-    expect(f({ gibtsnicht: { sichtbar: true, deckkraft: 1, gesperrt: false } }).length).toBeGreaterThan(0);
+    expect(f({ gibtsnicht: { sichtbar: true, deckkraft: 1, gesperrt: false } })).toEqual([]); // spätere Version: ignoriert
     expect(f({ symbole: { sichtbar: "ja", deckkraft: 1, gesperrt: false } }).length).toBeGreaterThan(0);
     expect(f({ symbole: { sichtbar: true, deckkraft: 2, gesperrt: false } }).length).toBeGreaterThan(0);
   });

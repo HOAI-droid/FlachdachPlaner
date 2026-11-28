@@ -215,7 +215,7 @@ function pruefeDach(c: Pruefer, p: string, v: unknown): void {
     ["daemmdickeTiefpunkt", "daemmMittel", ...c.ab4(["belagDicke", "wandanschluesse"])]);
   if (!o) return;
   c.optNum(p, o, "daemmdickeTiefpunkt", { min: 0 });
-  c.optNum(p, o, "daemmMittel", { min: 0 });
+  c.optNum(p, o, "daemmMittel", { min: 0, max: 1000 });
   c.optNum(p, o, "belagDicke", { min: 0 });
   c.id(sub(p, "id"), o["id"]);
   c.str(sub(p, "name"), o["name"]);
@@ -306,6 +306,7 @@ function pruefeUnterlage(c: Pruefer, p: string, v: unknown): void {
   }
   c.optNum(p, o, "seite", { min: 1, ganz: true });
   c.optStr(p, o, "quellpfad");
+  if (typeof o["quellpfad"] === "string" && o["quellpfad"].length > 1024) c.err(sub(p, "quellpfad"), "Pfad zu lang");
   c.optNum(p, o, "massstab", { gt: 0 });
   const pp = sub(p, "passpunkte");
   const a = c.arr(pp, o["passpunkte"], 2);
@@ -335,7 +336,7 @@ function pruefeAnsicht(c: Pruefer, v: unknown): void {
   if (!isObj(eb)) return c.err("/ansicht/ebenen", "Objekt erwartet");
   for (const [k, w] of Object.entries(eb)) {
     const q = sub("/ansicht/ebenen", k);
-    if (!(EBENEN_IDS as readonly string[]).includes(k)) { c.err(q, "Unbekannte Ebene"); continue; }
+    if (!(EBENEN_IDS as readonly string[]).includes(k)) continue; // Ebenen späterer Versionen: ignorieren, Datei bleibt lesbar
     const x = c.obj(q, w, ["sichtbar", "deckkraft", "gesperrt"]);
     if (!x) continue;
     for (const b of ["sichtbar", "gesperrt"]) if (typeof x[b] !== "boolean") c.err(sub(q, b), "Wahrheitswert erwartet");
