@@ -4,7 +4,7 @@
  * Reine Funktion von Modell und Ergebnissen; keine UI-Farben.
  */
 import {
-  anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, pfeilLage, plattenDaemmdicke, polygonCentroid, verletzteKoten,
+  anschlussLabel, anschlussStatus, attikaStreifen, dickeAn, dickeRaster, kotenMarken, meshDach, pfeilLage, plattenDaemmdicke, polygonCentroid, verletzteKoten,
   type Anschluss, type Befund, type CatchmentResult, type Dachflaeche, type Entwaesserung, type InsulationLayout, type Notwasserstand, type ProjectModel, type SlopeResult, type Vec2,
 } from "../../core/index";
 import { PdfDokument, textBreite, type PdfBild, type PdfSeite, type Punkt } from "./pdf";
@@ -455,6 +455,38 @@ function daemmplan(s: PdfSeite, a: Abbildung, e: PlanEingabe, unter: () => void)
   }
 }
 
+
+/**
+ * 3D-Übersicht (Axonometrie, 5-fach überhöht) als Vektorgrafik in einem Kasten rechts neben dem Plan.
+ * Zeichnet die Dachfacetten von hinten nach vorn (Maler-Algorithmus); Rückgabe: Unterkante des Kastens.
+ */
+function uebersicht3d(s: PdfSeite, e: PlanEingabe, y1: number, h = 52): number {
+  const x0 = SEITE.x0, b = SEITE.x1 - SEITE.x0, y0 = y1 - h, UE = 5;
+  s.text("Übersicht 3D", x0, y1 - 1, { groesse: T.normal, fett: true });
+  const flaechen = meshDach(e.slope, UE).filter((f) => f.art === "dach");
+  const yaw = 0.6, pitch = 0.9, cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const pr = (p: { x: number; y: number; z: number }) => { const rx = p.x * cy - p.y * sy, ry = p.x * sy + p.y * cy; return { x: rx, y: p.z * cp + ry * sp, t: ry * cp - p.z * sp }; };
+  const items = flaechen.map((f) => {
+    const ringe = [f.outer, ...f.holes].map((r) => r.map(pr));
+    const t = f.outer.length ? ringe[0]!.reduce((a, p) => a + p.t, 0) / ringe[0]!.length : 0;
+    return { f, ringe, t };
+  });
+  const alle = items.flatMap((i) => i.ringe[0] ?? []);
+  s.linie([{ x: x0, y: y0 }, { x: x0 + b, y: y0 }, { x: x0 + b, y: y1 - 4 }, { x: x0, y: y1 - 4 }], { breite: LW.fein, zu: true });
+  if (!alle.length) return y0;
+  const minX = Math.min(...alle.map((p) => p.x)), maxX = Math.max(...alle.map((p) => p.x));
+  const minY = Math.min(...alle.map((p) => p.y)), maxY = Math.max(...alle.map((p) => p.y));
+  const rand = 4, bw = b - 2 * rand, bh = h - 4 - 2 * rand - 3;
+  const k = Math.min(bw / Math.max(maxX - minX, 1e-6), bh / Math.max(maxY - minY, 1e-6));
+  const ox = x0 + rand + (bw - (maxX - minX) * k) / 2, oy = y0 + rand + (bh - (maxY - minY) * k) / 2;
+  const sp2 = (p: { x: number; y: number }) => ({ x: ox + (p.x - minX) * k, y: oy + (p.y - minY) * k });
+  for (const i of items.sort((a, c) => c.t - a.t)) {
+    s.flaeche(i.ringe.map((r) => r.map(sp2)), { fuell: tint(e.farbe(Math.max(0, i.f.gruppe)), 0.25), breite: LW.fein });
+  }
+  s.text(`Überhöhung ${UE}×, nicht maßstäblich`, x0 + 1, y0 + 1.2, { groesse: T.klein });
+  return y0;
+}
+
 function legendeGefaelle(s: PdfSeite, e: PlanEingabe, y: number): number {
   s.text("Legende", SEITE.x0, y, { groesse: T.normal, fett: true });
   y -= 6;
@@ -562,7 +594,8 @@ export function baueVariantenPdf(vs: readonly VariantenPlan[], titel?: string): 
       bemassung(s, a, e.modell);
       nordpfeil(s, PLAN.x0 + 8, PLAN.y1 - 26);
       massstabsbalken(s, a, PLAN.x0 + 20, PLAN.y0 + 3);
-      const y = b.legende(s, PLAN.y1 - 4);
+      const yl = b.legende(s, PLAN.y1 - 4);
+      const y = uebersicht3d(s, e, yl - 3);
       tabellen(s, e, y - 4);
       schriftfeld(s, e, b.titel, a.massstab, `${nr}/${gesamt}`);
     }

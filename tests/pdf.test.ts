@@ -53,6 +53,7 @@ describe("Schritt 28: PDF-Export", () => {
     expect((s.match(/\/Type \/Page /g) ?? []).length).toBe(2);
     expect(s).toContain("/MediaBox [0 0 1190.551 841.89]");
     expect(s).toContain("(Gef\\344lleplan)");
+    expect(s).toContain("(\\334bersicht 3D)");
     expect(s).toContain("(Testdach \\(PDF\\))");
     expect(s).not.toContain("NaN");
   });
