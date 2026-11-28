@@ -65,7 +65,7 @@ export async function zeigePdfVorschau(q: VorschauQuelle): Promise<VorschauWahl 
     opt.append(lab, zeile);
   }
   const blattWahl = mk("select"); blattWahl.dataset.k = "export-blatt"; blattWahl.hidden = true;
-  blattWahl.addEventListener("change", () => { void zeigeBlatt(Number(blattWahl.value)); });
+  blattWahl.addEventListener("change", () => { zeigeBlatt(Number(blattWahl.value)).catch(() => { /* Vorschau-Fehler nicht kritisch */ }); });
   const blattLabel = mk("label", "field"); blattLabel.append(mk("span", "", "Blatt"), blattWahl);
   opt.append(mk("div", "panel-title", "Vorschau"), blattLabel);
 
@@ -77,14 +77,19 @@ export async function zeigePdfVorschau(q: VorschauQuelle): Promise<VorschauWahl 
   pruefe();
 
   // Rendern: veraltete Läufe werden verworfen (Zähler); pdf.js läuft lokal gebündelt wie bei der Unterlage.
-  type Dok = { numPages: number; getPage(n: number): Promise<{ getViewport(o: { scale: number }): { width: number; height: number }; render(o: unknown): { promise: Promise<void> } }>; destroy(): Promise<void> };
+  type Dok = { numPages: number; getPage(n: number): Promise<{ getViewport(o: { scale: number }): { width: number; height: number }; render(o: unknown): { promise: Promise<void>; cancel?: () => void } }>; destroy(): Promise<void> };
   let lauf = 0, doc = null as Dok | null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  type RT = { promise: Promise<void>; cancel?: () => void };
+  let task = null as RT | null;
+  let blattLauf = 0;
   async function zeigeBlatt(n: number) {
     if (!doc) return;
-    const mein = lauf;
+    const mein = lauf, meinBlatt = ++blattLauf;
+    if (task) { task.cancel?.(); try { await task.promise; } catch { /* abgebrochen */ } task = null; }
+    if (!doc || meinBlatt !== blattLauf) return;
     const seite = await doc.getPage(n);
-    if (mein !== lauf) return;
+    if (mein !== lauf || meinBlatt !== blattLauf) return;
     const roh = seite.getViewport({ scale: 1 });
     const breite = Math.max(320, bild.clientWidth || 640), dpr = window.devicePixelRatio || 1;
     const sk = breite / roh.width, vp = seite.getViewport({ scale: sk * dpr });
@@ -93,8 +98,10 @@ export async function zeigePdfVorschau(q: VorschauQuelle): Promise<VorschauWahl 
     const cx = canvas.getContext("2d");
     if (!cx) return;
     cx.fillStyle = "#ffffff"; cx.fillRect(0, 0, canvas.width, canvas.height);
-    await seite.render({ canvas, canvasContext: cx, viewport: vp }).promise;
-    if (mein === lauf) status.hidden = true;
+    const rt = seite.render({ canvas, canvasContext: cx, viewport: vp });
+    task = rt;
+    try { await rt.promise; } catch { return; }
+    if (mein === lauf && meinBlatt === blattLauf) status.hidden = true;
   }
   async function aktualisiere() {
     const mein = ++lauf;

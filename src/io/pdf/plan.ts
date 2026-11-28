@@ -309,13 +309,14 @@ function faltlinien(s: PdfSeite, a: Abbildung, slope: SlopeResult): void {
   }
 }
 
-function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
+function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe, unter: () => void): void {
   const frei = new Frei();
   // Einzugsflächen: Tint + Label mit ID und m² (im Graustufendruck unterscheidet das Label)
   for (const f of e.catchments.flaechen) {
     const fuell = tint(e.farbe(f.farbe), 0.25);
     for (const p of f.polygone) s.flaeche([p.outer, ...p.holes].map((r) => r.map((v) => a.p(v))), { fuell, breite: 0 });
   }
+  unter(); // Unterlage über den Flächenfüllungen, damit sie auf dem Dach sichtbar bleibt
   konturen(s, a, e.modell);
   faltlinien(s, a, e.slope);
   // Abläufe zuerst reservieren, damit das Flächenlabel ihnen ausweicht
@@ -382,7 +383,7 @@ function gefaelleplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
   }
 }
 
-function daemmplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
+function daemmplan(s: PdfSeite, a: Abbildung, e: PlanEingabe, unter: () => void): void {
   const plan = e.plan;
   const gelb = "#F6DF7A";
   const frei = new Frei();
@@ -394,6 +395,7 @@ function daemmplan(s: PdfSeite, a: Abbildung, e: PlanEingabe): void {
       }
     }
   }
+  unter();
   konturen(s, a, e.modell);
   faltlinien(s, a, e.slope);
   if (!plan) return;
@@ -548,16 +550,15 @@ export function baueVariantenPdf(vs: readonly VariantenPlan[], titel?: string): 
   for (const { eingabe: e } of vs) {
     const a = abbildung(e.modell);
     massstaebe.push(a.massstab);
-    const blaetter: { titel: string; zeichne: (s: PdfSeite) => void; legende: (s: PdfSeite, y: number) => number }[] = [
-      { titel: "Gefälleplan", zeichne: (s) => gefaelleplan(s, a, e), legende: (s) => legendeGefaelle(s, e, PLAN.y1 - 4) },
-      ...(e.plan ? [{ titel: "Gefälledämmplan", zeichne: (s: PdfSeite) => daemmplan(s, a, e), legende: (s: PdfSeite) => legendeDaemmplan(s, PLAN.y1 - 4) }] : []),
+    const blaetter: { titel: string; zeichne: (s: PdfSeite, unter: () => void) => void; legende: (s: PdfSeite, y: number) => number }[] = [
+      { titel: "Gefälleplan", zeichne: (s, u) => gefaelleplan(s, a, e, u), legende: (s) => legendeGefaelle(s, e, PLAN.y1 - 4) },
+      ...(e.plan ? [{ titel: "Gefälledämmplan", zeichne: (s: PdfSeite, u: () => void) => daemmplan(s, a, e, u), legende: (s: PdfSeite) => legendeDaemmplan(s, PLAN.y1 - 4) }] : []),
     ];
     for (const b of blaetter) {
       const s = dok.seite(BLATT.b, BLATT.h);
       nr++;
       rahmen(s);
-      if (e.unterlage) zeichneUnterlage(s, a, e.unterlage);
-      b.zeichne(s);
+      b.zeichne(s, () => { if (e.unterlage) zeichneUnterlage(s, a, e.unterlage); });
       bemassung(s, a, e.modell);
       nordpfeil(s, PLAN.x0 + 8, PLAN.y1 - 26);
       massstabsbalken(s, a, PLAN.x0 + 20, PLAN.y0 + 3);

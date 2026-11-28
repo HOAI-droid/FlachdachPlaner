@@ -143,9 +143,9 @@ function ablaufOrt(g: DachGefaelle, id: string) {
 
 /**
  * Koten, die gegen eine Höhenvorgabe verstoßen (max. Hochpunkt überschritten / min. Tiefpunkt unterschritten):
- * Prädikat „Kote (m) → Verstoß?“ für die rote Markierung in 2D und PDF. Verglichen wird der gemeldete Wert (Toleranz 0,05 mm).
+ * Prädikat „Kote (m) → Verstoß?“ für die rote Markierung in 2D und PDF. Verglichen wird der gemeldete Wert (Toleranz 0,5 mm wegen mm-Rundung der Eckkoten).
  */
 export function verletzteKoten(befunde: readonly Befund[]): (kote: number) => boolean {
   const werte = befunde.filter((b) => (b.regelId === REGEL_VORGABE_MAX_HP || b.regelId === REGEL_VORGABE_MIN_TP) && b.wert !== undefined).map((b) => b.wert as number);
-  return (k) => werte.some((w) => Math.abs(w - k) < 5e-5);
+  return (k) => werte.some((w) => Math.abs(w - k) < 5e-4);
 }

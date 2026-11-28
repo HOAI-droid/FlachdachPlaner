@@ -134,8 +134,10 @@ export async function ladePdf(file: File, seite = 1): Promise<UnterlageUI> {
     cx.fillStyle = "#ffffff"; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(bitmap, 0, 0, c.width, c.height);
     const blob = await new Promise<Blob | null>((ok) => c.toBlob(ok, "image/jpeg", 0.85));
     if (!blob) throw new Error("JPEG-Kodierung nicht verfügbar");
-    return { breite: c.width, hoehe: c.height, jpeg: new Uint8Array(await blob.arrayBuffer()) };
-  })());
+    const r = { breite: c.width, hoehe: c.height, jpeg: new Uint8Array(await blob.arrayBuffer()) };
+    c.width = c.height = 0;
+    return r;
+  })().catch((err) => { jpegCache = null; throw err; }));
   const W = base.width, H = base.height;
   return {
     art: "pdf", name: file.name, pruefsumme, seite: seiteNr, layer: [], sichtbar: new Set(), einheitUnbekannt: false,

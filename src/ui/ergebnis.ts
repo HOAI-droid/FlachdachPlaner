@@ -207,7 +207,7 @@ export function zeichneKoten(ctx: CanvasRenderingContext2D, vp: Viewport, e: Erg
     ctx.fillStyle = fz; ctx.beginPath();
     ctx.moveTo(p.x - 4 * px, p.y + 8 * px); ctx.lineTo(p.x + 4 * px, p.y + 8 * px); ctx.lineTo(p.x, p.y); ctx.closePath(); ctx.fill();
     if (schlecht) { ctx.strokeStyle = rot; ctx.lineWidth = 2 * px; ctx.beginPath(); ctx.arc(p.x, p.y, 7 * px, 0, Math.PI * 2); ctx.stroke(); }
-    if (dy > 6) { ctx.strokeStyle = fz; ctx.lineWidth = px; ctx.lineWidth = px; bahn(ctx, [p, { x: p.x + (links ? -8 : 8) * px, y: p.y + dy * px }], false); ctx.stroke(); }
+    if (dy > 6) { ctx.strokeStyle = fz; ctx.lineWidth = px; bahn(ctx, [p, { x: p.x + (links ? -8 : 8) * px, y: p.y + dy * px }], false); ctx.stroke(); }
     text(ctx, vp, s, p.x + (links ? -(w + 10) : 10) * px, p.y + dy * px, { px: 12, mono: true, farbe: schlecht ? rot : fett ? css("--accent", "#1F4FA3") : tx });
   };
   const alle = kotenMarken(e.slope.dachflaechen);

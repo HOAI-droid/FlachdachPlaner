@@ -100,7 +100,7 @@ function feldCm(label: string, wert: number | undefined, faktor: number, key: st
   i.id = `f-${key}`; l.htmlFor = i.id; i.inputMode = "decimal"; i.dataset.k = key; i.placeholder = platzhalter;
   i.value = wert === undefined ? "" : zahl(Math.round(wert * faktor * 10) / 10, 1);
   const uebernimm = (cm: number | undefined) => {
-    commit(cm === undefined ? undefined : cm / faktor);
+    commit(cm === undefined ? undefined : Math.round(cm / faktor * 1e4) / 1e4);
     const n = document.getElementById(i.id) as HTMLInputElement | null;
     if (n && n !== i) { n.focus(); n.select(); }
   };
@@ -112,8 +112,8 @@ function feldCm(label: string, wert: number | undefined, faktor: number, key: st
   i.addEventListener("change", () => { const t = i.value.trim(); if (t === "") uebernimm(undefined); else { const v = num(t); if (Number.isFinite(v)) uebernimm(v); } });
   i.addEventListener("keydown", (e) => {
     if (e.key === "Enter") i.blur();
-    else if (e.key === "ArrowUp" || e.key === "+") { e.preventDefault(); stufe(1); }
-    else if (e.key === "ArrowDown" || (e.key === "-" && i.value.trim() !== "")) { e.preventDefault(); stufe(-1); }
+    else if (e.key === "ArrowUp" || (e.key === "+" && i.selectionStart === i.selectionEnd)) { e.preventDefault(); stufe(1); }
+    else if (e.key === "ArrowDown" || (e.key === "-" && i.value.trim() !== "" && i.selectionStart === i.selectionEnd)) { e.preventDefault(); stufe(-1); }
   });
   const mk = (t: string, r: number, titel: string) => { const b = button(t, () => stufe(r), "btn step"); b.title = titel; b.setAttribute("aria-label", titel); b.tabIndex = -1; return b; };
   const zeile = el("div", "stepper");
