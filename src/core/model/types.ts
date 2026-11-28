@@ -211,6 +211,8 @@ export interface Dachflaeche {
   readonly entwaesserung: readonly Entwaesserung[];
   /** Mindestdämmdicke der Gefälledämmung am Tiefpunkt in mm (optional; sonst Standard). */
   readonly daemmdickeTiefpunkt?: number;
+  /** Gewünschte mittlere Gefälledämmdicke in mm: daraus wird beim Setzen der Abläufe Tiefpunktdicke und Kote abgeleitet. */
+  readonly daemmMittel?: number;
   /** Belagdicke (Kies, Platten, Gründach) in m (seit v4, ≥ 0); fehlt = 0. Zonen können abweichen. */
   readonly belagDicke?: number;
 }

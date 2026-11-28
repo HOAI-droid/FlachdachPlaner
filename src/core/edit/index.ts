@@ -24,3 +24,4 @@ export {
   istProjektGeaendert, kopiereDachflaechen, legeVarianteAn, loescheVariante, pruefeVariantenName, vorschlagVariantenName,
   wechsleVariante, type VariantenErgebnis, type VariantenFehler, type VariantenFehlerCode,
 } from "./varianten";
+export { MIN_TIEFPUNKT_DICKE, dachaufbauVon, leiteHoehenAb, mitAbleitung, setDachaufbau, type Dachaufbau } from "./dachaufbau";

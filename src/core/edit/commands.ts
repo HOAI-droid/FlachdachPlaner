@@ -667,6 +667,7 @@ export function trenneDachflaeche(dachId: Id, a: Vec2, b: Vec2, breite: number =
           vorgaben: d.vorgaben, attika, tuerschwellen, entwaesserung,
           ...(d.wandanschluesse !== undefined ? { wandanschluesse } : {}),
           ...(d.daemmdickeTiefpunkt !== undefined ? { daemmdickeTiefpunkt: d.daemmdickeTiefpunkt } : {}),
+          ...(d.daemmMittel !== undefined ? { daemmMittel: d.daemmMittel } : {}),
           ...(d.belagDicke !== undefined ? { belagDicke: d.belagDicke } : {}),
         };
       });

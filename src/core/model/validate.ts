@@ -212,9 +212,10 @@ function pruefeEntwaesserung(c: Pruefer, p: string, v: unknown, kanten: Map<stri
 
 function pruefeDach(c: Pruefer, p: string, v: unknown): void {
   const o = c.obj(p, v, ["id", "name", "typ", "kontur", "aufbauten", "zonen", "vorgaben", "attika", "tuerschwellen", "entwaesserung"],
-    ["daemmdickeTiefpunkt", ...c.ab4(["belagDicke", "wandanschluesse"])]);
+    ["daemmdickeTiefpunkt", "daemmMittel", ...c.ab4(["belagDicke", "wandanschluesse"])]);
   if (!o) return;
   c.optNum(p, o, "daemmdickeTiefpunkt", { min: 0 });
+  c.optNum(p, o, "daemmMittel", { min: 0 });
   c.optNum(p, o, "belagDicke", { min: 0 });
   c.id(sub(p, "id"), o["id"]);
   c.str(sub(p, "name"), o["name"]);

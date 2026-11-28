@@ -1,7 +1,7 @@
 /** UI-Steuerung der Bearbeitung (PLAN Schritte 15–17): Werkzeuge, Verlauf, Unterlage, Panels, Zeichnung. */
 import {
   abbrechen, abschliessen, ablaeufeHinzufuegen, schlageAblaeufeVor, attikaGesamtFlaeche, attikaGesamtLaenge, attikaLaenge, attikaSegmentFlaeche, attikaStreifen, attikaUmlaufend,
-  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, verschiebeEntwaesserung, computeAnschluesse, computeNotwasserstaende, setAttikaOberkante, setTuerschwelleOberkante, setTuerschwelleRinne, setWandanschlussOberkante, setWandanschlussLaenge, setAufbauOberkante, setBelagDicke, setUeberlaufKante, type LesGriff, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, istProjektGeaendert, wechsleVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
+  aufbauFlaeche, ausfuehren, ausPasspunkten, findeAbweichungen, TOLERANZ_STANDARD, uebernehmeVorschlaege, verschiebePunkte, verschiebeEntwaesserung, computeAnschluesse, computeNotwasserstaende, setAttikaOberkante, setTuerschwelleOberkante, setTuerschwelleRinne, setWandanschlussOberkante, setWandanschlussLaenge, setAufbauOberkante, setBelagDicke, setUeberlaufKante, setDachaufbau, mitAbleitung, dachaufbauVon, type LesGriff, createProjekt, projektAusModell, createSnapIndex, modellFuerVariante, mitModell, setzeProjektangaben, legeVarianteAn, benenneVarianteUm, loescheVariante, aufVariante, befehlVarianteAnlegen, befehlVarianteLoeschen, befehlVarianteUmbenennen, istProjektGeaendert, wechsleVariante, vorschlagVariantenName, VARIANTEN_NAME_MAX, variantenListe, serializeProjekt, dachNetto, entfernePunkt, faktor, kannRueckgaengig,
   kannWiederholen, kalibriereStrecke, kantenTreffer, klick, konturFlaeche, konturUmfang, loesche, neuerVerlauf,
   neuerZustand, nennerAusFaktor, nennerSetzen, projektSegmente, rueckgaengig, setAttikaBreite, setTuerschwelleBreite,
   setzeAttikaBreite, setzeSchwellenBreite, setzeAblaufZ, setEntwaesserungTyp, setEntwaesserungZ, setGullyVerbindung, snap, ausrichten, winkelGrad, pointInPolygon, waehleWerkzeug, wiederholen, zonenFlaeche, zuPasspunkten, entwSegment, dachAn, intersection, setzeTrennBreite, trennStreifen,
@@ -77,8 +77,8 @@ function feld(label: string, wert: string, key: string, commit: (v: number) => v
   return f;
 }
 /** Optionale Höhe (m): leeres Feld = nicht gesetzt (undefined). */
-function feldOpt(label: string, wert: number | undefined, key: string, commit: (v: number | undefined) => void, platzhalter = ""): HTMLElement {
-  const f = feld(label, wert === undefined ? "" : zahl(wert, 3), key, () => undefined);
+function feldOpt(label: string, wert: number | undefined, key: string, commit: (v: number | undefined) => void, platzhalter = "", einheit = "m", stellen = 3): HTMLElement {
+  const f = feld(label, wert === undefined ? "" : zahl(wert, stellen), key, () => undefined, einheit);
   const i = f.querySelector("input")!;
   i.placeholder = platzhalter;
   const neu = i.cloneNode(true) as HTMLInputElement; // Handler von feld() entfernen
@@ -238,13 +238,15 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
   const vergissErfasste = () => { erfasst = []; ausricht = null; if (verweil) { clearTimeout(verweil.timer); verweil = null; } };
 
   // ---------- Aktionen ----------
+  const ableitOpt = () => { const std = daemmStandard(); return { packs, ...(std !== undefined ? { daemmdickeTiefpunktStandard: std } : {}) }; };
   function wende(r: KlickErgebnis) {
     const warEntwurf = z.entwurf.length > 0;
     z = r.zustand;
     if (warEntwurf && z.entwurf.length === 0) vergissErfasste();
     if (r.befehl) {
       const alt = verlauf;
-      fuehreAus(r.befehl);
+      const dachId = r.auswahl?.art === "entwaesserung" ? r.auswahl.dachId : undefined;
+      fuehreAus(dachId ? mitAbleitung(r.befehl, dachId, ableitOpt()) : r.befehl);
       if (verlauf === alt) z = { ...z, hinweis: z.hinweis };
     }
     if (r.auswahl !== undefined) auswahl = r.auswahl && z.tool === "select" && gesperrt(r.auswahl.art === "entwaesserung" ? "symbole" : "kontur") ? null : r.auswahl;
@@ -818,6 +820,24 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
       row("Überfallhöhe (Schätzung)", mm(x.ueberfallhoehe), "not-ueberfall"),
       row("Notwasserstand (Schätzung)", x.wasserstand === null ? "–" : `${zahl(x.wasserstand, 3)} m`, "not-wasser"));
   }
+  /** Dachaufbau: drei Eingaben (Dämmstärke im Mittel, min. Tiefpunkt, max. Hochpunkt) + abgeleitete Höhen live. */
+  function panelDachaufbau(p: HTMLElement, d: Dachflaeche) {
+    const w = dachaufbauVon(d);
+    const setze = (n: Partial<Record<keyof typeof w, number | undefined>>) => {
+      const neu = { ...w, ...n };
+      fuehreAus(setDachaufbau(d.id, { ...(neu.daemmMittel !== undefined ? { daemmMittel: neu.daemmMittel } : {}), ...(neu.minTiefpunkt !== undefined ? { minTiefpunkt: neu.minTiefpunkt } : {}), ...(neu.maxHochpunkt !== undefined ? { maxHochpunkt: neu.maxHochpunkt } : {}) }, ableitOpt()));
+      refresh();
+    };
+    p.append(el("div", "panel-title", "Dachaufbau"),
+      feldOpt("Dämmstärke im Mittel", w.daemmMittel, "daemm-mittel", (v) => setze({ daemmMittel: v === undefined || v < 0 ? undefined : v }), "aus", "mm", 0),
+      feldOpt("Min. Tiefpunkt z", w.minTiefpunkt, "min-tiefpunkt", (v) => setze({ minTiefpunkt: v }), "aus"),
+      feldOpt("Max. Hochpunkt z", w.maxHochpunkt, "max-hochpunkt", (v) => setze({ maxHochpunkt: v }), "keine Warnung"));
+    const g = ergebnis?.slope.dachflaechen.find((x) => x.dachflaecheId === d.id);
+    if (g?.tiefpunkt || g?.hochpunkt) {
+      p.append(row("Tiefpunkt z", g.tiefpunkt ? `${zahl(g.tiefpunkt.kote, 3)} m` : "–", "hoehe-tief"), row("Hochpunkt z", g.hochpunkt ? `${zahl(g.hochpunkt.kote, 3)} m` : "–", "hoehe-hoch"));
+      if (g.daemmung) p.append(row("Dämmung Tiefpunkt / Mittel / max.", `${zahl(g.daemmung.min, 0)} / ${zahl(g.daemmung.mittel, 0)} / ${zahl(g.daemmung.max, 0)} mm`, "daemm-werte"));
+    }
+  }
   function panelAuswahl() {
     const p = shell.panels.auswahl;
     p.replaceChildren();
@@ -833,6 +853,7 @@ export function mountEditor(shell: Shell, stage: Stage): Editor {
           row("Attika Länge", meter(attikaGesamtLaenge(d), 2), "attika-laenge"),
           row("Attika Fläche", quadratmeter(attikaGesamtFlaeche(d), 2), "attika-flaeche"));
         p.append(feldOpt("Belagdicke", d.belagDicke, "belag-dicke", (v) => { fuehreAus(setBelagDicke(d.id, null, v)); refresh(); }, "0"));
+        panelDachaufbau(p, d);
         { const b = el("div", "pad"); b.append(button("Abläufe vorschlagen", () => schlageVor(d.id))); p.append(b); }
         break;
       case "aufbau": {
