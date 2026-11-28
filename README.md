@@ -61,6 +61,7 @@ Die Prüfliste ist nach Schwere sortiert; ein Klick springt zum betroffenen Obje
 - **3D** aus dem Höhenfeld mit wählbarer Überhöhung (1/5/10×) mit Gefällepfeilen; der Dämmplan zeigt dieselbe Dachfläche zusätzlich mit den Plattenfugen quer zum Gefälle (Umschalter Gefälle/Dämmplan in der Kopfzeile).
 - **PDF-Export** (maßstäblich, Vektor) mit Schriftfeld, Legende, kleiner 3D-Übersicht (überhöht, nicht maßstäblich), Nordpfeil und Maßstabsbalken sowie Tabelle der Ablauf-Koten und der mittleren Gefälledämmung.
 - **Höhen in cm** mit ±-Schaltflächen und Tasten (5 mm je Schritt); Koten, die eine Vorgabe verletzen, sind rot markiert; in 3D stehen die Dämmdicken in cm an den Koten.
+- **Rote Koten:** Verletzt eine Höhenkote die Vorgabe „max. Hochpunkt“ oder „min. Tiefpunkt“ (Dachaufbau), wird genau diese Kote in 2D und im PDF-Gefälleplan rot (fett, mit Ring) markiert; zusätzlich steht der Befund (Wert und Überschreitung in mm) in der Prüfliste. Verglichen wird der gemeldete Wert mit 0,5 mm Toleranz. Grenzen: Es wird die gemeldete Kote markiert, weitere Koten über dem Grenzwert bleiben schwarz.
 - **PDF-Export-Vorschau**: Varianten, Unterlage (an/aus, Deckkraft) und Blatt vor dem Speichern einstellen. Beim Speichern wird gefragt, ob die Unterlage eingebettet wird.
 - **DXF-Export** mit Layern je Objektart.
 
